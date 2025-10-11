@@ -1,34 +1,202 @@
-# Environment variables
-.env
+#==================================================
+# AI-Powered Serverless Data Pipeline - .gitignore
+#==================================================
 
-# Terraform
+#-------------------- Environment Variables --------------------#
+.env
+.env.*
+!.env.example
+*.env
+
+#-------------------- Terraform --------------------#
+# Local state files
 **/.terraform/*
 *.tfstate
 *.tfstate.*
-*.tfvars
-.terraform.lock.hcl
-outputs.json
+*.tfstate.backup
 
-# Python
+# Lock files (may want to commit these in some projects)
+.terraform.lock.hcl
+
+# Variable files with sensitive data
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+
+# Terraform output files
+outputs.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform plan files
+*.tfplan
+plan.out
+
+# Terraform crash log files
+crash.log
+crash.*.log
+
+#-------------------- Python --------------------#
+# Virtual environments
 venv/
+env/
+ENV/
+.venv
+.ENV
+
+# Byte-compiled files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 *.pyo
 *.pyd
 .Python
-*.egg-info/
+
+# Distribution / packaging
 dist/
 build/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+*.whl
 
-# IDE
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# pyenv
+.python-version
+
+#-------------------- AWS --------------------#
+# AWS credentials (NEVER commit these!)
+*.pem
+*.key
+*-key.json
+credentials
+credentials.json
+config
+
+# AWS SAM
+.aws-sam/
+samconfig.toml
+
+# Lambda deployment packages
+lambda_function.zip
+*.zip
+package/
+
+# Local DynamoDB
+.dynamodb/
+
+#-------------------- IDEs & Editors --------------------#
+# VSCode
 .vscode/
+*.code-workspace
+
+# IntelliJ IDEA / PyCharm
 .idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Vim
 *.swp
 *.swo
+*~
+.*.swp
+.*.swo
 
-# OS
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+#-------------------- Operating Systems --------------------#
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
+.LSOverride
+._*
 
-# AWS
-*.pem
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+#-------------------- Node.js (if using CDK or frontend) --------------------#
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn/
+package-lock.json
+yarn.lock
+
+#-------------------- Logs & Temporary Files --------------------#
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*.swp
+
+#-------------------- Documentation --------------------#
+# Generated documentation (if using tools like Sphinx)
+_build/
+site/
+.doctrees/
+
+#-------------------- Testing & CI/CD --------------------#
+.circleci/
+.travis.yml
+
+#-------------------- Miscellaneous --------------------#
+# Backup files
+*.backup
+*.old
+
+# Archives
+*.tar
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Local test data
+test-data/
+sample-data/
+mock-data/
+
+# Local scripts (user-specific utilities)
+local/
+scratch/

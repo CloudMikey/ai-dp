@@ -1,0 +1,97 @@
+# tfsec configuration for AI-Powered Serverless Data Pipeline
+# Documentation: https://aquasecurity.github.io/tfsec/
+
+# Severity levels to report
+severity_overrides:
+  # Can be: CRITICAL, HIGH, MEDIUM, LOW
+  # By default, all severities are reported
+
+# Exclude specific checks if needed
+exclude:
+  # Example: Exclude checks that don't apply to your use case
+  # - aws-s3-enable-bucket-logging  # Uncomment if you have centralized logging
+
+# Minimum severity to fail CI/CD pipeline
+minimum_severity: MEDIUM
+
+# Custom checks (optional)
+# custom_checks:
+#   - path: .tfsec/custom_checks
+
+# Configure specific rules
+config:
+  # S3 Security
+  - rule: aws-s3-enable-versioning
+    enabled: true
+
+  - rule: aws-s3-enable-bucket-encryption
+    enabled: true
+
+  - rule: aws-s3-block-public-acls
+    enabled: true
+
+  - rule: aws-s3-block-public-policy
+    enabled: true
+
+  - rule: aws-s3-ignore-public-acls
+    enabled: true
+
+  - rule: aws-s3-restrict-public-buckets
+    enabled: true
+
+  # Lambda Security
+  - rule: aws-lambda-enable-tracing
+    enabled: true
+
+  - rule: aws-lambda-restrict-source-arn
+    enabled: true
+
+  # DynamoDB Security
+  - rule: aws-dynamodb-enable-recovery
+    enabled: true
+
+  - rule: aws-dynamodb-table-customer-key
+    enabled: false  # Can be enabled if using CMK
+
+  # API Gateway Security
+  - rule: aws-api-gateway-enable-access-logging
+    enabled: true
+
+  - rule: aws-api-gateway-enable-tracing
+    enabled: true
+
+  # IAM Security
+  - rule: aws-iam-no-policy-wildcards
+    enabled: true
+
+  - rule: aws-iam-enforce-mfa
+    enabled: true
+
+  # CloudWatch Security
+  - rule: aws-cloudwatch-log-group-customer-key
+    enabled: false  # Can be enabled if using CMK
+
+  # Kinesis Security
+  - rule: aws-kinesis-enable-in-transit-encryption
+    enabled: true
+
+  # Step Functions Security
+  - rule: aws-states-enable-logging
+    enabled: true
+
+# Ignore specific resources or paths
+exclude_paths:
+  # - "examples/"
+  # - "tests/"
+
+# Output format (json, csv, checkstyle, junit, sarif, default)
+format: default
+
+# Enable colored output
+color: true
+
+# Show passed checks
+show_passed: false
+
+# Show statistics
+show_statistics: true
