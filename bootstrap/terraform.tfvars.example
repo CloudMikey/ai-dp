@@ -1,0 +1,17 @@
+# Bootstrap Configuration Values
+# Copy this file to terraform.tfvars and update with your values
+
+aws_region     = "us-west-1"
+aws_account_id = "123456789012"  # REQUIRED: Replace with your AWS Account ID
+project_name   = "ai-dp"
+
+# Optional: Uncomment to customize
+# enable_versioning                   = true
+# enable_lifecycle_rules              = true
+# noncurrent_version_expiration_days  = 90
+
+# Optional: Additional tags
+# tags = {
+#   CostCenter = "Engineering"
+#   Owner      = "DevOps Team"
+# }

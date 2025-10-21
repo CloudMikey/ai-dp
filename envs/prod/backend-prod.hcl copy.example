@@ -1,0 +1,10 @@
+# Backend configuration for Production environment
+# 1. Copy this file to backend-prod.hcl
+# 2. Update bucket name with output from bootstrap
+# 3. Run: terraform init -backend-config=backend-prod.hcl
+
+bucket       = "tf-state-ACCOUNT_ID-REGION"  # Replace with actual bucket name from bootstrap output
+key          = "envs/prod/terraform.tfstate"
+region       = "us-west-1"                    # Must match bootstrap region
+encrypt      = true
+use_lockfile = true                           # Native S3 locking (Terraform >= 1.11.0)

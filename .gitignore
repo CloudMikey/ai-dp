@@ -23,6 +23,10 @@
 *.tfvars.json
 !terraform.tfvars.example
 
+# Backend configuration files (contain bucket names)
+backend-*.hcl
+!backend-*.hcl.example
+
 # Terraform output files
 outputs.json
 override.tf
