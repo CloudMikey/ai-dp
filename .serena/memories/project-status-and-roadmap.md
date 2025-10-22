@@ -2,66 +2,95 @@
 
 ## Current Status
 
-**Phase**: Early Development (Phase 0-1)
+**Phase**: Phase 2 - Core Data Lake & Ingestion (In Progress)
 
 **Completed**:
+
+### Phase 0: Project Bootstrap ✅ COMPLETED
 - ✅ Directory structure created (`envs/`, `modules/`, `lambdas/`, `docs/`)
 - ✅ `.gitignore` configured for Terraform, Python, and AWS files
 - ✅ `.terraform-version` file specifying Terraform 1.13.0
 - ✅ Comprehensive documentation in `docs/` directory
 - ✅ `CLAUDE.md` guidance file created
+- ✅ S3 state bucket created: `tf-state-aidp`
+- ✅ Backend configurations created for all environments (dev, stg, prod)
+- ✅ All three environments initialized with S3 backend
+- ✅ Backend uses Terraform 1.13.0 with native S3 locking (`use_lockfile = true`)
+
+### Phase 2: Core Data Lake (Partial) ✅
+- ✅ **Data Lake Module Completed** (`modules/data_lake/`)
+  - S3 bucket created: `ai-dp-data-lake-dev-us-west-1`
+  - Three-layer architecture: raw/, processed/, curated/
+  - Lifecycle policies configured for cost optimization
+  - Encryption at rest (AES256)
+  - Versioning enabled
+  - Public access blocked
+  - TLS/HTTPS enforced via bucket policy
+  - Provider default_tags pattern implemented
+  - All three layers tested and operational
+
+**In Progress**:
+- ⏳ Ingestion Stream Module (`modules/ingestion_stream/`)
+- ⏳ ETL Lambda Function (`lambdas/etl/`)
 
 **Not Yet Implemented**:
-- ❌ Bootstrap Terraform configuration for S3 state bucket
-- ❌ All Terraform modules (empty directories)
-- ❌ All Lambda functions (empty directories)
-- ❌ GitHub Actions CI/CD workflows
-- ❌ Environment-specific Terraform configurations
-- ❌ AWS infrastructure deployment
+- ❌ Phase 1 (CI/CD) - Deferred to end of project
+- ❌ Step Functions orchestration
+- ❌ AI/ML enrichment modules
+- ❌ Hot store (DynamoDB)
+- ❌ Analytics (Glue, Athena)
+- ❌ Observability module
+
+---
 
 ## Implementation Roadmap
 
-The project follows a 7-phase roadmap (see `docs/roadmap.md` for complete details):
+### Phase 0: Project Bootstrap ✅ **COMPLETED**
+**Goal**: Production-ready repository with Terraform, S3 state locking
 
-### Phase 0: Project Bootstrap ⬅️ **CURRENT PHASE**
-**Goal**: Production-ready repository with Terraform, S3 state locking, and GitHub OIDC authentication
-
-Key tasks:
-1. Repository structure setup ✅ (DONE)
-2. Terraform version & standards
-3. S3 state bucket with native locking
-4. AWS OIDC Identity Provider
-
-**Complete when**: S3 bucket exists with versioning, `.tflock` files appear in S3, OIDC roles configured
+Key achievements:
+- Repository structure setup ✅
+- Terraform version 1.13.0 configured ✅
+- S3 state bucket with native locking ✅
+- Backend initialized for all environments ✅
 
 ---
 
-### Phase 1: CI/CD Workflows
+### Phase 1: CI/CD Workflows ⏸️ **DEFERRED**
 **Goal**: Automated, secure deployment pipeline with approval gates
 
-Key tasks:
-1. CI workflow for pull requests (fmt/validate/plan)
-2. Deploy workflow for main branch (dev → stg → prod)
-3. Per-environment IAM roles with least privilege
-4. Workflow testing & documentation
+**Status**: Postponed until core infrastructure is complete
+**Reason**: Focus on building functional modules first, automate deployment later
 
-**Complete when**: Merging to main deploys to dev, manual approvals work, environment isolation verified
+Will implement:
+- CI workflow for pull requests (fmt/validate/plan)
+- Deploy workflow for main branch (dev → stg → prod)
+- AWS OIDC Identity Provider
+- Per-environment IAM roles with least privilege
 
 ---
 
-### Phase 2: Core Data Lake & Ingestion
+### Phase 2: Core Data Lake & Ingestion ⏳ **IN PROGRESS**
 **Goal**: Functional batch and streaming ingestion into organized S3 data lake
 
-Key modules:
-- `modules/data_lake/` - S3 buckets (raw/processed/curated)
-- `modules/ingestion_stream/` - API Gateway, Kinesis
-- `lambdas/etl/` - Kinesis consumer Lambda
+#### Completed:
+✅ **`modules/data_lake/`** - S3 bucket with three layers
+- `raw/` layer: 30d→IA, 90d→Glacier, 180d expiration
+- `processed/` layer: 60d→IA, 120d→Glacier, 365d expiration
+- `curated/` layer: No lifecycle (permanent storage)
+- Test files uploaded and verified in all layers
+- Security features operational (encryption, versioning, TLS)
+
+#### Next Steps:
+1. Build `modules/ingestion_stream/` - API Gateway, Kinesis Data Streams
+2. Build `lambdas/etl/` - Kinesis consumer Lambda
+3. Test end-to-end batch and streaming ingestion
 
 **Complete when**: Both batch and streaming ingestion work end-to-end, data correctly partitioned in S3
 
 ---
 
-### Phase 3: Orchestration & AI/ML Enrichment
+### Phase 3: Orchestration & AI/ML Enrichment ⏸️ **NOT STARTED**
 **Goal**: Step Functions orchestrating AI services with retry logic
 
 Key modules:
@@ -73,7 +102,7 @@ Key modules:
 
 ---
 
-### Phase 4: Storage for Hot & Historical Queries
+### Phase 4: Storage for Hot & Historical Queries ⏸️ **NOT STARTED**
 **Goal**: Dual storage strategy operational with query capabilities
 
 Key modules:
@@ -84,7 +113,7 @@ Key modules:
 
 ---
 
-### Phase 5: Analytics & Frontend
+### Phase 5: Analytics & Frontend ⏸️ **NOT STARTED**
 **Goal**: Visual insights accessible to end users
 
 Options:
@@ -95,7 +124,7 @@ Options:
 
 ---
 
-### Phase 6: Security, Compliance & Cost Controls
+### Phase 6: Security, Compliance & Cost Controls ⏸️ **NOT STARTED**
 **Goal**: Production-hardened platform with predictable costs
 
 Focus areas:
@@ -109,7 +138,7 @@ Focus areas:
 
 ---
 
-### Phase 7: Testing, Promotion & Documentation
+### Phase 7: Testing, Promotion & Documentation ⏸️ **NOT STARTED**
 **Goal**: Production-ready system with complete documentation
 
 Key tasks:
@@ -125,56 +154,88 @@ Key tasks:
 
 ---
 
-## Phase Dependencies
+## Key Lessons Learned
 
+### Tag Configuration Pattern
+**Problem**: Initial implementation had tag conflicts between provider `default_tags` and module-level tags, causing AWS API errors.
+
+**Solution**: 
+- Use provider `default_tags` for global tags (Environment, Project, ManagedBy, Owner, CostCenter)
+- Resources only add resource-specific tags (Name, Description)
+- Never duplicate tags between provider and resource levels
+
+**Pattern**:
+```hcl
+# Provider level (envs/*/main.tf)
+provider "aws" {
+  default_tags {
+    tags = {
+      Environment = "dev"
+      Project     = "AI-DP"
+      ManagedBy   = "Terraform"
+      Owner       = "DataTeam"
+      CostCenter  = "Engineering"
+    }
+  }
+}
+
+# Module level (modules/*/main.tf)
+resource "aws_s3_bucket" "example" {
+  bucket = "my-bucket"
+  
+  # Only resource-specific tags, no duplicates
+  tags = {
+    Name        = "my-bucket"
+    Description = "Specific purpose"
+  }
+}
 ```
-Phase 0 (Bootstrap) ✅ In Progress
-    ↓
-Phase 1 (CI/CD)
-    ↓
-Phase 2 (Ingestion)
-    ↓
-Phase 3 (AI/ML)
-    ↓
-Phase 4 (Storage)
-    ↓
-Phase 5 (Analytics)
-    ↓
-Phase 6 (Security)
-    ↓
-Phase 7 (Testing & Production)
+
+### Lifecycle Rule Optimization
+**Problem**: S3 lifecycle rules with all values set to 0 (disabled) still created empty rules, which AWS rejects.
+
+**Solution**: Use dynamic blocks with conditional creation:
+```hcl
+dynamic "rule" {
+  for_each = var.expiration_days > 0 || var.transition_days > 0 ? [1] : []
+  content {
+    # Rule content only created when needed
+  }
+}
 ```
 
-**Parallelization opportunities**:
-- Phases 2-4 can have some overlap once ingestion is working
-- Phase 5 can start once Phase 4 has basic querying
-- Phase 6 should be integrated throughout, with final audit at end
-
-## Success Metrics
-
-**Technical Milestones**:
-- All 7 phases completed
-- End-to-end data flow working
-- Zero manual AWS Console clicks for deployment
-- All environments operational
-- P95 latency < 5 seconds
-- Cost within budget
-
-**Portfolio Readiness**:
-- Professional architecture diagram
-- Live demo or video walkthrough
-- Public GitHub repository with polished README
-- Can explain design decisions and tradeoffs
-
-**Estimated Timeline**: 8-12 weeks (depending on experience and time commitment)
+---
 
 ## Next Immediate Steps
 
-To continue Phase 0:
-1. Create `bootstrap/` directory with Terraform config for S3 state bucket
-2. Apply bootstrap configuration to create state bucket
-3. Configure `backend.tf` in each environment with S3 backend
-4. Set up AWS OIDC Identity Provider and IAM roles
-5. Test state locking with a simple plan operation
+To continue Phase 2:
+1. ✅ Data Lake Module - COMPLETED
+2. Create `modules/ingestion_stream/` module
+   - API Gateway REST API
+   - Kinesis Data Stream
+   - EventBridge rule for S3 batch uploads
+3. Create `lambdas/etl/` function
+   - Kinesis consumer
+   - Data validation and normalization
+   - Write to S3 raw/ layer
+4. Test end-to-end ingestion flow
+5. Document patterns and move to Phase 3
 
-Reference `docs/roadmap.md` for detailed completion criteria for each task.
+---
+
+## Progress Tracking
+
+**Overall Completion**: ~15% (Phase 0 complete, Phase 2 started)
+
+```
+Phase 0: ████████████████████ 100% ✅
+Phase 1: ░░░░░░░░░░░░░░░░░░░░   0% ⏸️ (Deferred)
+Phase 2: ████░░░░░░░░░░░░░░░░  20% ⏳ (data_lake done)
+Phase 3: ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 4: ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 5: ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 6: ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 7: ░░░░░░░░░░░░░░░░░░░░   0%
+```
+
+**Estimated Timeline**: 8-12 weeks total (1 week elapsed)
