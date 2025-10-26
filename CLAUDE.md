@@ -103,6 +103,48 @@ pytest lambdas/etl/
 4. **ASK QUESTIONS BEFORE CHANGING CODE**: Clarify requirements before implementing
 5. **SECURITY-FIRST**: Use GitHub OIDC with short-lived tokens, never long-term credentials
 
+### Portfolio Implementation Agent
+**This project is a portfolio project for entry-level to intermediate cloud engineering roles.**
+
+When implementing Terraform modules or AWS infrastructure, follow the **Portfolio Implementation Agent** guidelines in `.claude/agents/portfolio.md`. This agent provides:
+
+- **Portfolio-appropriate complexity**: Simple enough to explain in interviews, complex enough to demonstrate skills
+- **Context7 integration**: Research AWS services BEFORE implementing to avoid deprecated resources
+- **Entry-level focus**: Working > Perfect, Explainability First
+- **Interview preparation**: Code should help answer common technical questions
+- **Modern best practices**: Use current AWS patterns without enterprise over-engineering
+
+**Key principles from portfolio agent:**
+1. **WORKING > PERFECT** - Ship functional infrastructure first
+2. **USE CONTEXT7 TO STAY CURRENT** - Check for deprecations before implementing
+3. **NO SECRETS IN CODE** - Never hardcode credentials
+4. **EXPLAINABILITY FIRST** - If you can't explain it in an interview, simplify it
+5. **DOCUMENT YOUR DECISIONS** - Comments explain "why," not just "what"
+
+**When to use**: For all Terraform module implementations (ingestion_stream, step_functions, ai_enrichment, etc.)
+
+### Instruction Hierarchy
+
+When using specialized agents (like `.claude/agents/portfolio.md`), follow this hierarchy for resolving conflicts:
+
+1. **CLAUDE.md = Universal Project Rules** (Foundation)
+   - Foundation-level principles that always apply to the entire project
+   - Examples: "No secrets in code," "Check errorlog.md before fixing errors," "This is a portfolio project"
+   - **Sets the boundaries and project context**
+
+2. **Specialized Agents = Implementation Guides** (Task-Specific)
+   - Provides HOW to achieve CLAUDE.md goals for specific tasks (Terraform, Python, etc.)
+   - More specific guidance within CLAUDE.md boundaries
+   - Examples: "Use Context7 before implementing," "Keep modules under 300 lines"
+   - **Tells HOW to achieve CLAUDE.md goals**
+
+3. **Conflict Resolution Rules**:
+   - **Agent CONTRADICTS CLAUDE.md fundamentals**: ✅ CLAUDE.md wins (universal security/principle rules)
+   - **Agent SPECIFIES HOW to achieve CLAUDE.md goals**: ✅ Agent wins (more specific guidance)
+   - **Both say the same thing differently**: ✅ Use agent wording (task-specific context)
+
+**Example**: CLAUDE.md says "no secrets in code" (fundamental security rule). Portfolio.md says "use Context7 before implementing" (specific workflow). Both apply - no conflict. Portfolio.md adds specificity without contradicting fundamentals.
+
 ### Code Quality
 - Prefer simple solutions over complex ones
 - Avoid code duplication—check for existing similar functionality first
@@ -128,10 +170,18 @@ pytest lambdas/etl/
 - **Environment Isolation**: Maintain strict separation between dev/staging/prod (ideally separate AWS accounts)
 - **Zero-Trust**: All AWS access via short-lived tokens and least-privilege IAM roles
 
-### Error Handling
-- Review and update `docs/errorlog.md` when encountering errors
-- Document: error message, attempted solutions, working fix
-- Reference error log before attempting similar fixes
+### Error Handling (CRITICAL)
+**MANDATORY PROCESS - No exceptions:**
+1. **BEFORE attempting any error fix** (whether you encounter it or the user reports it):
+   Read `docs/errorlog.md` to check for similar issues and existing solutions
+2. **WHEN ANY error occurs in the project**: Immediately document in `docs/errorlog.md`:
+   - Error message (exact text)
+   - Attempted solutions (what didn't work)
+   - Working fix (what solved it)
+3. **NEVER skip documentation**: Every error is a learning opportunity
+4. **If error exists in log**: Reference the error number and apply the documented solution
+
+**Rule**: If an error occurs and errorlog.md isn't checked/updated, you're doing it wrong.
 
 ## Infrastructure Design Patterns
 
@@ -161,24 +211,35 @@ Use Terraform variables for feature toggles:
 - `feature_rekognition_on`: Enable/disable image labeling
 - `create_quicksight`: Enable/disable QuickSight dashboard creation
 
-## GitHub Actions CI/CD (Planned)
+## GitHub Actions CI/CD (Phase 10 - Final)
+
+> **Note:** CI/CD implementation deferred to Phase 10 after all infrastructure is built and proven working.
+
+**When implemented (Phase 10):**
 
 **CI Workflow** (on PRs):
 - Terraform fmt/validate/plan
 - tflint, tfsec security scanning
+- PR comment with plan output
 
 **Deploy Workflow** (on main branch):
 - OIDC authentication (no long-term credentials)
 - Environment promotion: dev → stg → prod
 - Manual approval gates between environments
+- Auto-deploy to dev, manual approve for staging/prod
+
+**Why last?** Deployment automation is most valuable once infrastructure is stable and tested.
 
 ## Common Tasks
 
 ### Adding a New Terraform Module
-1. Create directory under `modules/<module_name>/`
-2. Add `main.tf`, `variables.tf`, `outputs.tf`
-3. Wire module into environment-specific `main.tf` files
-4. Update this CLAUDE.md if the module represents a new architectural component
+**Follow the Portfolio Implementation Agent workflow** (`.claude/agents/portfolio.md`):
+1. **Research with Context7**: Check AWS service and Terraform resource documentation for current best practices and deprecations
+2. **Create module structure**: `modules/<module_name>/` with `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
+3. **Implement with portfolio principles**: Working > Perfect, keep it explainable, use clear comments
+4. **Wire module**: Add to environment-specific `main.tf` files
+5. **Test**: Validate with `terraform fmt` and `terraform validate`, then deploy to dev
+6. **Document**: Update README with usage examples and talking points for interviews
 
 ### Adding a New Lambda Function
 1. Create directory under `lambdas/<function_name>/`
@@ -196,14 +257,17 @@ Use Terraform variables for feature toggles:
 
 ## Current Project Status
 
-### Completed (Phase 0) ✅
-**Bootstrap Infrastructure**
+> **Note:** Roadmap reorganized on 2025-01-24 for strict sequential implementation. CI/CD moved from Phase 1 to Phase 10 (final phase).
+
+### Completed ✅
+
+**Phase 0: Bootstrap Infrastructure**
 - S3 state bucket created: `tf-state-aidp`
 - Backend configurations created for all environments (dev, stg, prod)
 - All three environments initialized with S3 backend
 - Backend uses Terraform 1.13.0 with native S3 locking (`use_lockfile = true`)
 
-### Backend Configuration Details
+**Backend Configuration Details:**
 - **Bucket**: `tf-state-aidp`
 - **Region**: `us-west-1`
 - **Encryption**: Enabled
@@ -212,8 +276,7 @@ Use Terraform variables for feature toggles:
   - Staging: `envs/stg/terraform.tfstate`
   - Production: `envs/prod/terraform.tfstate`
 
-### Completed (Phase 2 - Partial) ✅
-**Data Lake Module** (`modules/data_lake/`)
+**Phase 1: Data Lake Foundation (Task 1)**
 - ✅ S3 bucket deployed: `ai-dp-data-lake-dev-us-west-1`
 - ✅ Three-layer architecture implemented:
   - `raw/` - Ingested data (30d→IA, 90d→Glacier, 180d expiration)
@@ -228,51 +291,69 @@ Use Terraform variables for feature toggles:
 - ✅ All three layers tested with sample data
 - ✅ Lifecycle rules validated
 
-**Key Achievements**:
+**Key Achievements:**
 - Resolved AWS tag conflict errors by centralizing tags in provider `default_tags`
 - Implemented dynamic lifecycle rules to avoid empty rule errors
 - Successfully tested batch uploads to all three data lake layers
 - Established reusable tagging and lifecycle patterns for future modules
 
-### Development Strategy
-🔄 **Phase 1 (CI/CD) - Deferred**
-- GitHub Actions CI/CD pipeline setup will be completed at the end
-- AWS OIDC Identity Provider setup postponed
-- Focus on core infrastructure implementation first
+### In Progress ⏳
 
-### In Progress
-⏳ **Phase 2: Core Data Lake & Ingestion**
-- Next: Build `modules/ingestion_stream/` (API Gateway, Kinesis)
-- Next: Build `lambdas/etl/` (Kinesis consumer)
+**Phase 1: Data Lake Foundation (Task 2)**
+- Pending: Enable S3 EventBridge notifications on data lake bucket
+- This is required before Phase 3 (Batch EventBridge setup)
 
 ### Next Steps
-1. ✅ ~~Data Lake Module~~ - COMPLETED
-2. Build `modules/ingestion_stream/` module
-   - API Gateway REST API for real-time ingestion
-   - Kinesis Data Stream for buffering
-   - EventBridge rule for S3 batch upload triggers
-3. Build `lambdas/etl/` Lambda function
-   - Kinesis stream consumer
-   - Data validation and normalization
-   - Write validated data to S3 `raw/` layer
-4. Test end-to-end ingestion flow (batch and streaming)
-5. Build `modules/step_functions/` for orchestration (Phase 3)
-6. Build `modules/ai_enrichment/` for AI/ML services (Phase 3)
-7. Return to Phase 1 (CI/CD) after core infrastructure is complete
+
+**Immediate (Complete Phase 1):**
+1. Add `aws_s3_bucket_notification` resource to `modules/data_lake/main.tf` with `eventbridge = true`
+
+**Phase 2: Streaming Ingestion Path**
+2. Build `modules/ingestion_stream/` module (Part 1):
+   - HTTP API Gateway with POST endpoint
+   - Kinesis Data Stream (1 shard for dev)
+   - API Gateway → Kinesis integration
+3. Build `lambdas/etl/` Lambda function with DLQ
+4. Wire Lambda to `ingestion_stream` module (Part 2)
+5. Test end-to-end streaming: API → Kinesis → Lambda → S3 `raw/`
+
+**Phase 3: Batch Ingestion Path**
+6. Add EventBridge rule to `ingestion_stream` module (Part 3)
+7. Test S3 upload detection (no target yet)
+
+**Phase 4: Step Functions & EventBridge Wiring**
+8. Build `modules/step_functions/` (minimal Pass state)
+9. Wire EventBridge target to Step Functions
+
+**Phases 5-10:** See `docs/roadmap.md` for detailed sequential plan
+
+### Development Strategy
+
+✅ **Sequential Implementation Approach**
+- Build strictly in phase order (0 → 1 → 2 → 3 → ... → 10)
+- No "placeholders for later" - only build what's needed NOW
+- Resources created when needed (DynamoDB in Phase 5, before Phase 7 uses it)
+- **CI/CD deferred to Phase 10** (after infrastructure proven working)
 
 ### Progress Tracking
-**Overall Completion**: ~15%
+
+**Overall Completion**: ~20% (2 of 10 phases complete)
 
 ```
-Phase 0 (Bootstrap):     ████████████████████ 100% ✅
-Phase 1 (CI/CD):         ░░░░░░░░░░░░░░░░░░░░   0% ⏸️ (Deferred)
-Phase 2 (Data Lake):     ████░░░░░░░░░░░░░░░░  20% ⏳ (data_lake done)
-Phase 3 (Orchestration): ░░░░░░░░░░░░░░░░░░░░   0%
-Phase 4 (Storage):       ░░░░░░░░░░░░░░░░░░░░   0%
-Phase 5 (Analytics):     ░░░░░░░░░░░░░░░░░░░░   0%
-Phase 6 (Security):      ░░░░░░░░░░░░░░░░░░░░   0%
-Phase 7 (Production):    ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 0 (Bootstrap):           ████████████████████ 100% ✅
+Phase 1 (Data Lake):           ████████████████████ 100% ✅ (Task 1) | ⏳ (Task 2 pending)
+Phase 2 (Streaming):           ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 3 (Batch EventBridge):  ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 4 (Step Functions):     ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 5 (DynamoDB):            ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 6 (AI Enrichment):       ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 7 (Merge & Orchestrate): ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 8 (Analytics):           ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
+Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
 ```
+
+**See `docs/roadmap.md` for complete phase-by-phase implementation plan.**
 
 ## Lessons Learned & Best Practices
 
@@ -363,7 +444,11 @@ rule {
 
 ## Important Notes
 
-- **Current Status**: Phase 0 completed (backend infrastructure configured). Skipping Phase 1 (CI/CD) to focus on core infrastructure first.
-- **Roadmap**: See `docs/roadmap.md` for detailed implementation phases and completion criteria
+- **Portfolio Project**: This is a portfolio project for entry-level to intermediate cloud engineering roles. Focus on working, explainable infrastructure over enterprise perfection. See `.claude/agents/portfolio.md` for implementation guidelines.
+- **Learning Project**: The developer is learning as we go. Keep complexity appropriate (intermediate level), prioritize understanding, and ensure every implementation can be explained in an interview.
+- **Roadmap Reorganization (2025-01-24)**: Roadmap restructured for strict sequential implementation. CI/CD moved from Phase 1 to Phase 10 (final phase). Now building in order: Bootstrap → Data Lake → Streaming → Batch → Step Functions → DynamoDB → AI → Merge → Analytics → Hardening → CI/CD.
+- **Current Status**: Phase 1 Task 2 in progress (Enable S3 EventBridge notifications). See `docs/status.md` for quick status overview.
+- **Roadmap**: See `docs/roadmap.md` for detailed 10-phase sequential implementation plan
 - **Project Guide**: See `docs/ai-dp overview notion.md` for comprehensive architecture overview
 - **Error Tracking**: Always consult and update `docs/errorlog.md` when debugging issues
+- **Implementation Agent**: Use the Portfolio Implementation Agent (`.claude/agents/portfolio.md`) for all Terraform module work

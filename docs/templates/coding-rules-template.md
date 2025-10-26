@@ -1,6 +1,19 @@
+# Coding Rules Template
+
+> **📋 TEMPLATE FOR FUTURE PROJECTS**
+>
+> This is a reusable template for establishing coding standards in new projects.
+>
+> **How to use**:
+> 1. Copy the content below into your new project's `CLAUDE.md` or `.claude/` configuration
+> 2. Customize the rules based on project type and tech stack
+> 3. Remove or modify any rules that don't apply
+>
+> **Note**: The `inclusion: always` frontmatter below does NOT work in `docs/` directory.
+> Claude Code only processes frontmatter in `.claudecontext` files or project root CLAUDE.md.
+
 ---
-inclusion: always
----
+
 # Fundamental Development Principles (Development Directives)
 - **NO HARDCODING, EVER**: All solutions must be generic, pattern-based, and work across all commands, not just specific examples.
 - **ROOT CAUSE, NOT BANDAID**: Fix the underlying structural or data lineage issues.

@@ -14,7 +14,6 @@ variable "environment" {
 variable "project_name" {
   description = "Project name used in resource naming"
   type        = string
-  default     = "ai-dp"
 }
 
 variable "aws_region" {
@@ -31,7 +30,6 @@ variable "kms_key_arn" {
 variable "enable_versioning" {
   description = "Enable S3 bucket versioning"
   type        = bool
-  default     = true
 }
 
 #-------------------- Lifecycle Policy Variables --------------------#

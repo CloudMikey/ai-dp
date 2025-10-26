@@ -49,3 +49,30 @@ module "data_lake" {
     expiration_days            = 0 # Keep indefinitely
   }
 }
+
+#-------------------- Streaming Ingestion Module --------------------#
+# API Gateway HTTP API + Kinesis Data Stream for real-time ingestion
+
+module "ingestion_stream" {
+  source = "../../modules/ingestion_stream"
+
+  environment  = "dev"
+  project_name = var.project_name
+  aws_region   = var.aws_region
+
+  # Kinesis configuration (1 shard = 1 MB/sec write capacity)
+  kinesis_shard_count     = 1
+  kinesis_retention_hours = 24
+  kinesis_encryption_type = "NONE" # Use KMS in production
+
+  # API Gateway configuration
+  enable_api_gateway_logging     = true
+  api_gateway_log_retention_days = 7
+  enable_cors                    = true
+  cors_allow_origins             = ["*"] # Restrict in production
+
+  tags = {
+    Component = "Ingestion"
+    DataFlow  = "Streaming"
+  }
+}

@@ -1,422 +1,519 @@
 # AI-Powered Serverless Data Pipeline - Implementation Roadmap
 
-Based on your project guide, here's a comprehensive task list with completion criteria for each phase:
+**Sequential Implementation Plan:** Build only what's needed for each phase, no "placeholders for later" unless explicitly marked.
 
 ---
 
 ## Phase 0: Project Bootstrap
-**Goal:** Production-ready repository with Terraform, S3 state locking, and GitHub OIDC authentication
+**Goal:** Terraform-ready repository with remote state management
 
 ### Tasks
 
 **1. Repository Structure Setup**
-- Create directory structure (`/envs/{dev,stg,prod}`, `/modules/*`, `/lambdas/*`, `/scripts/*`)
+- Create directory structure (`/envs/{dev,stg,prod}`, `/modules/*`, `/lambdas/*`, `/docs/*`)
 - Add `.gitignore`, `.editorconfig`, and `README.md`
 - Initialize Git repository
 
-**Complete when:** Directory structure matches the skeleton, all configuration files are committed
+**Complete when:** Directory structure matches skeleton, all configuration files committed
 
 **2. Terraform Version & Standards**
 - Install Terraform >= 1.11.0
 - Create `terraform.tf` files in each env with version constraints
 - Add `tflint`, `tfsec` configuration files
 
-**Complete when:** `terraform version` shows >= 1.11.0, linters are configured and passing
+**Complete when:** `terraform version` shows >= 1.11.0, linters configured and passing
 
 **3. S3 State Bucket with Native Locking**
 - Create `bootstrap/` directory with Terraform config for S3 backend bucket
 - Define S3 bucket resource with versioning enabled and encryption
 - Apply bootstrap config locally: `terraform -chdir=bootstrap init && terraform -chdir=bootstrap apply`
-- Configure `backend.tf` in each env with `use_lockfile = true` pointing to the created bucket
+- Configure `backend.tf` in each env with `use_lockfile = true` pointing to created bucket
 - Migrate local state to remote: `terraform init -migrate-state` in each env directory
 
-**Complete when:** S3 bucket exists with versioning enabled, `.tflock` files appear in S3 bucket during `terraform plan`, no DynamoDB table required, local bootstrap state saved separately
+**Complete when:** S3 bucket exists with versioning enabled, `.tflock` files appear in S3 during `terraform plan`, all three envs using remote state
 
-**4. AWS OIDC Identity Provider**
-- Create OIDC Identity Provider in IAM for `token.actions.githubusercontent.com`
-- Create three IAM roles (dev, stg, prod) with trust policies scoped to your repository
-- Document role ARNs
-
-**Complete when:** GitHub Actions can successfully assume each role, trust policies validated
+**Status:** ✅ **COMPLETED**
 
 ---
 
-## Phase 1: CI/CD Workflows
-**Goal:** Automated, secure deployment pipeline with approval gates
-
-### Tasks
-
-**1. CI Workflow (Pull Requests)**
-- Create `.github/workflows/ci.yml`
-- Add steps: checkout → setup Terraform → fmt → validate → tflint → tfsec → plan (dev)
-- Test with a dummy PR
-
-**Complete when:** PR triggers workflow, all checks pass, plan output visible in PR comments
-
-**2. Deploy Workflow (Main Branch)**
-- Create `.github/workflows/deploy.yml`
-- Configure OIDC credential assumption for each environment
-- Add manual approval gates between environments
-- Implement dev → stg → prod promotion flow
-
-**Complete when:** Merging to main successfully deploys to dev, manual approvals work, stg/prod deployments succeed
-
-**3. Per-Environment IAM Roles**
-- Verify least-privilege policies for each environment role
-- Test resource-level permissions (S3, Lambda, DynamoDB, etc.)
-- Add environment protection rules in GitHub
-
-**Complete when:** Each environment can only modify its own resources, cross-environment isolation verified
-
-**4. Workflow Testing & Documentation**
-- Test rollback scenario
-- Document workflow triggers and approval process
-- Create runbook for common CI/CD issues
-
-**Complete when:** Team members understand deployment process, rollback tested successfully
-
----
-
-## Phase 2: Core Data Lake & Ingestion
-**Goal:** Functional batch and streaming ingestion into organized S3 data lake
+## Phase 1: Data Lake Foundation
+**Goal:** Three-layer S3 data lake with lifecycle policies
 
 ### Tasks
 
 **1. Data Lake Module (`modules/data_lake/`)**
-- Create S3 buckets with prefixes: `raw/`, `processed/`, `curated/`
-- Enable versioning and SSE-S3/KMS encryption
-- Configure lifecycle policies for cost optimization
-- Block public access
+- Create S3 bucket with prefixes: `raw/`, `processed/`, `curated/`
+- Enable versioning and SSE-S3 encryption
+- Configure lifecycle policies for each layer (different retention per layer)
+- Block public access (all 4 settings)
+- Enforce TLS/HTTPS via bucket policy
 
-**Complete when:** Buckets created, encryption verified, lifecycle rules tested with sample data
+**Complete when:** Bucket created, encryption verified, lifecycle rules tested with sample uploads to all three layers
 
-**2. Batch Ingestion Pipeline**
-- Create EventBridge rule for S3 `raw/` uploads
-- Configure rule to trigger Step Functions (placeholder for now)
-- Add CloudWatch logging
+**2. Enable S3 EventBridge Notifications**
+- Add `aws_s3_bucket_notification` resource with `eventbridge = true` to data lake module
+- This allows EventBridge to receive S3 object creation events
 
-**Complete when:** File upload to `raw/` triggers EventBridge event, logs confirm event delivery
+**Complete when:** S3 bucket has EventBridge notifications enabled (visible in S3 console)
 
-**3. Streaming Ingestion Module (`modules/ingestion_stream/`)**
-- Create HTTP API Gateway with POST endpoint
-- Create Kinesis Data Stream (1-2 shards)
-- Configure API Gateway → Kinesis integration
-
-**Complete when:** API endpoint accepts JSON payloads, data appears in Kinesis stream
-
-**4. ETL Lambda Consumer**
-- Write `lambdas/etl/app.py` (validate, normalize, write to S3 raw/)
-- Package Lambda with dependencies
-- Configure Lambda to consume from Kinesis
-- Add error handling and DLQ
-
-**Complete when:** Events from Kinesis are processed and appear as normalized JSON in S3 `raw/`, errors go to DLQ
-
-**5. Integration Testing**
-- Test batch upload end-to-end
-- Test streaming API with sample payloads
-- Verify data partitioning in S3
-- Test error scenarios
-
-**Complete when:** Both ingestion paths work reliably, data correctly partitioned, errors handled gracefully
+**Status:** ✅ **COMPLETED** (Phase 1, Task 1) | ⏳ **IN PROGRESS** (Phase 1, Task 2 - pending implementation)
 
 ---
 
-## Phase 3: Orchestration & AI/ML Enrichment
-**Goal:** Step Functions orchestrating AI services with retry logic
+## Phase 2: Streaming Ingestion Path
+**Goal:** Working API Gateway → Kinesis → Lambda → S3 pipeline
 
 ### Tasks
 
-**1. Step Functions Module (`modules/step_functions/`)**
-- Create state machine definition (ASL JSON)
-- Implement fan-out pattern for parallel AI calls
-- Configure CloudWatch Logs and X-Ray tracing
-- Add retry and catch configurations
+**1. Streaming Ingestion Module - Part 1 (`modules/ingestion_stream/`)**
+- Create `modules/ingestion_stream/` module structure
+- Create HTTP API Gateway with single POST endpoint (`/ingest`)
+- Create Kinesis Data Stream (1 shard for dev, variable for scaling)
+- Configure API Gateway → Kinesis integration (direct integration, no Lambda proxy)
 
-**Complete when:** State machine validates, can be triggered manually, execution history visible in console
+**Complete when:** API endpoint accepts JSON payloads, data appears in Kinesis stream (visible in Kinesis console)
 
-**2. AI Enrichment Module (`modules/ai_enrichment/`)**
-- Configure Comprehend integration (sentiment analysis, entity extraction)
-- Add feature flag for Rekognition (disabled by default)
-- Create IAM roles for AI service access
+**2. ETL Lambda Function (`lambdas/etl/`)**
+- Write `lambdas/etl/app.py`:
+  - Consume from Kinesis stream
+  - Validate JSON structure (basic schema check)
+  - Normalize data (consistent timestamp format, required fields)
+  - Write to S3 `raw/` layer with partitioning (`raw/year=YYYY/month=MM/day=DD/data.json`)
+- Create `requirements.txt` with dependencies (boto3, etc.)
+- Package Lambda deployment artifact
+- Create SQS Dead Letter Queue (DLQ) for failed events
+- Add CloudWatch Logs for Lambda
 
-**Complete when:** State machine can call Comprehend successfully, feature flag controls Rekognition, IAM permissions work
+**Complete when:** Lambda code written, packaged, DLQ created (not yet wired to Kinesis)
 
-**3. SageMaker Endpoint Setup**
-- Choose and deploy a simple anomaly detection model
-- Create real-time endpoint (ml.t2.medium to start)
-- Configure Step Functions integration with SageMaker
+**3. Lambda Infrastructure (`modules/ingestion_stream/` - Part 2)**
+- Add Lambda resource to `ingestion_stream` module
+- Create IAM role for Lambda with permissions:
+  - Kinesis: `DescribeStream`, `GetRecords`, `GetShardIterator`
+  - S3: `PutObject` to data lake `raw/*` prefix only
+  - CloudWatch Logs: `CreateLogGroup`, `CreateLogStream`, `PutLogEvents`
+  - SQS: `SendMessage` to DLQ
+- Configure Lambda event source mapping (Kinesis → Lambda)
+- Configure DLQ for failed Kinesis events
+- Set Lambda timeout (60s), memory (256MB)
 
-**Complete when:** Endpoint is deployed, accepts test requests, returns predictions within SLA
+**Complete when:** Lambda deployed, event source mapping active, can consume from Kinesis
 
-**4. Merge Lambda (`lambdas/merge/`)**
-- Write merge logic to combine AI outputs
-- Write enriched data to S3 `processed/`
-- Update DynamoDB hot view
-- Add idempotency logic
+**4. Integration Testing - Streaming Path**
+- Send test JSON payload to API Gateway endpoint
+- Verify data flows: API Gateway → Kinesis → Lambda → S3 `raw/`
+- Verify partitioning is correct (`raw/year=2025/month=01/day=24/...`)
+- Test error scenario: Send invalid JSON → verify DLQ receives message
 
-**Complete when:** Lambda successfully merges all AI outputs, writes to both S3 and DynamoDB, handles duplicates
-
-**5. Error Handling & DLQ**
-- Configure SQS DLQ for each Lambda
-- Create `lambdas/replay/app.py` for DLQ processing
-- Add CloudWatch alarms for DLQ depth
-- Test failure scenarios
-
-**Complete when:** Failed messages go to DLQ, replay logic works, alarms fire appropriately
-
-**6. End-to-End Orchestration Test**
-- Trigger state machine with real data
-- Verify all AI services are called
-- Confirm data appears in processed/ and DynamoDB
-- Test with various input types
-
-**Complete when:** Complete pipeline from ingestion → AI enrichment → storage works reliably for 100+ test events
+**Complete when:** End-to-end streaming ingestion works, data appears in S3 `raw/` with correct partitions, DLQ catches errors
 
 ---
 
-## Phase 4: Storage for Hot & Historical Queries
-**Goal:** Dual storage strategy operational with query capabilities
+## Phase 3: Batch Ingestion Path (EventBridge)
+**Goal:** EventBridge detects S3 uploads to `raw/` (orchestration happens later)
 
 ### Tasks
 
-**1. DynamoDB Hot Store (`modules/hot_store/`)**
-- Create DynamoDB table with PK/SK design
-- Add GSIs for common query patterns
-- Configure TTL for data expiration
-- Set provisioned or on-demand capacity
+**1. EventBridge Rule (`modules/ingestion_stream/` - Part 3)**
+- Add EventBridge rule to existing `ingestion_stream` module
+- Configure event pattern: source=`aws.s3`, detail-type=`Object Created`, prefix=`raw/`
+- Filter to only match data lake bucket name
+- Add CloudWatch Logs/metrics for rule invocations
 
-**Complete when:** Table created, can write/read data, GSIs return results, TTL deletes old items
+**Complete when:** File upload to `raw/` triggers EventBridge rule (visible in CloudWatch Metrics "Invocations")
 
-**2. Glue Crawler Configuration (`modules/analytics/`)**
-- Create Glue database for processed data
-- Configure crawler for `processed/` and `curated/` prefixes
-- Set up crawler schedule
+**Note:** EventBridge rule created but NO target configured yet. Target will be added in Phase 4 after Step Functions is created.
+
+**2. Testing - Batch Event Detection**
+- Manually upload file to `raw/` layer: `aws s3 cp test.json s3://bucket/raw/test.json`
+- Verify EventBridge rule shows "Invocations" metric increase in CloudWatch
+- Verify upload to `processed/` or `curated/` does NOT trigger rule
+
+**Complete when:** EventBridge reliably detects `raw/` uploads, ignores other layers
+
+---
+
+## Phase 4: Step Functions Placeholder & EventBridge Wiring
+**Goal:** Batch ingestion triggers Step Functions (minimal state machine)
+
+### Tasks
+
+**1. Step Functions Module - Minimal Placeholder (`modules/step_functions/`)**
+- Create `modules/step_functions/` module structure
+- Create `statemachine.json` with minimal ASL definition:
+  - Single "Pass" state that logs input
+  - Outputs success message
+- Create IAM role for Step Functions with CloudWatch Logs permissions
+- Create Step Functions state machine resource
+- Enable CloudWatch Logs (log level: ALL)
+
+**Complete when:** State machine created, can be triggered manually via console, execution logs appear in CloudWatch
+
+**2. EventBridge Target Configuration (`modules/ingestion_stream/` - Part 4)**
+- Add EventBridge target resource (conditional creation via variable)
+- Add variable: `state_machine_arn` (accepts ARN from Step Functions module)
+- Add variable: `create_eventbridge_target` (boolean, default: false)
+- Create IAM role for EventBridge with `states:StartExecution` permission
+- Wire EventBridge rule → Step Functions target
+
+**Complete when:** Terraform code ready, variables defined (not yet enabled)
+
+**3. Wire EventBridge to Step Functions (`envs/dev/main.tf`)**
+- Update `ingestion_stream` module call in `envs/dev/main.tf`:
+  - Set `state_machine_arn = module.step_functions.state_machine_arn`
+  - Set `create_eventbridge_target = true`
+- Apply Terraform changes
+
+**Complete when:** EventBridge target created and active
+
+**4. Integration Testing - Batch Path**
+- Upload file to S3 `raw/`: `aws s3 cp test.json s3://bucket/raw/batch-test.json`
+- Verify Step Functions execution triggered (visible in Step Functions console)
+- Verify execution completes successfully (Pass state)
+- Verify CloudWatch Logs show S3 event details in state machine input
+
+**Complete when:** End-to-end batch ingestion works: S3 upload → EventBridge → Step Functions → Logs confirm event delivery
+
+---
+
+## Phase 5: DynamoDB Hot Store
+**Goal:** DynamoDB table ready for enriched data storage (created BEFORE AI enrichment needs it)
+
+### Tasks
+
+**1. DynamoDB Hot Store Module (`modules/hot_store/`)**
+- Create `modules/hot_store/` module structure
+- Create DynamoDB table:
+  - Partition key: `recordId` (String)
+  - Sort key: `timestamp` (Number)
+  - GSI for querying by date range
+  - On-demand billing mode (simpler for dev)
+  - Enable point-in-time recovery
+  - Enable encryption at rest
+- Configure TTL attribute (optional: `expiresAt` for auto-deletion)
+
+**Complete when:** DynamoDB table created, can write/read test records via console, GSI returns results
+
+**2. Test DynamoDB Operations**
+- Write sample record via AWS CLI/console
+- Query by partition key
+- Query using GSI
+- Verify TTL deletes expired items (if configured)
+
+**Complete when:** All CRUD operations work, GSI functional, TTL deletes old items
+
+---
+
+## Phase 6: AI Enrichment Services
+**Goal:** Comprehend sentiment analysis integrated with Step Functions
+
+### Tasks
+
+**1. AI Enrichment Module - Comprehend Only (`modules/ai_enrichment/`)**
+- Create `modules/ai_enrichment/` module structure
+- Create IAM role for Step Functions to call Comprehend:
+  - Permissions: `comprehend:DetectSentiment`, `comprehend:DetectEntities`
+  - Trust relationship: Step Functions service
+- No resources created yet (Comprehend is serverless, no setup needed)
+- Output IAM role ARN for use in Step Functions state machine
+
+**Complete when:** IAM role created with correct permissions
+
+**2. Update Step Functions State Machine - Add Comprehend Task**
+- Update `statemachine.json` to replace Pass state with real workflow:
+  - Read S3 object (file uploaded to `raw/`)
+  - Call Comprehend DetectSentiment task
+  - Call Comprehend DetectEntities task (parallel with sentiment)
+  - Pass results to next step (placeholder for merge Lambda)
+- Update Step Functions IAM role to allow `s3:GetObject` on data lake `raw/*`
+- Apply changes to state machine
+
+**Complete when:** State machine updated, can successfully call Comprehend on S3 object content
+
+**3. Testing - AI Enrichment**
+- Upload text file to S3 `raw/`: `aws s3 cp sample-text.txt s3://bucket/raw/sample-text.txt`
+- Verify Step Functions execution triggered
+- Verify Comprehend tasks complete successfully
+- Verify execution output contains sentiment score and entities
+
+**Complete when:** Comprehend successfully analyzes S3 objects, results visible in Step Functions execution history
+
+**4. Optional: SageMaker Endpoint (Skip for Now)**
+- **Decision Point:** SageMaker endpoints are expensive ($50-100/month minimum)
+- **Portfolio Recommendation:** Skip SageMaker for initial build, add later if needed
+- **Alternative:** Use Comprehend only, or mock SageMaker with Lambda function
+
+**Complete when:** Decision documented (skip or implement)
+
+---
+
+## Phase 7: Merge Lambda & Complete Orchestration
+**Goal:** Combine AI outputs and write to `processed/` + DynamoDB
+
+### Tasks
+
+**1. Merge Lambda Function (`lambdas/merge/`)**
+- Write `lambdas/merge/app.py`:
+  - Accept AI enrichment results as input (from Step Functions)
+  - Merge Comprehend sentiment + entities into single JSON object
+  - Write enriched data to S3 `processed/` layer with partitioning
+  - Write enriched data to DynamoDB hot store
+  - Return success/failure status
+- Create `requirements.txt`
+- Package Lambda deployment artifact
+
+**Complete when:** Lambda code written and packaged
+
+**2. Merge Lambda Infrastructure (`modules/orchestration/`)**
+- Create new module: `modules/orchestration/` (or add to `step_functions` module)
+- Create Lambda resource for merge function
+- Create IAM role with permissions:
+  - S3: `PutObject` to `processed/*` prefix
+  - DynamoDB: `PutItem` to hot store table
+  - CloudWatch Logs
+- Create SQS DLQ for merge Lambda failures
+- Set timeout (30s), memory (256MB)
+
+**Complete when:** Merge Lambda deployed with IAM role and DLQ
+
+**3. Update Step Functions - Add Merge Lambda Task**
+- Update `statemachine.json`:
+  - Add Lambda invocation task after Comprehend tasks
+  - Pass Comprehend results as input to merge Lambda
+  - Add error handling (retry on throttle, catch on failure → DLQ)
+- Update Step Functions IAM role to allow `lambda:InvokeFunction` on merge Lambda
+
+**Complete when:** State machine includes merge Lambda task
+
+**4. End-to-End Testing - Full Pipeline**
+- **Streaming Path:** Send JSON via API Gateway → Kinesis → Lambda → S3 `raw/` → EventBridge → Step Functions → Comprehend → Merge Lambda → S3 `processed/` + DynamoDB
+- **Batch Path:** Upload file to S3 `raw/` → EventBridge → Step Functions → Comprehend → Merge Lambda → S3 `processed/` + DynamoDB
+- Verify enriched data in `processed/` layer
+- Verify enriched data in DynamoDB
+- Test error scenario: Invalid file → verify DLQ receives failure
+
+**Complete when:** Both ingestion paths work end-to-end, data lands in `processed/` and DynamoDB with AI enrichments
+
+---
+
+## Phase 8: Analytics & Query Layer
+**Goal:** Glue + Athena for SQL queries, visualization dashboard
+
+### Tasks
+
+**1. Analytics Module - Glue Crawler (`modules/analytics/`)**
+- Create `modules/analytics/` module structure
+- Create Glue database
+- Create Glue crawler for `processed/` prefix:
+  - Schedule: Daily (or on-demand)
+  - Partition detection enabled
+  - Schema inference from JSON files
+- Create IAM role for Glue crawler with S3 read permissions
 - Run initial crawl
 
-**Complete when:** Crawler successfully catalogs S3 data, tables visible in Glue catalog
+**Complete when:** Glue crawler successfully catalogs S3 `processed/` data, tables visible in Glue Data Catalog
 
-**3. Athena Query Setup**
-- Create Athena workgroup
-- Configure result bucket
-- Test sample queries against cataloged tables
-- Add partition projection for date-based queries
+**2. Athena Query Setup**
+- Create Athena workgroup (dev workgroup)
+- Configure S3 bucket for Athena query results (`s3://bucket/athena-results/`)
+- Test sample queries:
+  - `SELECT * FROM processed_data LIMIT 10`
+  - Query by partition: `WHERE year=2025 AND month=01`
+  - Aggregate sentiment scores: `SELECT sentiment, COUNT(*) FROM processed_data GROUP BY sentiment`
 
-**Complete when:** Can query processed data via SQL, query performance is acceptable, partitions work
+**Complete when:** Can query `processed/` data via SQL in Athena, partitions work, query performance acceptable
 
-**4. Data Partitioning Strategy**
-- Implement partitioning by date (`dt=YYYY/MM/DD`) and dimensions
-- Update Lambda merge logic to write partitioned data
-- Re-run crawler to detect partitions
+**3. Visualization Dashboard - Choose Platform**
+- **Option A:** QuickSight (managed, $$$)
+- **Option B:** Custom React app with Amplify (more control, portfolio-friendly)
+- **Option C:** Simple HTML + JavaScript dashboard (minimal, fast)
+- **Decision:** Document choice in README
 
-**Complete when:** Data is properly partitioned, queries automatically use partition pruning, costs are optimized
+**Complete when:** Platform chosen and documented
 
-**5. Query Performance Testing**
-- Run typical analytical queries
-- Measure query duration and data scanned
-- Optimize partitioning if needed
-- Document query patterns
+**4. Build Dashboard (Based on Chosen Platform)**
+- Implement dashboard with key metrics:
+  - Event volume over time (line chart)
+  - Sentiment distribution (pie chart)
+  - Recent events table (from DynamoDB)
+  - Entity frequency (bar chart)
+- Connect to Athena for historical queries
+- Connect to DynamoDB for real-time view
 
-**Complete when:** Queries return in < 10 seconds for typical use cases, costs per query are reasonable
-
----
-
-## Phase 5: Analytics & Frontend
-**Goal:** Visual insights accessible to end users
-
-### Tasks
-
-**1. Choose Visualization Platform**
-- Decide: QuickSight (managed) vs. React app (custom)
-- Document decision rationale
-
-**Complete when:** Platform chosen, requirements documented
-
-**2. Option A: QuickSight Setup**
-- Create QuickSight account
-- Configure data source (Athena + DynamoDB)
-- Create initial dashboard with key metrics
-- Set up user access
-
-**Complete when:** Dashboard shows live data, refreshes work, users can access
-
-**2. Option B: React Dashboard**
-- Set up React app with Amplify
-- Implement API calls to DynamoDB (latest view)
-- Implement Athena query execution for trends
-- Deploy to Amplify Hosting
-
-**Complete when:** Dashboard accessible via URL, shows real-time and historical data, responsive design works
-
-**3. Key Metrics & Visualizations**
-- Implement: event volume over time
-- Implement: sentiment distribution
-- Implement: anomaly alerts/scores
-- Implement: entity frequency analysis
-
-**Complete when:** All key metrics are visualized, update in real-time/near-real-time
-
-**4. Alert Configuration**
-- Set up SNS topic for alerts
-- Configure CloudWatch alarms for anomaly thresholds
-- Add email/Slack notifications
-- Test alert delivery
-
-**Complete when:** Alerts trigger correctly, notifications delivered within 1 minute, escalation works
+**Complete when:** Dashboard shows live data from both DynamoDB (recent) and Athena (historical)
 
 ---
 
-## Phase 6: Security, Compliance & Cost Controls
-**Goal:** Production-hardened platform with predictable costs
-
-### Tasks
-
-**1. IAM Least Privilege Review**
-- Audit all IAM roles and policies
-- Remove wildcards where possible
-- Add resource-level ARNs
-- Implement conditions (source VPC, MFA, etc.)
-
-**Complete when:** All services use minimal permissions, security scan passes, no overly permissive policies
-
-**2. Network Security**
-- Deploy SageMaker endpoint in VPC (if needed)
-- Configure security groups
-- Enable VPC endpoints for AWS services
-- Test connectivity
-
-**Complete when:** Network isolation verified, no public internet access required
-
-**3. Encryption at Rest & In Transit**
-- Verify S3 bucket encryption (SSE-S3 or KMS)
-- Enable DynamoDB encryption
-- Configure TLS-only S3 bucket policies
-- Verify Kinesis encryption
-
-**Complete when:** All data encrypted at rest and in transit, bucket policies enforce TLS
-
-**4. CloudWatch Dashboards**
-- Create operational dashboard (Lambda errors/duration, Kinesis iterator age, Step Functions failures)
-- Create cost dashboard (service usage, trends)
-- Add DLQ depth widgets
-
-**Complete when:** Single dashboard shows system health, anomalies visible at a glance
-
-**5. CloudWatch Alarms**
-- Lambda error rate > threshold
-- Step Functions failure rate
-- DLQ depth > 0
-- Kinesis iterator age increasing
-- SageMaker endpoint latency
-
-**Complete when:** All critical metrics have alarms, SNS notifications configured, tested
-
-**6. Cost Controls**
-- Apply consistent tags across all resources
-- Set up AWS Budget with alerts
-- Configure cost allocation tags
-- Review Kinesis shard scaling strategy
-
-**Complete when:** All resources tagged, budget alerts configured and tested, spending is predictable
-
-**7. Compliance Documentation**
-- Document data retention policies
-- Create data flow diagrams
-- Document encryption strategies
-- Add access control documentation
-
-**Complete when:** Audit-ready documentation exists, covers all compliance requirements
-
----
-
-## Phase 7: Testing, Promotion & Documentation
-**Goal:** Production-ready system with complete documentation
+## Phase 9: Production Hardening & Documentation
+**Goal:** Load testing, security review, operational documentation
 
 ### Tasks
 
 **1. Lambda Unit Tests**
-- Write unit tests for ETL Lambda
-- Write unit tests for merge Lambda
-- Write unit tests for replay Lambda
-- Achieve >80% code coverage
+- Write unit tests for ETL Lambda (`lambdas/etl/test_app.py`)
+- Write unit tests for Merge Lambda (`lambdas/merge/test_app.py`)
+- Use `pytest` and `moto` for mocking AWS services
+- Achieve >70% code coverage (portfolio-appropriate)
 
-**Complete when:** All tests pass, coverage threshold met, CI runs tests automatically
+**Complete when:** Tests written, all tests pass, coverage threshold met
 
-**2. Step Functions Testing**
-- Create local test inputs
-- Test happy path
-- Test error scenarios (AI service failures, timeouts)
-- Test retry logic
+**2. Load Testing - Streaming Path**
+- Create load test script: `scripts/load-test-streaming.ps1`
+- Send 1000 events to API Gateway endpoint
+- Monitor:
+  - Lambda concurrency
+  - Kinesis iterator age
+  - Error rates
+  - P95 latency
+- Identify bottlenecks
 
-**Complete when:** State machine handles all test cases correctly, retry logic verified
+**Complete when:** System handles 1000 events without errors, latency acceptable (<5s P95)
 
-**3. Load Testing**
-- Generate synthetic events for Kinesis
-- Run `load-test-kinesis.ps1` script
-- Monitor Lambda concurrency, errors, duration
-- Measure P95 latency
+**3. CloudWatch Dashboards**
+- Create operational dashboard in `modules/observability/`:
+  - Lambda invocations, errors, duration
+  - Kinesis metrics (iterator age, incoming records)
+  - Step Functions execution status
+  - DLQ depth (should be 0)
+  - DynamoDB read/write capacity
 
-**Complete when:** System handles target load (e.g., 1000 events/min) without errors, latency < 5s at P95
+**Complete when:** Single dashboard shows system health, anomalies visible at a glance
 
-**4. Disaster Recovery Testing**
-- Test DLQ replay mechanism
-- Test Terraform rollback
-- Simulate service outage
-- Document recovery procedures
+**4. CloudWatch Alarms**
+- Create alarms for critical metrics:
+  - Lambda error rate > 5%
+  - DLQ depth > 0 (immediate alert)
+  - Kinesis iterator age > 1 minute
+  - Step Functions failures > 3 in 5 minutes
+- Configure SNS topic for email notifications
 
-**Complete when:** Can recover from failures within RTO, procedures documented
+**Complete when:** All alarms created, SNS notifications tested
 
-**5. Staging Promotion**
-- Deploy full stack to staging
-- Run smoke tests
-- Perform manual validation
-- Get stakeholder approval
+**5. Security Review**
+- Audit IAM roles for least-privilege compliance
+- Verify all S3 buckets block public access
+- Verify TLS enforcement on S3 buckets
+- Verify encryption at rest (S3, DynamoDB, Kinesis)
+- Run `tfsec` security scan
+- Document findings and fixes
 
-**Complete when:** Staging environment matches prod config, all tests pass, approval obtained
+**Complete when:** Security scan passes, no critical findings, audit trail documented
 
-**6. Production Deployment**
-- Deploy to production using GitHub Actions
-- Monitor closely for 24 hours
-- Verify data flow end-to-end
-- Enable monitoring alerts
+**6. Cost Optimization Review**
+- Review lifecycle policies (data retention appropriate?)
+- Review DynamoDB capacity (on-demand vs provisioned)
+- Review Kinesis shard count (can reduce to 1 for dev?)
+- Review CloudWatch Logs retention (7 days for dev)
+- Set up AWS Budget alert ($50/month threshold)
 
-**Complete when:** Production deployment successful, no errors, data flowing correctly
+**Complete when:** Cost controls in place, budget alerts configured
 
 **7. Architecture Documentation**
-- Create system architecture diagram (update ASCII art to visual diagram)
-- Document all AWS resources and their purposes
-- Add sequence diagrams for key flows
-- Document API contracts
+- Create architecture diagram (visual, not ASCII art)
+- Document data flow: Ingestion → Enrichment → Storage → Analytics
+- Add sequence diagram for batch pipeline
+- Add sequence diagram for streaming pipeline
+- Document API contracts (API Gateway endpoint schema)
+- Update README with architecture overview
 
 **Complete when:** Complete architecture documentation exists, diagrams are current
 
 **8. Operational Runbooks**
 - Write runbook: DLQ replay procedure
-- Write runbook: Rollback procedure
+- Write runbook: Manual Step Functions trigger
 - Write runbook: Scaling Kinesis shards
-- Write runbook: Troubleshooting common issues
+- Write runbook: Troubleshooting Lambda errors
+- Write runbook: Disaster recovery (restore from S3 versions)
 
-**Complete when:** Team can operate system using runbooks, no tribal knowledge required
+**Complete when:** Team can operate system using runbooks
 
-**9. README & Portfolio Documentation**
-- Update README with architecture overview
-- Add setup instructions
-- Add Terraform commands reference
-- Create portfolio write-up highlighting key achievements
+**9. Staging Environment Deployment**
+- Deploy full stack to `envs/stg/`
+- Run smoke tests
+- Compare staging vs dev configurations
+- Document environment differences
 
-**Complete when:** README is complete, project is portfolio-ready, can be shared publicly
+**Complete when:** Staging environment operational, matches dev functionality
+
+---
+
+## Phase 10: CI/CD Pipeline (Final Phase)
+**Goal:** Automated deployments via GitHub Actions
+
+### Tasks
+
+**1. AWS OIDC Identity Provider Setup**
+- Create OIDC Identity Provider in IAM for `token.actions.githubusercontent.com`
+- Create three IAM roles (dev, stg, prod) with trust policies scoped to your GitHub repository
+- Document role ARNs in README
+
+**Complete when:** GitHub Actions can assume each role, trust policies validated
+
+**2. CI Workflow - Pull Requests**
+- Create `.github/workflows/ci.yml`
+- Workflow triggers: Pull requests to `main`
+- Steps:
+  - Checkout code
+  - Setup Terraform
+  - `terraform fmt -check`
+  - `terraform validate`
+  - Run `tflint`
+  - Run `tfsec`
+  - `terraform plan` for dev environment
+  - Comment plan output on PR
+
+**Complete when:** PR triggers CI workflow, all checks pass, plan output visible in PR comments
+
+**3. Deploy Workflow - Main Branch**
+- Create `.github/workflows/deploy.yml`
+- Workflow triggers: Push to `main` branch
+- Jobs:
+  - **Deploy to Dev:** Auto-deploy after merge
+  - **Deploy to Staging:** Manual approval required
+  - **Deploy to Prod:** Manual approval required
+- Use OIDC for authentication (no long-term credentials)
+- Each job runs: `terraform apply -auto-approve` for respective environment
+
+**Complete when:** Merging to main deploys to dev, manual approvals work for staging/prod
+
+**4. Environment Protection Rules**
+- Configure GitHub environment protection:
+  - `dev`: No approvals required
+  - `stg`: Require 1 reviewer approval
+  - `prod`: Require 1 reviewer approval + 30-minute wait time
+- Restrict prod deployments to main branch only
+
+**Complete when:** Environment protection rules active, tested with deployment
+
+**5. Workflow Testing**
+- Create test PR with Terraform change (add tag to resource)
+- Verify CI workflow runs and plan output correct
+- Merge PR, verify dev deployment succeeds
+- Approve staging deployment, verify success
+- Test rollback: Revert commit, verify rollback deploys
+
+**Complete when:** Full CI/CD cycle tested (PR → CI → Dev → Staging → Prod)
+
+**6. CI/CD Documentation**
+- Document workflow triggers
+- Document approval process
+- Document rollback procedure
+- Add CI/CD architecture diagram
+- Create troubleshooting guide for failed deployments
+
+**Complete when:** CI/CD pipeline fully documented
 
 ---
 
 ## Success Metrics
 
 **Technical Milestones:**
-- ✅ All 7 phases completed
-- ✅ End-to-end data flow working (ingestion → AI enrichment → storage → visualization)
-- ✅ Zero manual AWS Console clicks required for deployment
+- ✅ All 10 phases completed sequentially
+- ✅ End-to-end data flow working (ingestion → AI enrichment → storage → analytics)
+- ✅ Automated deployment pipeline operational
 - ✅ All environments (dev, stg, prod) operational
 - ✅ P95 latency < 5 seconds for streaming path
-- ✅ Cost < $X/month target (set your budget)
+- ✅ Cost < $50/month for dev environment
 
 **Portfolio Readiness:**
 - ✅ Professional architecture diagram
@@ -424,39 +521,67 @@ Based on your project guide, here's a comprehensive task list with completion cr
 - ✅ Public GitHub repository with polished README
 - ✅ Can explain design decisions and tradeoffs
 - ✅ Can discuss scalability and cost optimization strategies
+- ✅ Demonstrates AWS services: S3, Lambda, Kinesis, Step Functions, Comprehend, DynamoDB, Glue, Athena
+- ✅ Demonstrates IaC: Terraform, modules, remote state
+- ✅ Demonstrates CI/CD: GitHub Actions, OIDC, multi-environment deployment
 
 ---
 
-**Total Estimated Timeline:** 8-12 weeks (depending on experience level and time commitment)
-
----
-
-## Quick Reference: Phase Dependencies
+## Phase Completion Tracking
 
 ```
-Phase 0 (Bootstrap)
+Phase 0 (Bootstrap):           ████████████████████ 100% ✅
+Phase 1 (Data Lake):           ████████████████████ 100% ✅
+Phase 2 (Streaming):           ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 3 (Batch EventBridge):  ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 4 (Step Functions):     ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 5 (DynamoDB):            ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 6 (AI Enrichment):       ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 7 (Merge & Orchestrate): ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 8 (Analytics):           ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
+Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
+```
+
+**Overall Progress:** ~20% (2 of 10 phases complete)
+
+---
+
+## Quick Reference: New Sequential Phase Order
+
+```
+Phase 0: Bootstrap (Terraform setup)
     ↓
-Phase 1 (CI/CD) ←─────┐
-    ↓                  │
-Phase 2 (Ingestion)    │ (All phases need CI/CD)
-    ↓                  │
-Phase 3 (AI/ML) ───────┤
-    ↓                  │
-Phase 4 (Storage) ─────┤
-    ↓                  │
-Phase 5 (Analytics) ───┤
-    ↓                  │
-Phase 6 (Security) ────┤
-    ↓                  │
-Phase 7 (Testing) ─────┘
+Phase 1: Data Lake (S3 buckets)
+    ↓
+Phase 2: Streaming Ingestion (API Gateway → Kinesis → Lambda → S3)
+    ↓
+Phase 3: Batch Ingestion (EventBridge rule, no target yet)
+    ↓
+Phase 4: Step Functions Placeholder + EventBridge Wiring
+    ↓
+Phase 5: DynamoDB Hot Store (before AI needs it)
+    ↓
+Phase 6: AI Enrichment (Comprehend integration)
+    ↓
+Phase 7: Merge Lambda & Complete Orchestration
+    ↓
+Phase 8: Analytics (Glue, Athena, Dashboard)
+    ↓
+Phase 9: Production Hardening (Testing, Security, Docs)
+    ↓
+Phase 10: CI/CD Pipeline (GitHub Actions)
 ```
 
-**Can work in parallel:**
-- Phase 2-4 can have some overlap once ingestion is working
-- Phase 5 can start once Phase 4 has basic querying
-- Phase 6 should be integrated throughout, final audit at end
+**Key Principles:**
+1. **No dependencies on future phases** - Each phase builds only what's needed NOW
+2. **Resources created when needed** - DynamoDB created in Phase 5 (before Phase 7 Merge Lambda needs it)
+3. **DLQs created with Lambdas** - Error handling infrastructure built alongside resources
+4. **Security incremental** - Each phase includes security basics (encryption, IAM), final audit in Phase 9
+5. **CI/CD last** - Deployment automation added after infrastructure is proven working
 
-**Cannot be parallelized:**
-- Phase 0 must complete before Phase 1
-- Phase 1 must complete before other phases (need deployment pipeline)
-- Phase 7 testing requires all other phases substantially complete
+---
+
+**Total Estimated Timeline:** 8-12 weeks
+
+**Last Updated:** 2025-01-24 (Reorganized for strict sequential implementation)

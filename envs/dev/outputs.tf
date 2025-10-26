@@ -26,3 +26,25 @@ output "data_lake_curated_path" {
   description = "Full S3 path to curated data layer"
   value       = module.data_lake.curated_bucket_path
 }
+
+#-------------------- Streaming Ingestion Outputs --------------------#
+
+output "api_gateway_invoke_url" {
+  description = "API Gateway endpoint URL for data ingestion (use this for testing)"
+  value       = module.ingestion_stream.api_gateway_invoke_url
+}
+
+output "api_gateway_id" {
+  description = "API Gateway HTTP API ID"
+  value       = module.ingestion_stream.api_gateway_id
+}
+
+output "kinesis_stream_name" {
+  description = "Name of the Kinesis ingestion stream"
+  value       = module.ingestion_stream.kinesis_stream_name
+}
+
+output "kinesis_stream_arn" {
+  description = "ARN of the Kinesis ingestion stream"
+  value       = module.ingestion_stream.kinesis_stream_arn
+}
