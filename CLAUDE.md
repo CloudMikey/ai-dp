@@ -276,7 +276,7 @@ Use Terraform variables for feature toggles:
   - Staging: `envs/stg/terraform.tfstate`
   - Production: `envs/prod/terraform.tfstate`
 
-**Phase 1: Data Lake Foundation (Task 1)**
+**Phase 1: Data Lake Foundation (All Tasks Complete)**
 - ✅ S3 bucket deployed: `ai-dp-data-lake-dev-us-west-1`
 - ✅ Three-layer architecture implemented:
   - `raw/` - Ingested data (30d→IA, 90d→Glacier, 180d expiration)
@@ -287,6 +287,7 @@ Use Terraform variables for feature toggles:
   - Versioning enabled
   - Public access blocked (all 4 settings)
   - TLS/HTTPS enforced via bucket policy
+- ✅ EventBridge notifications enabled for batch ingestion detection
 - ✅ Provider default_tags pattern implemented (resolved tag conflicts)
 - ✅ All three layers tested with sample data
 - ✅ Lifecycle rules validated
@@ -296,34 +297,38 @@ Use Terraform variables for feature toggles:
 - Implemented dynamic lifecycle rules to avoid empty rule errors
 - Successfully tested batch uploads to all three data lake layers
 - Established reusable tagging and lifecycle patterns for future modules
+- EventBridge integration ready for Phase 3 batch ingestion path
 
-### In Progress ⏳
+**Phase 2: Streaming Ingestion Path (All Tasks Complete)**
+- ✅ HTTP API Gateway deployed: `https://57cnx9jpje.execute-api.us-west-1.amazonaws.com//ingest`
+- ✅ Kinesis Data Stream operational: `ai-dp-dev-ingestion-stream` (1 shard)
+- ✅ API Gateway → Kinesis direct integration (no Lambda proxy)
+- ✅ ETL Lambda function deployed: `ai-dp-dev-etl` (Python 3.11, 256MB, 60s timeout)
+- ✅ Lambda event source mapping active (Kinesis → Lambda, batch=100, retry=3)
+- ✅ SQS Dead Letter Queue configured: `ai-dp-dev-etl-dlq` (14-day retention)
+- ✅ End-to-end streaming path tested: API → Kinesis → Lambda → S3 `raw/`
+- ✅ S3 partitioning verified: `raw/year=2025/month=10/day=27/`
+- ✅ DLQ error handling tested: Invalid records sent to SQS after 3 retries
 
-**Phase 1: Data Lake Foundation (Task 2)**
-- Pending: Enable S3 EventBridge notifications on data lake bucket
-- This is required before Phase 3 (Batch EventBridge setup)
+**Key Achievements:**
+- Implemented least-privilege IAM roles (S3 write scoped to `raw/*` only)
+- Successfully processed streaming events with JSON validation and normalization
+- Confirmed automatic retry mechanism and DLQ integration
+- Lambda adds metadata: `processed_at`, `lambda_version`, `lambda_name`
 
 ### Next Steps
 
-**Immediate (Complete Phase 1):**
-1. Add `aws_s3_bucket_notification` resource to `modules/data_lake/main.tf` with `eventbridge = true`
-
-**Phase 2: Streaming Ingestion Path**
-2. Build `modules/ingestion_stream/` module (Part 1):
-   - HTTP API Gateway with POST endpoint
-   - Kinesis Data Stream (1 shard for dev)
-   - API Gateway → Kinesis integration
-3. Build `lambdas/etl/` Lambda function with DLQ
-4. Wire Lambda to `ingestion_stream` module (Part 2)
-5. Test end-to-end streaming: API → Kinesis → Lambda → S3 `raw/`
-
-**Phase 3: Batch Ingestion Path**
-6. Add EventBridge rule to `ingestion_stream` module (Part 3)
-7. Test S3 upload detection (no target yet)
+**Phase 3: Batch Ingestion Path (EventBridge Rule)**
+1. Add EventBridge rule to `ingestion_stream` module:
+   - Configure event pattern for S3 Object Created events
+   - Filter to only match data lake bucket `raw/` prefix
+   - Add CloudWatch metrics for rule invocations
+2. Test S3 upload detection (no target yet - targets added in Phase 4)
 
 **Phase 4: Step Functions & EventBridge Wiring**
-8. Build `modules/step_functions/` (minimal Pass state)
-9. Wire EventBridge target to Step Functions
+3. Build `modules/step_functions/` (minimal Pass state)
+4. Wire EventBridge target to Step Functions
+5. Test end-to-end batch ingestion: S3 upload → EventBridge → Step Functions
 
 **Phases 5-10:** See `docs/roadmap.md` for detailed sequential plan
 
@@ -337,12 +342,12 @@ Use Terraform variables for feature toggles:
 
 ### Progress Tracking
 
-**Overall Completion**: ~20% (2 of 10 phases complete)
+**Overall Completion**: ~30% (3 of 10 phases complete)
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
-Phase 1 (Data Lake):           ████████████████████ 100% ✅ (Task 1) | ⏳ (Task 2 pending)
-Phase 2 (Streaming):           ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 1 (Data Lake):           ████████████████████ 100% ✅
+Phase 2 (Streaming):           ████████████████████ 100% ✅
 Phase 3 (Batch EventBridge):  ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 4 (Step Functions):     ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 5 (DynamoDB):            ░░░░░░░░░░░░░░░░░░░░   0%
@@ -447,7 +452,7 @@ rule {
 - **Portfolio Project**: This is a portfolio project for entry-level to intermediate cloud engineering roles. Focus on working, explainable infrastructure over enterprise perfection. See `.claude/agents/portfolio.md` for implementation guidelines.
 - **Learning Project**: The developer is learning as we go. Keep complexity appropriate (intermediate level), prioritize understanding, and ensure every implementation can be explained in an interview.
 - **Roadmap Reorganization (2025-01-24)**: Roadmap restructured for strict sequential implementation. CI/CD moved from Phase 1 to Phase 10 (final phase). Now building in order: Bootstrap → Data Lake → Streaming → Batch → Step Functions → DynamoDB → AI → Merge → Analytics → Hardening → CI/CD.
-- **Current Status**: Phase 1 Task 2 in progress (Enable S3 EventBridge notifications). See `docs/status.md` for quick status overview.
+- **Current Status**: Phases 0-2 complete (30% overall progress). Ready to begin Phase 3 (Batch Ingestion EventBridge Rule). See `docs/roadmap.md` for detailed progress.
 - **Roadmap**: See `docs/roadmap.md` for detailed 10-phase sequential implementation plan
 - **Project Guide**: See `docs/ai-dp overview notion.md` for comprehensive architecture overview
 - **Error Tracking**: Always consult and update `docs/errorlog.md` when debugging issues

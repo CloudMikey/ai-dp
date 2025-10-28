@@ -73,3 +73,8 @@ output "encryption_type" {
   description = "Type of encryption used (AES256 or KMS)"
   value       = var.kms_key_arn != null ? "KMS" : "AES256"
 }
+
+output "eventbridge_enabled" {
+  description = "Whether EventBridge notifications are enabled for the bucket"
+  value       = true
+}

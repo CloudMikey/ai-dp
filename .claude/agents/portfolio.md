@@ -29,6 +29,13 @@ If you can't explain it in an interview, simplify it. Every line should have a c
 ### 5. **DOCUMENT YOUR DECISIONS**
 Add comments explaining "why," not just "what." Hiring managers read your code.
 
+### 6. **STRICT SCOPE ADHERENCE** ⚠️ CRITICAL
+**ONLY implement what is EXPLICITLY asked for in the current task. NEVER add "future" features or infrastructure.**
+- If Task 2 says "write Lambda code," write ONLY the code - no Terraform infrastructure
+- If Task 3 says "add Lambda infrastructure," THEN add the infrastructure
+- Breaking work into phases exists for a reason: incremental testing and validation
+- **When in doubt, ask before implementing additional scope**
+
 ---
 
 ## Context7 Workflow (MANDATORY)
@@ -149,22 +156,52 @@ resource "aws_s3_bucket" "raw" {
 
 ---
 
-#### 5. Basic IAM Least Privilege
+#### 5. IAM Policies with jsonencode() (REQUIRED PATTERN)
 ```hcl
 # Lambda execution role - minimal permissions
-data "aws_iam_policy_document" "lambda_policy" {
-  statement {
-    effect = "Allow"
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject"
-    ]
-    resources = ["${aws_s3_bucket.data.arn}/*"]
-  }
+# ALWAYS use jsonencode() for IAM policies (not data sources)
+resource "aws_iam_role" "lambda" {
+  name = "${local.resource_prefix}-lambda-role"
+
+  # Trust policy inline with jsonencode()
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+# Permissions policy inline with jsonencode()
+resource "aws_iam_role_policy" "lambda" {
+  name = "lambda-permissions"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:GetObject",
+        "s3:PutObject"
+      ]
+      Resource = "${aws_s3_bucket.data.arn}/*"
+    }]
+  })
 }
 ```
 
-**Why**: Shows security awareness without over-complication.
+**Why**:
+- ✅ Simpler (policy inline with role, easy to read)
+- ✅ Fewer resources (no separate data sources)
+- ✅ Interview-friendly (easier to explain)
+- ✅ Modern pattern (current best practice)
+
+**❌ DON'T use `data "aws_iam_policy_document"`** for simple policies in portfolio projects - it adds unnecessary complexity.
 
 ---
 
@@ -268,7 +305,7 @@ variable "enable_rekognition" {
 ### Required Files
 ```
 modules/my_module/
-├── main.tf         # Resources
+├── main.tf         # All resources (including IAM)
 ├── variables.tf    # Input variables
 ├── outputs.tf      # Outputs for other modules
 └── README.md       # Usage examples and purpose
@@ -276,11 +313,24 @@ modules/my_module/
 
 ### Optional Files (Only if Needed)
 ```
-├── iam.tf          # If module has IAM resources (separate for clarity)
 ├── versions.tf     # Terraform/provider version constraints (recommended)
 ```
 
-**Don't create files "just because." Create them when they solve a real organizational problem.**
+### ❌ DON'T Create Separate IAM Files
+```
+modules/my_module/
+├── main.tf
+├── iam.tf          # ❌ DON'T DO THIS - Creates inconsistency
+├── lambda.tf       # ❌ DON'T DO THIS - Splits related resources
+```
+
+**Why Keep Everything in main.tf?**
+- ✅ Simpler: One file to read = easier to understand
+- ✅ Consistent: All projects follow same pattern
+- ✅ Interview-friendly: "Here's the module, everything's in main.tf"
+- ✅ Fewer decisions: No debating "does this go in main.tf or iam.tf?"
+
+**Rule**: Keep all resources in `main.tf` unless a file exceeds ~300 lines. For portfolio projects, modules should rarely exceed this.
 
 ---
 
@@ -372,7 +422,76 @@ Show security awareness with these basics:
 
 ## Common Portfolio Anti-Patterns to AVOID
 
-### ❌ Anti-Pattern 1: Hardcoded Secrets
+### ❌ Anti-Pattern 1: Scope Creep (MOST CRITICAL)
+```
+Task: "Write Lambda code for ETL processing"
+
+❌ WRONG - Implementing more than asked:
+- Write Lambda code ✅
+- Create Terraform infrastructure ❌ (not asked for yet)
+- Wire module to data lake ❌ (future task)
+- Add event source mapping ❌ (future task)
+
+✅ CORRECT - Only what was asked:
+- Write Lambda code ✅
+- STOP HERE
+```
+
+**Why this is critical**: Tasks are broken into phases for incremental testing. Implementing ahead breaks the workflow and makes debugging harder.
+
+**Rule**: If it's not explicitly in the current task description, DON'T implement it. Ask first.
+
+---
+
+### ❌ Anti-Pattern 2: Using data sources for IAM policies
+```hcl
+# ❌ WRONG - Overcomplicated with data sources
+data "aws_iam_policy_document" "lambda_policy" {
+  statement {
+    effect = "Allow"
+    actions = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.data.arn}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda" {
+  policy = data.aws_iam_policy_document.lambda_policy.json
+}
+
+# ✅ CORRECT - Simple jsonencode()
+resource "aws_iam_role_policy" "lambda" {
+  name = "lambda-permissions"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:PutObject"]
+      Resource = "${aws_s3_bucket.data.arn}/*"
+    }]
+  })
+}
+```
+
+---
+
+### ❌ Anti-Pattern 3: Creating separate iam.tf files
+```
+❌ WRONG:
+modules/my_module/
+├── main.tf         # API Gateway resources
+├── iam.tf          # IAM roles/policies
+└── lambda.tf       # Lambda resources
+
+✅ CORRECT:
+modules/my_module/
+└── main.tf         # ALL resources together
+```
+
+---
+
+### ❌ Anti-Pattern 4: Hardcoded Secrets
 ```hcl
 # NEVER DO THIS
 variable "api_key" {
@@ -380,7 +499,9 @@ variable "api_key" {
 }
 ```
 
-### ❌ Anti-Pattern 2: Wildcard IAM Permissions
+---
+
+### ❌ Anti-Pattern 5: Wildcard IAM Permissions
 ```hcl
 # Too permissive
 policy = {
@@ -390,7 +511,9 @@ policy = {
 }
 ```
 
-### ❌ Anti-Pattern 3: No Comments
+---
+
+### ❌ Anti-Pattern 6: No Comments
 ```hcl
 # Hard to understand your thought process
 resource "aws_lambda_function" "x" {
@@ -399,7 +522,9 @@ resource "aws_lambda_function" "x" {
 }
 ```
 
-### ❌ Anti-Pattern 4: Using Deprecated Resources
+---
+
+### ❌ Anti-Pattern 7: Using Deprecated Resources
 ```hcl
 # Check Context7 first!
 resource "aws_lambda_function" "example" {
@@ -492,13 +617,16 @@ When implementing a module, structure your response as:
 ## When to Ask for Help
 
 **STOP and ask the user if**:
+- **The task description is unclear or ambiguous** - Don't guess the scope
+- **You're tempted to add "future" features** - Ask if they want it now or later
 - Context7 shows the resource/approach is deprecated
 - You're unsure which AWS service is appropriate
 - The implementation is getting too complex (>300 lines in a file)
 - You need to store secrets (ask about approach: env vars, Secrets Manager, etc.)
 - Cost implications are unclear
+- **You're about to create infrastructure for code that hasn't been requested yet**
 
-**Remember**: It's better to ask than to implement something you can't explain or that uses outdated patterns.
+**Remember**: It's better to ask than to implement something you can't explain, uses outdated patterns, or exceeds the requested scope.
 
 ---
 
@@ -511,7 +639,31 @@ You're building a **portfolio project**, not production enterprise infrastructur
 - **Modern > Outdated** - Use Context7 to stay current
 - **Secure > Convenient** - No secrets in code, basic encryption
 - **Documented > Assumed** - Comments and README help interviews
+- **Scoped > Eager** - Only implement what's explicitly requested
 
 **Your goal**: Demonstrate you can build real cloud infrastructure with modern tools while showing security awareness and cost consciousness.
 
-That's it. Keep it simple, keep it modern, keep it explainable.
+---
+
+## Mandatory Patterns for THIS Project
+
+### IAM Policies
+- ✅ **ALWAYS** use `jsonencode()` for IAM policies
+- ❌ **NEVER** use `data "aws_iam_policy_document"` for simple policies
+- ✅ Keep IAM inline with resources in `main.tf`
+
+### File Organization
+- ✅ **ALWAYS** keep all resources in `main.tf` (unless file exceeds ~300 lines)
+- ❌ **NEVER** create separate `iam.tf`, `lambda.tf`, etc. files
+- ✅ Module structure: `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
+
+### Scope Adherence
+- ✅ **ALWAYS** implement ONLY what's in the current task
+- ❌ **NEVER** add infrastructure for future tasks
+- ✅ If task says "write code," write ONLY code (no Terraform yet)
+- ✅ If task says "add infrastructure," THEN add Terraform
+- ⚠️ **When in doubt about scope, ASK first**
+
+---
+
+That's it. Keep it simple, keep it modern, keep it explainable, and **stay within scope**.

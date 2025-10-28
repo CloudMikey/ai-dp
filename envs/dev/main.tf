@@ -60,6 +60,10 @@ module "ingestion_stream" {
   project_name = var.project_name
   aws_region   = var.aws_region
 
+  # Data Lake integration (Lambda writes to S3)
+  data_lake_bucket_name = module.data_lake.bucket_name
+  data_lake_bucket_arn  = module.data_lake.bucket_arn
+
   # Kinesis configuration (1 shard = 1 MB/sec write capacity)
   kinesis_shard_count     = 1
   kinesis_retention_hours = 24

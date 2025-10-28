@@ -231,3 +231,13 @@ resource "aws_s3_bucket_policy" "enforce_tls" {
     ]
   })
 }
+
+#-------------------- EventBridge Notification --------------------#
+# Enable EventBridge to receive S3 object-level events
+# Required for batch ingestion path (Phase 3)
+# EventBridge rules will filter specific events (e.g., Object Created in raw/)
+
+resource "aws_s3_bucket_notification" "eventbridge" {
+  bucket      = aws_s3_bucket.data_lake.id
+  eventbridge = true
+}

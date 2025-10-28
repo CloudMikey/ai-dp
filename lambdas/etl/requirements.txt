@@ -1,0 +1,15 @@
+# Lambda ETL Function Dependencies
+#
+# Note: boto3 and botocore are already included in the AWS Lambda Python runtime,
+# so they don't need to be packaged with the deployment artifact.
+#
+# This file is kept minimal for the portfolio project.
+# Additional dependencies can be added as requirements evolve.
+#
+# For production, consider pinning specific versions for reproducibility:
+# boto3==1.34.0
+# botocore==1.34.0
+
+# No additional dependencies required for this Lambda function
+# All imports (json, base64, logging, datetime, uuid) are part of Python standard library
+# boto3 is provided by AWS Lambda runtime

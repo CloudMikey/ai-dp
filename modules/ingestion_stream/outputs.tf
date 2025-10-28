@@ -50,3 +50,37 @@ output "kinesis_retention_hours" {
   description = "Data retention period configured for the Kinesis stream (hours)"
   value       = var.kinesis_retention_hours
 }
+
+#-------------------- Lambda Function Outputs --------------------#
+
+output "lambda_function_name" {
+  description = "Name of the ETL Lambda function"
+  value       = aws_lambda_function.etl.function_name
+}
+
+output "lambda_function_arn" {
+  description = "ARN of the ETL Lambda function"
+  value       = aws_lambda_function.etl.arn
+}
+
+output "lambda_function_version" {
+  description = "Latest published version of the Lambda function"
+  value       = aws_lambda_function.etl.version
+}
+
+output "lambda_role_arn" {
+  description = "ARN of the Lambda execution role"
+  value       = aws_iam_role.etl_lambda.arn
+}
+
+#-------------------- DLQ Outputs --------------------#
+
+output "dlq_url" {
+  description = "URL of the Dead Letter Queue for failed Lambda invocations"
+  value       = aws_sqs_queue.etl_dlq.url
+}
+
+output "dlq_arn" {
+  description = "ARN of the Dead Letter Queue"
+  value       = aws_sqs_queue.etl_dlq.arn
+}

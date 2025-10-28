@@ -7,6 +7,7 @@ locals {
   resource_prefix = "${var.project_name}-${var.environment}"
   stream_name     = "${local.resource_prefix}-ingestion-stream"
   api_name        = "${local.resource_prefix}-ingestion-api"
+  lambda_name     = "${local.resource_prefix}-etl" # For Task 3 Lambda function
 }
 
 #-------------------- Kinesis Data Stream --------------------#
@@ -44,24 +45,22 @@ resource "aws_kinesis_stream" "ingestion" {
 # Trust policy: API Gateway service can assume this role
 # Permissions: kinesis:PutRecord on the specific stream
 
-# Trust policy: Allow API Gateway to assume this role
-data "aws_iam_policy_document" "api_gateway_assume_role" {
-  statement {
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["apigateway.amazonaws.com"]
-    }
-
-    actions = ["sts:AssumeRole"]
-  }
-}
-
-# IAM role for API Gateway
 resource "aws_iam_role" "api_gateway_kinesis" {
-  name               = "${local.resource_prefix}-apigw-kinesis-role"
-  assume_role_policy = data.aws_iam_policy_document.api_gateway_assume_role.json
+  name = "${local.resource_prefix}-apigw-kinesis-role"
+
+  # Trust policy: Allow API Gateway service to assume this role
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "apigateway.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
 
   tags = merge(
     var.tags,
@@ -72,26 +71,26 @@ resource "aws_iam_role" "api_gateway_kinesis" {
   )
 }
 
-# Permissions policy: Allow PutRecord to Kinesis stream
-data "aws_iam_policy_document" "api_gateway_kinesis_policy" {
-  statement {
-    effect = "Allow"
-
-    actions = [
-      "kinesis:PutRecord",
-      "kinesis:PutRecords"
-    ]
-
-    # Least privilege: Only allow writes to this specific stream
-    resources = [aws_kinesis_stream.ingestion.arn]
-  }
-}
-
-# Attach policy to role
+# Permissions policy: Allow PutRecord to Kinesis stream (least privilege)
 resource "aws_iam_role_policy" "api_gateway_kinesis" {
-  name   = "kinesis-put-record"
-  role   = aws_iam_role.api_gateway_kinesis.id
-  policy = data.aws_iam_policy_document.api_gateway_kinesis_policy.json
+  name = "kinesis-put-record"
+  role = aws_iam_role.api_gateway_kinesis.id
+
+  # Inline policy granting Kinesis write permissions
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "kinesis:PutRecord",
+          "kinesis:PutRecords"
+        ]
+        # Scoped to only this specific Kinesis stream (least privilege)
+        Resource = aws_kinesis_stream.ingestion.arn
+      }
+    ]
+  })
 }
 
 #-------------------- API Gateway HTTP API --------------------#
@@ -219,4 +218,234 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
       Description = "Access logs for ingestion API"
     }
   )
+}
+
+#-------------------- Lambda Code Packaging --------------------#
+# Archives Lambda Python code into deployment-ready ZIP file
+# Terraform automatically detects code changes via source_code_hash
+
+data "archive_file" "etl_lambda" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../lambdas/etl"
+  output_path = "${path.module}/../../lambdas/etl/lambda_etl.zip"
+
+  # Exclude unnecessary files from package
+  excludes = [
+    "lambda_etl.zip",
+    "__pycache__",
+    "*.pyc",
+    ".pytest_cache"
+  ]
+}
+
+#-------------------- SQS Dead Letter Queue --------------------#
+# Stores failed Kinesis records for debugging and replay
+# After max retries, failed Lambda invocations send messages here
+
+resource "aws_sqs_queue" "etl_dlq" {
+  name = "${local.resource_prefix}-etl-dlq"
+
+  # Retention period: 14 days (balances debugging time vs. cost)
+  message_retention_seconds = 1209600 # 14 days
+
+  # Enable encryption at rest (optional for dev, recommended for prod)
+  # sqs_managed_sse_enabled = true  # Uncomment for encryption
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = "${local.resource_prefix}-etl-dlq"
+      Description = "Dead letter queue for failed ETL Lambda processing"
+      Purpose     = "ErrorHandling"
+    }
+  )
+}
+
+#-------------------- CloudWatch Log Group for Lambda --------------------#
+# Stores Lambda function logs for debugging and monitoring
+# Retention period configurable per environment (7d dev, 30d+ prod)
+# NOTE: Lambda function resource will be created in Task 3
+
+resource "aws_cloudwatch_log_group" "etl_lambda" {
+  name              = "/aws/lambda/${local.lambda_name}"
+  retention_in_days = 7 # Default retention, will be made variable in Task 3
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = "${local.lambda_name}-logs"
+      Description = "CloudWatch logs for ETL Lambda function"
+    }
+  )
+}
+
+#-------------------- Lambda IAM Role --------------------#
+# Execution role for ETL Lambda function
+# Permissions: Kinesis read, S3 write, CloudWatch logs, SQS (DLQ)
+
+resource "aws_iam_role" "etl_lambda" {
+  name = "${local.resource_prefix}-etl-lambda-role"
+
+  # Trust policy: Allow Lambda service to assume this role
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = "${local.resource_prefix}-etl-lambda-role"
+      Description = "Execution role for ETL Lambda function"
+    }
+  )
+}
+
+# Attach AWS managed policy for basic Lambda execution (CloudWatch Logs)
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+  role       = aws_iam_role.etl_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Attach AWS managed policy for Kinesis stream consumer
+resource "aws_iam_role_policy_attachment" "lambda_kinesis_execution" {
+  role       = aws_iam_role.etl_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole"
+}
+
+# Inline policy for S3 write access (least privilege - only to data lake bucket)
+resource "aws_iam_role_policy" "lambda_s3_write" {
+  name = "s3-data-lake-write"
+  role = aws_iam_role.etl_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectAcl"
+        ]
+        # Scoped to only raw/ prefix in data lake bucket
+        Resource = "${var.data_lake_bucket_arn}/raw/*"
+      }
+    ]
+  })
+}
+
+# Inline policy for SQS DLQ access (for failed record handling)
+resource "aws_iam_role_policy" "lambda_sqs_dlq" {
+  name = "sqs-dlq-access"
+  role = aws_iam_role.etl_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = aws_sqs_queue.etl_dlq.arn
+      }
+    ]
+  })
+}
+
+#-------------------- Lambda Function --------------------#
+# ETL Lambda: Reads from Kinesis, validates, writes to S3 raw/
+# Triggered automatically by Kinesis event source mapping
+
+resource "aws_lambda_function" "etl" {
+  function_name = local.lambda_name
+  description   = "ETL function: Kinesis → S3 raw layer with validation and normalization"
+
+  # Deployment package (created by archive_file data source)
+  filename         = data.archive_file.etl_lambda.output_path
+  source_code_hash = data.archive_file.etl_lambda.output_base64sha256
+
+  # Runtime configuration
+  runtime = "python3.11"
+  handler = "app.lambda_handler"
+  timeout = 60 # 60 seconds (Kinesis batch processing may take time)
+
+  # Memory allocation (128 MB is minimum, increase if processing large batches)
+  memory_size = 256 # 256 MB for JSON processing
+
+  # IAM role for execution
+  role = aws_iam_role.etl_lambda.arn
+
+  # Environment variables
+  environment {
+    variables = {
+      DATA_LAKE_BUCKET = var.data_lake_bucket_name
+      RAW_PREFIX       = "raw/"
+      LOG_LEVEL        = "INFO"
+    }
+  }
+
+  # Dead letter queue configuration
+  dead_letter_config {
+    target_arn = aws_sqs_queue.etl_dlq.arn
+  }
+
+  # Tracing configuration (optional - adds X-Ray costs)
+  # tracing_config {
+  #   mode = "Active"
+  # }
+
+  # Ensure log group exists before Lambda
+  depends_on = [
+    aws_cloudwatch_log_group.etl_lambda,
+    aws_iam_role_policy_attachment.lambda_basic_execution
+  ]
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = local.lambda_name
+      Description = "ETL Lambda for Kinesis to S3 ingestion"
+      Component   = "DataIngestion"
+    }
+  )
+}
+
+#-------------------- Lambda Event Source Mapping --------------------#
+# Connects Kinesis stream to Lambda function
+# Lambda polls Kinesis and processes records in batches
+
+resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
+  event_source_arn  = aws_kinesis_stream.ingestion.arn
+  function_name     = aws_lambda_function.etl.arn
+  starting_position = "LATEST" # Start processing new records (not historical)
+
+  # Batch configuration
+  batch_size                         = 100  # Process up to 100 records per invocation
+  maximum_batching_window_in_seconds = 5    # Wait up to 5 seconds to collect batch
+  parallelization_factor             = 1    # Number of concurrent batches per shard
+
+  # Error handling configuration
+  maximum_retry_attempts = 3 # Retry failed batches 3 times before sending to DLQ
+
+  # Failed records destination (DLQ)
+  destination_config {
+    on_failure {
+      destination_arn = aws_sqs_queue.etl_dlq.arn
+    }
+  }
+
+  # Ensure Lambda function is ready before creating mapping
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_kinesis_execution,
+    aws_lambda_function.etl
+  ]
 }
