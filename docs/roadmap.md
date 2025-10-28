@@ -56,7 +56,9 @@
 
 **Complete when:** S3 bucket has EventBridge notifications enabled (visible in S3 console)
 
-**Status:** ✅ **COMPLETED** (Phase 1, Task 1) | ⏳ **IN PROGRESS** (Phase 1, Task 2 - pending implementation)
+**Status:** ✅ **COMPLETED** (All tasks finished on 2025-10-27)
+- Task 1: Data Lake Module with three-layer architecture
+- Task 2: EventBridge notifications enabled for batch ingestion support
 
 ---
 
@@ -86,6 +88,8 @@
 
 **Complete when:** Lambda code written, packaged, DLQ created (not yet wired to Kinesis)
 
+**Status:** ✅ **COMPLETED** - Lambda simplified for portfolio-level learning (166 lines)
+
 **3. Lambda Infrastructure (`modules/ingestion_stream/` - Part 2)**
 - Add Lambda resource to `ingestion_stream` module
 - Create IAM role for Lambda with permissions:
@@ -106,6 +110,12 @@
 - Test error scenario: Send invalid JSON → verify DLQ receives message
 
 **Complete when:** End-to-end streaming ingestion works, data appears in S3 `raw/` with correct partitions, DLQ catches errors
+
+**Status:** ✅ **COMPLETED** (All 4 tasks finished on 2025-10-27)
+- API Gateway → Kinesis integration tested and working
+- Lambda ETL function deployed and processing records
+- S3 partitioning verified: `raw/year=2025/month=10/day=27/`
+- DLQ error handling tested: Invalid records sent to SQS after 3 retries
 
 ---
 
@@ -532,7 +542,7 @@
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
 Phase 1 (Data Lake):           ████████████████████ 100% ✅
-Phase 2 (Streaming):           ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 2 (Streaming):           ████████████████████ 100% ✅
 Phase 3 (Batch EventBridge):  ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 4 (Step Functions):     ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 5 (DynamoDB):            ░░░░░░░░░░░░░░░░░░░░   0%
@@ -543,7 +553,7 @@ Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░�
 Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
-**Overall Progress:** ~20% (2 of 10 phases complete)
+**Overall Progress:** ~30% (3 of 10 phases complete)
 
 ---
 
