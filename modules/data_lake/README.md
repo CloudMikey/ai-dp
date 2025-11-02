@@ -156,6 +156,47 @@ After applying this module:
 5. Verify lifecycle rules: `aws s3api get-bucket-lifecycle-configuration --bucket <bucket-name>`
 6. Verify public access block: `aws s3api get-public-access-block --bucket <bucket-name>`
 
+## Viewing Bucket Contents
+
+Use these AWS CLI commands to inspect data in your data lake:
+
+### See Everything Recursively
+
+```bash
+aws s3 ls s3://bucket/ --recursive
+```
+
+Lists all objects in the bucket with their last modified date and size.
+
+### Add File Sizes & Summary
+
+```bash
+aws s3 ls s3://bucket/ --recursive --human-readable --summarize
+```
+
+Displays file sizes in human-readable format (KB, MB, GB) and provides a summary with total object count and size.
+
+### Only Show File Paths
+
+```bash
+aws s3api list-objects --bucket bucket-name --query "Contents[].Key" --output text
+```
+
+Returns just the object keys (file paths) without metadata - useful for scripting or piping to other commands.
+
+### Examples with Data Lake Layers
+
+```bash
+# View all raw data
+aws s3 ls s3://aidp-data-lake-dev-us-west-1/raw/ --recursive --human-readable
+
+# Check processed data with summary
+aws s3 ls s3://aidp-data-lake-dev-us-west-1/processed/ --recursive --summarize
+
+# List only curated file paths
+aws s3api list-objects --bucket aidp-data-lake-dev-us-west-1 --query "Contents[].Key" --output text --prefix curated/
+```
+
 ## Maintenance
 
 - Review lifecycle policies quarterly to optimize costs
