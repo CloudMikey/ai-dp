@@ -4,10 +4,11 @@
 # API Gateway → Kinesis → (later) Lambda ETL → S3
 
 locals {
-  resource_prefix = "${var.project_name}-${var.environment}"
-  stream_name     = "${local.resource_prefix}-ingestion-stream"
-  api_name        = "${local.resource_prefix}-ingestion-api"
-  lambda_name     = "${local.resource_prefix}-etl" # For Task 3 Lambda function
+  resource_prefix       = "${var.project_name}-${var.environment}"
+  stream_name           = "${local.resource_prefix}-ingestion-stream"
+  api_name              = "${local.resource_prefix}-ingestion-api"
+  lambda_name           = "${local.resource_prefix}-etl" # For Task 3 Lambda function
+  eventbridge_rule_name = "${local.resource_prefix}-s3-batch-ingestion"
 }
 
 #-------------------- Kinesis Data Stream --------------------#
@@ -429,9 +430,9 @@ resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
   starting_position = "LATEST" # Start processing new records (not historical)
 
   # Batch configuration
-  batch_size                         = 100  # Process up to 100 records per invocation
-  maximum_batching_window_in_seconds = 5    # Wait up to 5 seconds to collect batch
-  parallelization_factor             = 1    # Number of concurrent batches per shard
+  batch_size                         = 100 # Process up to 100 records per invocation
+  maximum_batching_window_in_seconds = 5   # Wait up to 5 seconds to collect batch
+  parallelization_factor             = 1   # Number of concurrent batches per shard
 
   # Error handling configuration
   maximum_retry_attempts = 3 # Retry failed batches 3 times before sending to DLQ
@@ -448,4 +449,41 @@ resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
     aws_iam_role_policy_attachment.lambda_kinesis_execution,
     aws_lambda_function.etl
   ]
+}
+
+#-------------------- EventBridge Rule (Batch Ingestion Detection) --------------------#
+# Detects batch file uploads to the data lake raw/ layer
+# Triggers on S3 Object Created events, filtered to raw/ prefix only
+# Note: NO target configured yet - target added in Phase 4 after Step Functions exists
+
+resource "aws_cloudwatch_event_rule" "s3_batch_ingestion" {
+  name        = local.eventbridge_rule_name
+  description = "Detects batch file uploads to raw/ layer for Step Functions processing"
+
+  # Event pattern: S3 Object Created in data lake bucket, raw/ prefix only
+  event_pattern = jsonencode({
+    source      = ["aws.s3"]
+    detail-type = ["Object Created"]
+    detail = {
+      bucket = {
+        name = [var.data_lake_bucket_name]
+      }
+      object = {
+        key = [{
+          prefix = "raw/"
+        }]
+      }
+    }
+  })
+
+  state = "ENABLED"
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = local.eventbridge_rule_name
+      Description = "Batch ingestion detection for Step Functions orchestration"
+      Component   = "EventBridge"
+    }
+  )
 }

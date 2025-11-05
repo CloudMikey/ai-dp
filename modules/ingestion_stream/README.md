@@ -175,6 +175,121 @@ curl -X POST https://{api-id}.execute-api.us-west-1.amazonaws.com/ingest \
 
 ---
 
+## EventBridge Batch Ingestion Detection (Phase 3)
+
+### What It Does
+
+Detects batch file uploads to the data lake `raw/` layer for orchestrated processing. When files are uploaded directly to S3 (bypassing the streaming API path), EventBridge triggers processing workflows.
+
+**Data Flow**: S3 upload to `raw/` → EventBridge rule → (Phase 4: Step Functions orchestration)
+
+### Why EventBridge vs S3 Notifications?
+
+**Centralized Event Routing**:
+- Easier to add multiple targets later without reconfiguring S3 bucket
+- Can route to Step Functions, Lambda, SNS, SQS from one rule
+- Better for evolving architectures
+
+**Advanced Filtering**:
+- Can filter by bucket + prefix in a single rule
+- Complex event patterns (multiple conditions)
+- No need to manage multiple S3 notification configurations
+
+**Native AWS Service Integration**:
+- Direct integration with Step Functions (no Lambda glue code)
+- Built-in retry and error handling
+- CloudWatch metrics included automatically
+
+**Better for Portfolio Projects**:
+- Demonstrates modern AWS event-driven architecture
+- Easier to explain in interviews than S3 notifications
+- Shows understanding of decoupled systems
+
+### Why Filter to raw/ Prefix Only?
+
+**Prevents Infinite Loops**:
+- Processing pipeline writes to `processed/` layer
+- Without filtering, processed writes would re-trigger the pipeline
+- Could cause exponential cost growth and endless loops
+
+**Clear Layer Separation**:
+- `raw/` = ingestion trigger point (batch uploads)
+- `processed/` = output from AI enrichment (no trigger)
+- `curated/` = analytics-ready (no trigger)
+
+**Streaming vs Batch Paths**:
+- Streaming data uses Kinesis path (no EventBridge)
+- Batch uploads trigger EventBridge → Step Functions
+- Two independent ingestion paths for different use cases
+
+### Event Pattern Breakdown
+
+```json
+{
+  "source": ["aws.s3"],
+  "detail-type": ["Object Created"],
+  "detail": {
+    "bucket": {
+      "name": ["ai-dp-data-lake-dev"]
+    },
+    "object": {
+      "key": [{
+        "prefix": "raw/"
+      }]
+    }
+  }
+}
+```
+
+**What Triggers the Rule**:
+- ✅ `s3://bucket/raw/data.json` → Triggers
+- ✅ `s3://bucket/raw/subfolder/data.csv` → Triggers
+- ❌ `s3://bucket/processed/data.json` → Ignored
+- ❌ `s3://bucket/curated/data.json` → Ignored
+- ❌ `s3://other-bucket/raw/data.json` → Ignored
+
+### Cost Awareness
+
+**EventBridge Pricing**:
+- $1.00 per million events
+- At typical batch upload volumes (dozens per day): ~$0.01/month
+
+**CloudWatch Metrics**:
+- Free for AWS service metrics (includes EventBridge rule invocations)
+
+### Testing the EventBridge Rule
+
+**Test 1: Upload to raw/ (should trigger)**:
+```powershell
+echo '{"test": "data"}' > test.json
+aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/raw/test.json
+```
+
+**Verify in AWS Console**:
+1. CloudWatch → Metrics → EventBridge → By Rule Name
+2. Find rule: `ai-dp-dev-s3-batch-ingestion`
+3. Check "Invocations" metric → Should show 1 invocation ✅
+
+**Test 2 & 3: Upload to processed/ and curated/ (should NOT trigger)**:
+```powershell
+aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/processed/test.json
+aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/curated/test.json
+# Invocations metric should NOT increase ✅
+```
+
+### Interview Talking Points
+
+**Q: Why EventBridge instead of S3 bucket notifications?**
+> "EventBridge provides centralized event routing and advanced filtering. With S3 notifications, you configure targets directly on the bucket - if you want to add another consumer later, you have to reconfigure the bucket. With EventBridge, I can add multiple targets to the same event rule without touching the S3 bucket. It's more flexible for evolving architectures."
+
+**Q: How does the event pattern filtering work?**
+> "The event pattern uses JSON to define three filters: source must be aws.s3, detail-type must be Object Created, and the object key must start with 'raw/'. This ensures only new uploads to the raw layer trigger processing. Uploads to processed or curated layers are ignored, preventing infinite loops."
+
+**Q: What happens if the rule fails to invoke a target?**
+> "In Phase 4, we'll add a dead letter queue for failed invocations. EventBridge has built-in retry logic - it retries failed deliveries with exponential backoff. If all retries fail, the event goes to the DLQ where we can replay it or investigate the failure."
+
+---
+
 ## Capacity Planning
 
 ### Shard Sizing Guide

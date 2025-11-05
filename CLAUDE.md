@@ -316,19 +316,25 @@ Use Terraform variables for feature toggles:
 - Confirmed automatic retry mechanism and DLQ integration
 - Lambda adds metadata: `processed_at`, `lambda_version`, `lambda_name`
 
+**Phase 3: Batch Ingestion Path (All Tasks Complete)**
+- ✅ EventBridge rule deployed: `ai-dp-dev-s3-batch-ingestion`
+- ✅ Event pattern configured: S3 Object Created events filtered to `raw/` prefix
+- ✅ Rule state: ENABLED (CloudWatch Metrics available)
+- ✅ Outputs added: `eventbridge_rule_name`, `eventbridge_rule_arn` (for Phase 4 wiring)
+- ✅ Testing complete: EventBridge rule verified to detect raw/ uploads only
+
+**Key Achievements:**
+- Event pattern filters to data lake bucket + `raw/` prefix only (prevents infinite loops)
+- No target configured yet - target will be added in Phase 4 after Step Functions created
+- Module updated: `modules/ingestion_stream/` (main.tf, outputs.tf, README.md)
+- Successfully tested: raw/ uploads trigger rule, processed/ and curated/ uploads ignored
+
 ### Next Steps
 
-**Phase 3: Batch Ingestion Path (EventBridge Rule)**
-1. Add EventBridge rule to `ingestion_stream` module:
-   - Configure event pattern for S3 Object Created events
-   - Filter to only match data lake bucket `raw/` prefix
-   - Add CloudWatch metrics for rule invocations
-2. Test S3 upload detection (no target yet - targets added in Phase 4)
-
 **Phase 4: Step Functions & EventBridge Wiring**
-3. Build `modules/step_functions/` (minimal Pass state)
-4. Wire EventBridge target to Step Functions
-5. Test end-to-end batch ingestion: S3 upload → EventBridge → Step Functions
+1. Build `modules/step_functions/` (minimal Pass state)
+2. Wire EventBridge target to Step Functions
+3. Test end-to-end batch ingestion: S3 upload → EventBridge → Step Functions
 
 **Phases 5-10:** See `docs/roadmap.md` for detailed sequential plan
 
@@ -342,13 +348,13 @@ Use Terraform variables for feature toggles:
 
 ### Progress Tracking
 
-**Overall Completion**: ~30% (3 of 10 phases complete)
+**Overall Completion**: ~40% (4 of 10 phases complete)
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
 Phase 1 (Data Lake):           ████████████████████ 100% ✅
 Phase 2 (Streaming):           ████████████████████ 100% ✅
-Phase 3 (Batch EventBridge):  ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 3 (Batch EventBridge):  ████████████████████ 100% ✅
 Phase 4 (Step Functions):     ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 5 (DynamoDB):            ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 6 (AI Enrichment):       ░░░░░░░░░░░░░░░░░░░░   0%

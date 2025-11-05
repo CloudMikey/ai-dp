@@ -84,3 +84,15 @@ output "dlq_arn" {
   description = "ARN of the Dead Letter Queue"
   value       = aws_sqs_queue.etl_dlq.arn
 }
+
+#-------------------- EventBridge Outputs --------------------#
+
+output "eventbridge_rule_name" {
+  description = "Name of the EventBridge rule for batch ingestion detection"
+  value       = aws_cloudwatch_event_rule.s3_batch_ingestion.name
+}
+
+output "eventbridge_rule_arn" {
+  description = "ARN of the EventBridge rule (used for target configuration in Phase 4)"
+  value       = aws_cloudwatch_event_rule.s3_batch_ingestion.arn
+}
