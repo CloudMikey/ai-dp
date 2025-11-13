@@ -114,3 +114,17 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+#-------------------- Step Functions Integration (Phase 4) --------------------#
+
+variable "state_machine_arn" {
+  description = "ARN of the Step Functions state machine for batch ingestion orchestration (from step_functions module)"
+  type        = string
+  default     = ""
+}
+
+variable "create_eventbridge_target" {
+  description = "Create EventBridge target to invoke Step Functions. Set to true after Step Functions module is deployed (Phase 4, Task 3)."
+  type        = bool
+  default     = false
+}

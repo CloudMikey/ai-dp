@@ -111,13 +111,13 @@ AI-DP/
 │   ├── stg/             # Staging environment
 │   └── prod/            # Production environment
 ├── modules/             # Reusable Terraform modules
-│   ├── data_lake/           # S3 buckets (raw/processed/curated)
-│   ├── ingestion_stream/    # API Gateway, Kinesis, EventBridge
-│   ├── step_functions/      # Orchestration state machine
-│   ├── ai_enrichment/       # Comprehend, Rekognition, SageMaker
-│   ├── hot_store/           # DynamoDB tables
-│   ├── analytics/           # Glue crawler, Athena
-│   └── observability/       # CloudWatch dashboards, alarms, DLQs
+│   ├── data_lake/           # S3 buckets (raw/processed/curated) ✅
+│   ├── ingestion_stream/    # API Gateway, Kinesis, EventBridge ✅
+│   ├── step_functions/      # Orchestration state machine ✅
+│   ├── ai_enrichment/       # Comprehend, Rekognition, SageMaker (Phase 6)
+│   ├── hot_store/           # DynamoDB tables (Phase 5)
+│   ├── analytics/           # Glue crawler, Athena (Phase 8)
+│   └── observability/       # CloudWatch dashboards, alarms (Phase 9)
 ├── lambdas/             # Python Lambda function code
 │   ├── etl/            # Kinesis consumer (normalize & write to S3)
 │   ├── merge/          # Merge AI outputs, write to storage
@@ -235,26 +235,49 @@ pytest lambdas/merge/
 
 ## Project Status
 
-**Current Phase**: Phase 0-1 (Bootstrap & Initial Setup)
+**Current Phase**: Phase 4 Complete - Step Functions & EventBridge Wiring
+**Overall Progress**: 50% (5 of 10 phases complete)
 
 This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) for detailed implementation phases and completion criteria.
 
-### Completed
-- Repository structure
-- Configuration files (.gitignore, .editorconfig)
-- Documentation framework
+### ✅ Completed Phases
 
-### In Progress
-- Terraform backend setup
-- AWS OIDC configuration
-- CI/CD pipeline
+**Phase 0: Bootstrap Infrastructure**
+- S3 state bucket with native locking (Terraform >= 1.11.0)
+- All environments initialized (dev, stg, prod)
 
-### Planned
-- Data Lake module
-- Ingestion pipelines (batch + streaming)
-- AI enrichment orchestration
-- Analytics layer
-- Security hardening
+**Phase 1: Data Lake Foundation**
+- S3 bucket: `ai-dp-data-lake-dev-us-west-1`
+- Three-layer architecture (raw/processed/curated)
+- Lifecycle policies, versioning, encryption
+
+**Phase 2: Streaming Ingestion**
+- API Gateway HTTP API + Kinesis Data Streams
+- ETL Lambda function (Python 3.11)
+- End-to-end tested: API → Kinesis → Lambda → S3
+
+**Phase 3: Batch Ingestion EventBridge**
+- EventBridge rule detects S3 uploads to raw/ layer
+- Filtered event pattern (prevents infinite loops)
+
+**Phase 4: Step Functions & EventBridge Wiring**
+- State machine deployed: `ai-dp-dev-orchestrator`
+- EventBridge → Step Functions integration
+- End-to-end batch path tested and verified
+
+### 🔄 In Progress
+
+**Phase 5: DynamoDB Hot Store** (Next)
+- Design table schema for enriched data
+- Configure on-demand capacity and TTL
+
+### 📋 Planned
+
+- Phase 6: AI Enrichment (Comprehend, SageMaker, Rekognition)
+- Phase 7: Merge Lambda & Parallel Orchestration
+- Phase 8: Analytics (Glue, Athena, QuickSight)
+- Phase 9: Production Hardening (Alarms, Monitoring)
+- Phase 10: CI/CD Pipeline (GitHub Actions)
 
 ## Documentation
 

@@ -1,8 +1,8 @@
 # AI-DP Project Status & Roadmap
 
-**Last Updated:** 2025-01-04 (Phase 3 Complete)
+**Last Updated:** 2025-01-10 (Phase 4 Complete)
 
-## Current Status: 40% Complete (4 of 10 Phases)
+## Current Status: 50% Complete (5 of 10 Phases)
 
 ### ✅ Completed Phases
 
@@ -57,25 +57,62 @@
 - Module files: `modules/ingestion_stream/main.tf` (lines 454-489), `outputs.tf` (lines 88-98), `README.md`
 - Successfully tested: raw/ uploads trigger rule, other layers ignored
 
-### 🔄 Next Phase
-
-#### Phase 4: Step Functions Placeholder & EventBridge Wiring
+#### Phase 4: Step Functions & EventBridge Wiring
 **Goal:** Batch ingestion triggers Step Functions (minimal state machine)
 
+**Task 1 - Step Functions Module:**
+- Module created: `modules/step_functions/`
+- State machine deployed: `ai-dp-dev-orchestrator`
+- IAM role: `ai-dp-dev-step-functions-role` (CloudWatch Logs permissions)
+- CloudWatch Logs: `/aws/states/ai-dp-dev-orchestrator` (7-day retention, ALL level)
+- ASL definition: Minimal Pass state (ReceiveEvent)
+
+**Task 2 - EventBridge Target Configuration:**
+- Variables added to `ingestion_stream` module: `state_machine_arn`, `create_eventbridge_target`
+- IAM role created: `ai-dp-dev-eventbridge-sfn-role` (EventBridge → Step Functions)
+- IAM policy: `states:StartExecution` permission scoped to state machine
+- EventBridge target: `StepFunctionsOrchestrator` (conditional creation)
+
+**Task 3 - Module Wiring:**
+- Step Functions module added to `envs/dev/main.tf`
+- Ingestion stream module wired with Step Functions integration
+- 7 resources deployed successfully
+
+**Task 4 - Integration Testing:**
+- ✅ Test file uploaded: `s3://ai-dp-data-lake-dev-us-west-1/raw/phase4-test.json`
+- ✅ EventBridge rule triggered Step Functions execution
+- ✅ Execution SUCCEEDED in 53ms
+- ✅ Pass state output: `processing_result` added to S3 event
+- ✅ CloudWatch Logs: 4 events captured (ExecutionStarted, PassStateEntered, PassStateExited, ExecutionSucceeded)
+
+**Key Achievements:**
+- End-to-end batch path working: S3 upload → EventBridge → Step Functions → SUCCESS
+- Least-privilege IAM: EventBridge (`states:StartExecution`), Step Functions (CloudWatch Logs only)
+- Conditional resource creation pattern established (`count = var.create_eventbridge_target ? 1 : 0`)
+- Module wiring pattern ready for Phase 5+ AI enrichment expansion
+- State machine ARN passed between modules via outputs
+
+**State Machine ARN:** `arn:aws:states:us-west-1:061039801477:stateMachine:ai-dp-dev-orchestrator`
+
+### 🔄 Next Phase
+
+#### Phase 5: DynamoDB Hot Store
+**Goal:** Create DynamoDB table for enriched data storage
+
 **Tasks:**
-1. Create minimal Step Functions state machine (Pass state only)
-2. Add IAM role for EventBridge → Step Functions
-3. Wire EventBridge target to Step Functions
-4. Test: S3 upload → EventBridge → Step Functions execution
+1. Create `modules/hot_store/` module
+2. Design table schema (partition key, sort key, TTL)
+3. Configure on-demand capacity mode
+4. Add outputs for Phase 7 merge Lambda integration
 
 ### 📋 Remaining Phases
 
 - Phase 5: DynamoDB Hot Store
-- Phase 6: AI Enrichment (Comprehend)
-- Phase 7: Merge Lambda & Complete Orchestration
-- Phase 8: Analytics (Glue, Athena, Dashboard)
-- Phase 9: Production Hardening
-- Phase 10: CI/CD Pipeline
+- Phase 6: AI Enrichment (Comprehend, SageMaker, Rekognition)
+- Phase 7: Merge Lambda & Replace Pass State with Parallel AI Tasks
+- Phase 8: Analytics (Glue Crawler, Athena, QuickSight Dashboard)
+- Phase 9: Production Hardening (Alarms, DLQ Replay, X-Ray)
+- Phase 10: CI/CD Pipeline (GitHub Actions with OIDC)
 
 ## Key Infrastructure Outputs
 
@@ -85,6 +122,8 @@ kinesis_stream_name = "ai-dp-dev-ingestion-stream"
 api_gateway_invoke_url = "https://57cnx9jpje.execute-api.us-west-1.amazonaws.com//ingest"
 eventbridge_rule_name = "ai-dp-dev-s3-batch-ingestion"
 eventbridge_rule_arn = "arn:aws:events:us-west-1:061039801477:rule/ai-dp-dev-s3-batch-ingestion"
+state_machine_arn = "arn:aws:states:us-west-1:061039801477:stateMachine:ai-dp-dev-orchestrator"
+state_machine_name = "ai-dp-dev-orchestrator"
 ```
 
 ## Module Structure
@@ -92,7 +131,8 @@ eventbridge_rule_arn = "arn:aws:events:us-west-1:061039801477:rule/ai-dp-dev-s3-
 ```
 modules/
 ├── data_lake/           # Phase 1 - S3 + EventBridge notifications
-└── ingestion_stream/    # Phase 2 & 3 - API Gateway + Kinesis + Lambda + EventBridge
+├── ingestion_stream/    # Phase 2 & 3 - API Gateway + Kinesis + Lambda + EventBridge
+└── step_functions/      # Phase 4 - State machine orchestration
 ```
 
 ## Development Commands
@@ -114,8 +154,13 @@ curl -X POST "https://57cnx9jpje.execute-api.us-west-1.amazonaws.com//ingest" `
 echo '{"test": "data"}' > test.json
 aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/raw/test.json
 
-# Verify EventBridge rule triggered
-# AWS Console: CloudWatch → Metrics → EventBridge → By Rule Name → ai-dp-dev-s3-batch-ingestion
+# Verify EventBridge rule triggered and Step Functions execution
+# AWS Console: Step Functions → State machines → ai-dp-dev-orchestrator → Executions
+aws stepfunctions list-executions --state-machine-arn arn:aws:states:us-west-1:061039801477:stateMachine:ai-dp-dev-orchestrator --max-results 5
+
+# Check Step Functions CloudWatch Logs
+# Note: Use MSYS_NO_PATHCONV=1 on Windows Git Bash to prevent path conversion
+MSYS_NO_PATHCONV=1 aws logs tail /aws/states/ai-dp-dev-orchestrator --since 10m
 
 # Verify S3 data
 aws s3 ls s3://ai-dp-data-lake-dev-us-west-1/raw/ --recursive --region us-west-1

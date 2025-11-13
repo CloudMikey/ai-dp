@@ -329,14 +329,31 @@ Use Terraform variables for feature toggles:
 - Module updated: `modules/ingestion_stream/` (main.tf, outputs.tf, README.md)
 - Successfully tested: raw/ uploads trigger rule, processed/ and curated/ uploads ignored
 
+**Phase 4: Step Functions & EventBridge Wiring (All Tasks Complete)**
+- ✅ Step Functions module created: `modules/step_functions/`
+- ✅ State machine deployed: `ai-dp-dev-orchestrator` with minimal Pass state
+- ✅ IAM roles configured: Step Functions execution role + EventBridge invocation role
+- ✅ CloudWatch Logs enabled: `/aws/states/ai-dp-dev-orchestrator` (ALL level)
+- ✅ EventBridge target configured: EventBridge → Step Functions integration
+- ✅ End-to-end batch path tested: S3 upload → EventBridge → Step Functions → SUCCESS
+- ✅ Execution verified: State machine completed in 53ms with Pass state output
+
+**Key Achievements:**
+- Implemented least-privilege IAM (EventBridge: `states:StartExecution`, Step Functions: CloudWatch Logs only)
+- Successfully triggered state machine via S3 batch upload to `raw/` prefix
+- CloudWatch Logs captured all execution events (ExecutionStarted, PassStateEntered, PassStateExited, ExecutionSucceeded)
+- Pass state added `processing_result` field to S3 event, demonstrating input transformation
+- Module wiring pattern established for future AI enrichment tasks (Phase 5+)
+
 ### Next Steps
 
-**Phase 4: Step Functions & EventBridge Wiring**
-1. Build `modules/step_functions/` (minimal Pass state)
-2. Wire EventBridge target to Step Functions
-3. Test end-to-end batch ingestion: S3 upload → EventBridge → Step Functions
+**Phase 5: DynamoDB Hot Store**
+1. Create `modules/hot_store/` module
+2. Design DynamoDB table schema for enriched data
+3. Configure on-demand capacity and TTL
+4. Prepare for Phase 7 merge Lambda integration
 
-**Phases 5-10:** See `docs/roadmap.md` for detailed sequential plan
+**Phases 6-10:** See `docs/roadmap.md` for detailed sequential plan
 
 ### Development Strategy
 
@@ -348,14 +365,14 @@ Use Terraform variables for feature toggles:
 
 ### Progress Tracking
 
-**Overall Completion**: ~40% (4 of 10 phases complete)
+**Overall Completion**: ~50% (5 of 10 phases complete)
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
 Phase 1 (Data Lake):           ████████████████████ 100% ✅
 Phase 2 (Streaming):           ████████████████████ 100% ✅
 Phase 3 (Batch EventBridge):  ████████████████████ 100% ✅
-Phase 4 (Step Functions):     ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 4 (Step Functions):     ████████████████████ 100% ✅
 Phase 5 (DynamoDB):            ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 6 (AI Enrichment):       ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 7 (Merge & Orchestrate): ░░░░░░░░░░░░░░░░░░░░   0%

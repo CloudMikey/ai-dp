@@ -487,3 +487,69 @@ resource "aws_cloudwatch_event_rule" "s3_batch_ingestion" {
     }
   )
 }
+
+#-------------------- IAM Role for EventBridge → Step Functions --------------------#
+# Allows EventBridge to start Step Functions executions
+# Only created when create_eventbridge_target = true (Phase 4, Task 3)
+# Trust policy: EventBridge service can assume this role
+
+resource "aws_iam_role" "eventbridge_step_functions" {
+  count = var.create_eventbridge_target ? 1 : 0
+  name  = "${local.resource_prefix}-eventbridge-sfn-role"
+
+  # Trust policy: Allow EventBridge service to assume this role
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = "${local.resource_prefix}-eventbridge-sfn-role"
+      Description = "Allows EventBridge to invoke Step Functions state machine"
+    }
+  )
+}
+
+#-------------------- IAM Policy for Step Functions Invocation --------------------#
+# Permission for EventBridge to start executions on the specific state machine
+# Least privilege: scoped to only the state machine ARN provided
+
+resource "aws_iam_role_policy" "eventbridge_step_functions" {
+  count = var.create_eventbridge_target ? 1 : 0
+  name  = "start-execution"
+  role  = aws_iam_role.eventbridge_step_functions[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "states:StartExecution"
+        Resource = var.state_machine_arn
+      }
+    ]
+  })
+}
+
+#-------------------- EventBridge Target (EventBridge → Step Functions) --------------------#
+# Connects the EventBridge rule to the Step Functions state machine
+# When S3 files are uploaded to raw/, EventBridge triggers Step Functions execution
+# Only created when create_eventbridge_target = true (Phase 4, Task 3)
+
+resource "aws_cloudwatch_event_target" "step_functions" {
+  count     = var.create_eventbridge_target ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.s3_batch_ingestion.name
+  target_id = "StepFunctionsOrchestrator"
+  arn       = var.state_machine_arn
+  role_arn  = aws_iam_role.eventbridge_step_functions[0].arn
+}

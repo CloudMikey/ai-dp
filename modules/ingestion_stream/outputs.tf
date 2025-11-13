@@ -96,3 +96,15 @@ output "eventbridge_rule_arn" {
   description = "ARN of the EventBridge rule (used for target configuration in Phase 4)"
   value       = aws_cloudwatch_event_rule.s3_batch_ingestion.arn
 }
+
+#-------------------- EventBridge Target Outputs (Phase 4) --------------------#
+
+output "eventbridge_target_created" {
+  description = "Whether EventBridge target to Step Functions was created"
+  value       = var.create_eventbridge_target
+}
+
+output "eventbridge_sfn_role_arn" {
+  description = "ARN of the IAM role for EventBridge to Step Functions invocation (if created)"
+  value       = var.create_eventbridge_target ? aws_iam_role.eventbridge_step_functions[0].arn : null
+}

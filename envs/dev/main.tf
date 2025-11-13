@@ -50,6 +50,26 @@ module "data_lake" {
   }
 }
 
+#-------------------- Step Functions Orchestration Module --------------------#
+# State machine for batch data pipeline orchestration
+# Phase 4: Minimal Pass state for EventBridge integration testing
+
+module "step_functions" {
+  source = "../../modules/step_functions"
+
+  environment  = "dev"
+  project_name = var.project_name
+  aws_region   = var.aws_region
+
+  # CloudWatch Logs configuration
+  log_retention_days = 7     # 7 days for dev
+  log_level          = "ALL" # Full logging for dev debugging
+
+  tags = {
+    Component = "Orchestration"
+  }
+}
+
 #-------------------- Streaming Ingestion Module --------------------#
 # API Gateway HTTP API + Kinesis Data Stream for real-time ingestion
 
@@ -63,6 +83,10 @@ module "ingestion_stream" {
   # Data Lake integration (Lambda writes to S3)
   data_lake_bucket_name = module.data_lake.bucket_name
   data_lake_bucket_arn  = module.data_lake.bucket_arn
+
+  # Step Functions integration (Phase 4: EventBridge → Step Functions)
+  state_machine_arn         = module.step_functions.state_machine_arn
+  create_eventbridge_target = true
 
   # Kinesis configuration (1 shard = 1 MB/sec write capacity)
   kinesis_shard_count     = 1
