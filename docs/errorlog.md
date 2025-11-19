@@ -149,6 +149,142 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 
 ---
 
+## Preventive Patterns / Lessons Applied
+
+This section documents patterns used to **avoid** errors based on previous learnings, even when no error occurred.
+
+### Pattern #1: Provider default_tags Applied (Phase 3 - EventBridge)
+
+**Phase**: Phase 3 - Batch Ingestion EventBridge Rule
+**Date**: 2025-01-24
+**Context**: Creating EventBridge rule resource in `modules/ingestion_stream/`
+
+**Pattern Used**: Applied Error #1 lesson - used provider `default_tags` only, no tag duplication in module
+
+```hcl
+# modules/ingestion_stream/main.tf
+resource "aws_cloudwatch_event_rule" "s3_batch_ingestion" {
+  name        = "${var.project_name}-${var.environment}-s3-batch-ingestion"
+  description = "Trigger Step Functions when batch data uploaded to S3 raw/"
+
+  # Only resource-specific tags, provider handles global tags
+  tags = {
+    Name = "${var.project_name}-${var.environment}-s3-batch-ingestion"
+  }
+}
+```
+
+**Result**: No tag conflicts, clean deployment
+**Lesson Reference**: Error #1 - AWS Tag Conflicts
+
+---
+
+### Pattern #2: Provider default_tags Applied (Phase 4 - Step Functions)
+
+**Phase**: Phase 4 - Step Functions State Machine
+**Date**: 2025-01-24
+**Context**: Creating Step Functions state machine, IAM roles, CloudWatch log group
+
+**Pattern Used**: Consistently applied Error #1 lesson across all resources (state machine, IAM roles, log group)
+
+```hcl
+# modules/step_functions/main.tf
+resource "aws_sfn_state_machine" "orchestrator" {
+  name     = "${var.project_name}-${var.environment}-orchestrator"
+  role_arn = aws_iam_role.step_functions_execution.arn
+
+  # Only resource-specific tags
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-orchestrator"
+    Description = "Orchestrates AI enrichment pipeline"
+  }
+}
+
+resource "aws_iam_role" "step_functions_execution" {
+  name = "${var.project_name}-${var.environment}-sfn-execution-role"
+
+  # Only resource-specific tags
+  tags = {
+    Name = "${var.project_name}-${var.environment}-sfn-execution-role"
+  }
+}
+```
+
+**Result**: All resources deployed without tag conflicts
+**Lesson Reference**: Error #1 - AWS Tag Conflicts
+
+---
+
+### Pattern #3: Least-Privilege IAM Scoping (Phase 4 - Step Functions)
+
+**Phase**: Phase 4 - Step Functions IAM Roles
+**Date**: 2025-01-24
+**Context**: Creating IAM roles for Step Functions execution and EventBridge invocation
+
+**Pattern Used**: Scoped IAM permissions to exact resources needed, avoiding wildcards
+
+```hcl
+# EventBridge → Step Functions (only StartExecution on specific state machine)
+resource "aws_iam_role" "eventbridge_sfn_role" {
+  name = "${var.project_name}-${var.environment}-eventbridge-sfn-role"
+  # ... assume role policy ...
+}
+
+resource "aws_iam_role_policy" "eventbridge_sfn_invoke" {
+  name = "eventbridge-sfn-invoke"
+  role = aws_iam_role.eventbridge_sfn_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "states:StartExecution"
+        Resource = aws_sfn_state_machine.orchestrator.arn  # Specific ARN, not "*"
+      }
+    ]
+  })
+}
+
+# Step Functions → CloudWatch Logs (scoped to specific log group)
+resource "aws_iam_role_policy" "step_functions_logging" {
+  name = "step-functions-logging"
+  role = aws_iam_role.step_functions_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogDelivery",
+          "logs:GetLogDelivery",
+          "logs:UpdateLogDelivery",
+          "logs:DeleteLogDelivery",
+          "logs:ListLogDeliveries",
+          "logs:PutLogEvents",
+          "logs:PutResourcePolicy",
+          "logs:DescribeResourcePolicies",
+          "logs:DescribeLogGroups"
+        ]
+        Resource = "*"  # CloudWatch Logs requires "*" for log delivery
+      }
+    ]
+  })
+}
+```
+
+**Why This Matters**:
+- EventBridge role can ONLY invoke this specific state machine (not any state machine in account)
+- Prevents privilege escalation
+- Follows AWS least-privilege best practice
+- Makes it easier to debug permission issues (exact resource scoping)
+
+**Result**: Clean IAM policies, no overly permissive roles
+**Security Principle**: Always scope IAM permissions to specific resources when possible
+
+---
+
 ## Template for New Errors
 
 ```markdown
@@ -184,5 +320,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 
 ---
 
-**Last Updated**: 2025-10-23
+**Last Updated**: 2025-01-13
 **Total Errors Documented**: 2
+**Total Preventive Patterns Documented**: 3

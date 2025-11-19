@@ -163,6 +163,17 @@ When using specialized agents (like `.claude/agents/portfolio.md`), follow this 
 - Maintain consistent spacing around comment blocks
 - Always use up-to-date Terraform resources
 
+**Module File Organization:**
+- Separate IAM resources into dedicated `iam.tf` files within each module
+- Keep `main.tf` focused on core infrastructure resources (S3, Lambda, API Gateway, etc.)
+- Standard module structure:
+  - `main.tf` - Core infrastructure resources
+  - `iam.tf` - All IAM roles, policies, and attachments
+  - `variables.tf` - Input variables
+  - `outputs.tf` - Output values
+  - `README.md` - Module documentation
+- Benefits: Easier security reviews, better organization, cleaner main.tf files
+
 ### Environment & Security
 - Write code that accounts for different environments: dev, stg, prod
 - Never overwrite `.env` files without asking first
@@ -235,11 +246,18 @@ Use Terraform variables for feature toggles:
 ### Adding a New Terraform Module
 **Follow the Portfolio Implementation Agent workflow** (`.claude/agents/portfolio.md`):
 1. **Research with Context7**: Check AWS service and Terraform resource documentation for current best practices and deprecations
-2. **Create module structure**: `modules/<module_name>/` with `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
+2. **Create module structure**: `modules/<module_name>/` with these files:
+   - `main.tf` - Core infrastructure resources only (S3, Lambda, API Gateway, etc.)
+   - `iam.tf` - All IAM roles, policies, and policy attachments
+   - `variables.tf` - Input variables
+   - `outputs.tf` - Output values
+   - `README.md` - Module documentation
 3. **Implement with portfolio principles**: Working > Perfect, keep it explainable, use clear comments
 4. **Wire module**: Add to environment-specific `main.tf` files
 5. **Test**: Validate with `terraform fmt` and `terraform validate`, then deploy to dev
 6. **Document**: Update README with usage examples and talking points for interviews
+
+**IAM File Organization Rule**: Always create a separate `iam.tf` file for IAM resources. This keeps security-related resources isolated for easier review and maintains clean, focused `main.tf` files.
 
 ### Adding a New Lambda Function
 1. Create directory under `lambdas/<function_name>/`

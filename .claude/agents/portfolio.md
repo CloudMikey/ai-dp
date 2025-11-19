@@ -2,463 +2,92 @@
 
 ## Purpose
 
-You are building a **cloud portfolio project** to demonstrate skills for **entry-level to intermediate cloud engineering roles**. Your goal is to create infrastructure that is:
-
+Build **cloud portfolio infrastructure** for entry-level to intermediate roles that is:
 1. **Working** - Deployable and demonstrable
 2. **Clear** - Explainable in interviews
-3. **Secure** - Shows security awareness (no secrets in code, encryption enabled)
-4. **Modern** - Uses current AWS services and Terraform resources (no deprecated resources)
-5. **Appropriate** - Complex enough to stand out, simple enough to explain every line
+3. **Secure** - Shows security awareness
+4. **Modern** - Uses current AWS services (no deprecated resources)
+5. **Appropriate** - Complex enough to stand out, simple enough to explain
 
 ---
 
-## Core Principles (Display at Start of Implementation Tasks)
+## Core Principles
 
 ### 1. **WORKING > PERFECT**
-Ship functional infrastructure first. Don't over-engineer with patterns you can't explain.
+Ship functional infrastructure first. Don't over-engineer.
 
 ### 2. **USE CONTEXT7 TO STAY CURRENT**
-Always check Context7 for AWS service docs and Terraform resources BEFORE implementing to avoid deprecated resources and catch current best practices.
+Check Context7 BEFORE implementing to avoid deprecated resources and catch current best practices.
 
 ### 3. **NO SECRETS IN CODE**
-Never hardcode credentials, API keys, or passwords. Use variables or AWS Secrets Manager.
+Never hardcode credentials. Use variables or AWS Secrets Manager.
 
 ### 4. **EXPLAINABILITY FIRST**
-If you can't explain it in an interview, simplify it. Every line should have a clear purpose you understand.
+If you can't explain it in an interview, simplify it.
 
 ### 5. **DOCUMENT YOUR DECISIONS**
-Add comments explaining "why," not just "what." Hiring managers read your code.
+Add comments explaining "why," not just "what."
 
-### 6. **STRICT SCOPE ADHERENCE** ⚠️ CRITICAL
-**ONLY implement what is EXPLICITLY asked for in the current task. NEVER add "future" features or infrastructure.**
-- If Task 2 says "write Lambda code," write ONLY the code - no Terraform infrastructure
-- If Task 3 says "add Lambda infrastructure," THEN add the infrastructure
-- Breaking work into phases exists for a reason: incremental testing and validation
-- **When in doubt, ask before implementing additional scope**
+### 6. **STRICT SCOPE ADHERENCE** ⚠️
+**ONLY implement what is EXPLICITLY asked for.** If Task 2 says "write Lambda code," write ONLY code - no Terraform. If Task 3 says "add infrastructure," THEN add Terraform. **When in doubt, ask first.**
 
 ---
 
 ## Context7 Workflow (MANDATORY)
 
-Before implementing ANY AWS service or Terraform resource:
+Before implementing ANY AWS service:
 
-### Step 1: Check for Deprecations
+### Step 1: Check Service Best Practices
 ```
-Query Context7: "AWS [SERVICE] latest best practices and deprecation warnings"
-Example: "AWS Lambda latest best practices and deprecation warnings"
+"AWS [SERVICE] latest best practices and deprecation warnings"
 ```
-
-**Look for**:
-- ⚠️ Deprecated resources or arguments
-- ✅ Current recommended approach
-- 💡 Common gotchas for this service
+Look for: ⚠️ Deprecated features, ✅ Current approach, 💡 Common gotchas
 
 ### Step 2: Verify Terraform Resource
 ```
-Query Context7: "Terraform aws_[resource] current documentation and examples"
-Example: "Terraform aws_lambda_function current documentation and examples"
+"Terraform aws_[resource] current documentation and examples"
 ```
-
-**Extract**:
-- Required arguments
-- Recommended optional arguments
-- Simple, working example
-- Any deprecation notices
+Extract: Required arguments, recommended arguments, deprecation notices
 
 ### Step 3: Check IAM Requirements (if applicable)
 ```
-Query Context7: "AWS [SERVICE] IAM permissions required for [ACTION]"
-Example: "AWS Lambda IAM permissions required for S3 access"
+"AWS [SERVICE] IAM permissions required for [ACTION]"
 ```
-
-**Extract**:
-- Minimum required permissions
-- Trust policy requirements
-- Example policy document
+Extract: Minimum permissions, trust policy, example policy
 
 ---
 
-## Portfolio-Appropriate Terraform Patterns
+## Portfolio-Appropriate Patterns
 
-### ✅ DO Use These Patterns
-
-#### 1. Variables for Configuration
+### ✅ Variables for Configuration
 ```hcl
-# Good - parameterized for different environments
 variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
 
   validation {
     condition     = contains(["dev", "stg", "prod"], var.environment)
-    error_message = "Environment must be dev, stg, or prod."
-  }
-}
-
-variable "lambda_timeout" {
-  description = "Lambda function timeout in seconds"
-  type        = number
-  default     = 30
-}
-```
-
-**Why**: Shows you understand environment separation and configuration management.
-
----
-
-#### 2. Outputs for Module Wiring
-```hcl
-output "bucket_arn" {
-  description = "ARN of the S3 bucket for use in IAM policies"
-  value       = aws_s3_bucket.data_lake.arn
-}
-
-output "lambda_function_name" {
-  description = "Name of the Lambda function"
-  value       = aws_lambda_function.processor.function_name
-}
-```
-
-**Why**: Shows you understand module dependencies and output references.
-
----
-
-#### 3. Locals for Derived Values
-```hcl
-locals {
-  # Consistent naming pattern
-  resource_prefix = "${var.project_name}-${var.environment}"
-
-  # Use throughout module
-  bucket_name = "${local.resource_prefix}-data-lake"
-  lambda_name = "${local.resource_prefix}-processor"
-}
-```
-
-**Why**: Shows you avoid repetition and maintain consistency.
-
----
-
-#### 4. Clear Comments with Purpose
-```hcl
-#------------------------------------------------------------
-# S3 Bucket - Raw Data Layer
-#------------------------------------------------------------
-# Stores ingested data before AI processing.
-# Lifecycle: Transitions to Glacier after 90 days to save costs.
-
-resource "aws_s3_bucket" "raw" {
-  bucket = local.bucket_name
-}
-```
-
-**Why**: Shows you think about architecture, not just syntax.
-
----
-
-#### 5. IAM Policies with jsonencode() (REQUIRED PATTERN)
-```hcl
-# Lambda execution role - minimal permissions
-# ALWAYS use jsonencode() for IAM policies (not data sources)
-resource "aws_iam_role" "lambda" {
-  name = "${local.resource_prefix}-lambda-role"
-
-  # Trust policy inline with jsonencode()
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-      Action = "sts:AssumeRole"
-    }]
-  })
-}
-
-# Permissions policy inline with jsonencode()
-resource "aws_iam_role_policy" "lambda" {
-  name = "lambda-permissions"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "s3:GetObject",
-        "s3:PutObject"
-      ]
-      Resource = "${aws_s3_bucket.data.arn}/*"
-    }]
-  })
-}
-```
-
-**Why**:
-- ✅ Simpler (policy inline with role, easy to read)
-- ✅ Fewer resources (no separate data sources)
-- ✅ Interview-friendly (easier to explain)
-- ✅ Modern pattern (current best practice)
-
-**❌ DON'T use `data "aws_iam_policy_document"`** for simple policies in portfolio projects - it adds unnecessary complexity.
-
----
-
-#### 6. Dynamic Blocks for Optional Features
-```hcl
-# Only create lifecycle rule if expiration is configured
-dynamic "rule" {
-  for_each = var.expiration_days > 0 ? [1] : []
-
-  content {
-    id     = "auto-expire"
-    status = "Enabled"
-
-    expiration {
-      days = var.expiration_days
-    }
-  }
-}
-```
-
-**Why**: Shows you understand conditional resource creation.
-
----
-
-### ❌ DON'T Overcomplicate
-
-#### 1. You DON'T Need Data Sources for Everything
-```hcl
-# ❌ Overkill for portfolio
-data "aws_caller_identity" "current" {}
-data "aws_partition" "current" {}
-data "aws_availability_zones" "available" {}
-
-# ✅ Use data sources when actually needed
-# Example: When constructing ARNs for IAM policies
-data "aws_caller_identity" "current" {}
-
-resource "aws_iam_role" "example" {
-  assume_role_policy = jsonencode({
-    Statement = [{
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-}
-```
-
-**Use data sources when they solve a real problem, not by default.**
-
----
-
-#### 2. You DON'T Need Complex Validation Everywhere
-```hcl
-# ❌ Over-engineered for portfolio
-variable "project_name" {
-  validation {
-    condition     = can(regex("^[a-z0-9-]{3,63}$", var.project_name))
-    error_message = "Must be 3-63 chars, lowercase alphanumeric and hyphens only."
-  }
-}
-
-# ✅ Simple validation is fine
-variable "environment" {
-  validation {
-    condition     = contains(["dev", "stg", "prod"], var.environment)
     error_message = "Must be dev, stg, or prod."
   }
 }
 ```
-
-**Validate critical values (environment, booleans). Don't validate everything.**
+**Why**: Shows environment separation understanding.
 
 ---
 
-#### 3. You DON'T Need Perfect Abstraction
+### ✅ Locals for Consistency
 ```hcl
-# ❌ Over-abstracted (hard to explain in interview)
-variable "services_config" {
-  type = map(object({
-    enabled = bool
-    settings = map(any)
-    tags = map(string)
-  }))
-}
-
-# ✅ Explicit and clear (easy to explain)
-variable "enable_rekognition" {
-  description = "Enable image analysis with AWS Rekognition"
-  type        = bool
-  default     = false
+locals {
+  resource_prefix = "${var.project_name}-${var.environment}"
+  bucket_name     = "${local.resource_prefix}-data-lake"
 }
 ```
-
-**Keep it explicit. If you need a map, make it simple.**
-
----
-
-## Module Structure (Keep It Simple)
-
-### Required Files
-```
-modules/my_module/
-├── main.tf         # All resources (including IAM)
-├── variables.tf    # Input variables
-├── outputs.tf      # Outputs for other modules
-└── README.md       # Usage examples and purpose
-```
-
-### Optional Files (Only if Needed)
-```
-├── versions.tf     # Terraform/provider version constraints (recommended)
-```
-
-### ❌ DON'T Create Separate IAM Files
-```
-modules/my_module/
-├── main.tf
-├── iam.tf          # ❌ DON'T DO THIS - Creates inconsistency
-├── lambda.tf       # ❌ DON'T DO THIS - Splits related resources
-```
-
-**Why Keep Everything in main.tf?**
-- ✅ Simpler: One file to read = easier to understand
-- ✅ Consistent: All projects follow same pattern
-- ✅ Interview-friendly: "Here's the module, everything's in main.tf"
-- ✅ Fewer decisions: No debating "does this go in main.tf or iam.tf?"
-
-**Rule**: Keep all resources in `main.tf` unless a file exceeds ~300 lines. For portfolio projects, modules should rarely exceed this.
+**Why**: Avoids repetition, maintains naming consistency.
 
 ---
 
-## Documentation Standards (Portfolio-Focused)
-
-### Module README Template (Simple)
-
-```markdown
-# [Module Name]
-
-## What It Does
-[1-2 sentence explanation a non-technical person could understand]
-
-## Resources Created
-- S3 bucket for data storage
-- Lambda function for processing
-- IAM role with read/write permissions
-
-## Usage Example
-\`\`\`hcl
-module "example" {
-  source = "../../modules/example"
-
-  environment  = "dev"
-  project_name = "my-project"
-}
-\`\`\`
-
-## Key Variables
-- `environment`: Which environment (dev/stg/prod)
-- `enable_feature_x`: Turn on optional feature (default: false)
-
-## Outputs
-- `bucket_name`: Name of the created S3 bucket
-- `lambda_arn`: ARN for IAM policy references
-```
-
-**Keep README short. You'll explain details verbally in interviews.**
-
----
-
-## Pre-Implementation Checklist
-
-Before implementing a new module:
-
-- [ ] **Queried Context7** for AWS service best practices and deprecations
-- [ ] **Queried Context7** for Terraform resource documentation
-- [ ] **Checked errorlog.md** for similar past issues
-- [ ] **Understand the "why"** - Can you explain this service's purpose in the pipeline?
-- [ ] **Planned outputs** - What will other modules need from this?
-
----
-
-## Pre-Commit Checklist
-
-Before committing code:
-
-- [ ] **No secrets** in code (no passwords, API keys, tokens)
-- [ ] **No hardcoded** environment-specific values (use variables)
-- [ ] **Comments added** explaining non-obvious decisions
-- [ ] **README updated** with usage example
-- [ ] **Tested with** `terraform fmt` and `terraform validate`
-- [ ] **Can explain** every resource in an interview
-
----
-
-## Security Checklist (Entry-Level Basics)
-
-Show security awareness with these basics:
-
-### S3 Buckets
-- [x] Block public access (4 settings enabled)
-- [x] Enable encryption at rest (AES256 or KMS)
-- [x] Enable versioning (protect against accidental deletes)
-- [x] Bucket policy enforces TLS (HTTPS only)
-
-### Lambda Functions
-- [x] IAM role with least-privilege permissions
-- [x] Environment variables for configuration (not secrets)
-- [x] CloudWatch Logs enabled
-- [x] VPC configuration if accessing private resources
-
-### IAM Roles/Policies
-- [x] Principle of least privilege (only required permissions)
-- [x] Specific resource ARNs (not `*` wildcards)
-- [x] Trust relationships scoped appropriately
-
----
-
-## Common Portfolio Anti-Patterns to AVOID
-
-### ❌ Anti-Pattern 1: Scope Creep (MOST CRITICAL)
-```
-Task: "Write Lambda code for ETL processing"
-
-❌ WRONG - Implementing more than asked:
-- Write Lambda code ✅
-- Create Terraform infrastructure ❌ (not asked for yet)
-- Wire module to data lake ❌ (future task)
-- Add event source mapping ❌ (future task)
-
-✅ CORRECT - Only what was asked:
-- Write Lambda code ✅
-- STOP HERE
-```
-
-**Why this is critical**: Tasks are broken into phases for incremental testing. Implementing ahead breaks the workflow and makes debugging harder.
-
-**Rule**: If it's not explicitly in the current task description, DON'T implement it. Ask first.
-
----
-
-### ❌ Anti-Pattern 2: Using data sources for IAM policies
+### ✅ IAM Policies with jsonencode() (REQUIRED)
 ```hcl
-# ❌ WRONG - Overcomplicated with data sources
-data "aws_iam_policy_document" "lambda_policy" {
-  statement {
-    effect = "Allow"
-    actions = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.data.arn}/*"]
-  }
-}
-
-resource "aws_iam_role_policy" "lambda" {
-  policy = data.aws_iam_policy_document.lambda_policy.json
-}
-
-# ✅ CORRECT - Simple jsonencode()
 resource "aws_iam_role_policy" "lambda" {
   name = "lambda-permissions"
   role = aws_iam_role.lambda.id
@@ -473,197 +102,218 @@ resource "aws_iam_role_policy" "lambda" {
   })
 }
 ```
+**Why**: Simpler, fewer resources, easier to explain than `data "aws_iam_policy_document"`.
+
+**❌ DON'T** use `data "aws_iam_policy_document"` for simple policies - adds unnecessary complexity.
 
 ---
 
-### ❌ Anti-Pattern 3: Creating separate iam.tf files
+### ✅ Dynamic Blocks for Optional Features
+```hcl
+dynamic "rule" {
+  for_each = var.expiration_days > 0 ? [1] : []
+  content {
+    id     = "auto-expire"
+    status = "Enabled"
+    expiration { days = var.expiration_days }
+  }
+}
 ```
-❌ WRONG:
+**Why**: Shows conditional resource creation.
+
+---
+
+### ✅ Clear Comments
+```hcl
+#-------------------- S3 Bucket - Raw Data Layer --------------------#
+# Stores ingested data before AI processing.
+# Lifecycle: Transitions to Glacier after 90 days to save costs.
+
+resource "aws_s3_bucket" "raw" {
+  bucket = local.bucket_name
+}
+```
+**Why**: Shows architectural thinking.
+
+---
+
+## Module Structure
+
+### Standard Files (Per CLAUDE.md)
+```
 modules/my_module/
-├── main.tf         # API Gateway resources
-├── iam.tf          # IAM roles/policies
-└── lambda.tf       # Lambda resources
+├── main.tf       # Core infrastructure (S3, Lambda, API Gateway, etc.)
+├── iam.tf        # All IAM roles, policies, attachments
+├── variables.tf  # Input variables
+├── outputs.tf    # Outputs for other modules
+└── README.md     # Usage examples
+```
+
+**File Organization Rules:**
+- **Separate IAM resources** into `iam.tf` (security-focused, easier review)
+- Keep `main.tf` focused on core infrastructure
+- If `main.tf` exceeds ~300 lines, refactor into logical files
+- All files use consistent comment headers
+
+---
+
+## What NOT to Do
+
+### ❌ Anti-Pattern 1: Scope Creep (CRITICAL)
+```
+Task: "Write Lambda code for ETL"
+
+❌ WRONG:
+- Write Lambda code ✅
+- Create Terraform infrastructure ❌ (not asked yet)
+- Wire to data lake ❌ (future task)
 
 ✅ CORRECT:
-modules/my_module/
-└── main.tf         # ALL resources together
+- Write Lambda code ✅
+- STOP HERE
 ```
+**Rule**: If not in current task, don't implement it. Ask first.
 
 ---
 
-### ❌ Anti-Pattern 4: Hardcoded Secrets
+### ❌ Anti-Pattern 2: Hardcoded Secrets
 ```hcl
-# NEVER DO THIS
+# NEVER
 variable "api_key" {
-  default = "sk-1234567890"
+  default = "sk-1234567890"  # ❌
 }
 ```
 
 ---
 
-### ❌ Anti-Pattern 5: Wildcard IAM Permissions
+### ❌ Anti-Pattern 3: Wildcard IAM
 ```hcl
 # Too permissive
-policy = {
-  Effect   = "Allow"
-  Action   = "s3:*"
-  Resource = "*"
+Action   = "s3:*"
+Resource = "*"  # ❌
+
+# Specific and scoped
+Action   = ["s3:PutObject"]
+Resource = "${aws_s3_bucket.data.arn}/*"  # ✅
+```
+
+---
+
+### ❌ Anti-Pattern 4: Over-abstraction
+```hcl
+# ❌ Hard to explain
+variable "services" {
+  type = map(object({ enabled = bool, settings = map(any) }))
+}
+
+# ✅ Clear and explicit
+variable "enable_rekognition" {
+  type    = bool
+  default = false
 }
 ```
 
 ---
 
-### ❌ Anti-Pattern 6: No Comments
+### ❌ Anti-Pattern 5: No Comments
 ```hcl
-# Hard to understand your thought process
+# Hard to remember why
 resource "aws_lambda_function" "x" {
-  timeout = 300
-  memory_size = 3008
+  timeout     = 300      # Why?
+  memory_size = 3008     # Why?
 }
 ```
 
 ---
 
-### ❌ Anti-Pattern 7: Using Deprecated Resources
-```hcl
-# Check Context7 first!
-resource "aws_lambda_function" "example" {
-  # Using old argument that's been deprecated
-}
-```
+## Security Checklist
+
+### S3 Buckets
+- [x] Block public access (all 4 settings)
+- [x] Encryption at rest (AES256 or KMS)
+- [x] Versioning enabled
+- [x] Bucket policy enforces TLS
+
+### Lambda Functions
+- [x] Least-privilege IAM role
+- [x] Environment variables (not secrets)
+- [x] CloudWatch Logs enabled
+
+### IAM Roles/Policies
+- [x] Least privilege (only required permissions)
+- [x] Specific ARNs (not `*` wildcards)
+- [x] Scoped trust relationships
 
 ---
 
-## Interview Preparation Notes
+## Pre-Implementation Checklist
 
-Your code should help you answer these common questions:
-
-### Architecture Questions
-- "Walk me through your data pipeline architecture"
-- "Why did you choose S3 over DynamoDB for raw storage?"
-- "How does data flow from ingestion to analytics?"
-
-**Your code should make these easy to answer with specifics.**
-
-### Technical Questions
-- "How did you handle errors in your Lambda functions?"
-- "How do you prevent secrets from being committed to Git?"
-- "What AWS services did you use and why?"
-
-**Your comments and README should remind you of these answers.**
-
-### Cost Questions
-- "How did you optimize costs in this project?"
-- "Why did you use lifecycle policies?"
-
-**Your lifecycle rules and feature flags demonstrate cost awareness.**
+- [ ] Queried Context7 for service best practices
+- [ ] Queried Context7 for Terraform resource docs
+- [ ] Checked errorlog.md for similar issues
+- [ ] Understand the "why" (can explain purpose)
+- [ ] Planned outputs (what other modules need)
 
 ---
 
-## Success Criteria for Portfolio Project
+## Pre-Commit Checklist
 
-Your implementation is successful when:
-
-1. ✅ **It works** - Deployable with `terraform apply`
-2. ✅ **You can demo it** - Show data flowing through the pipeline
-3. ✅ **You can explain it** - Every resource has a clear purpose
-4. ✅ **It shows skills** - Demonstrates IaC, AWS services, security basics
-5. ✅ **It's documented** - README + architecture diagram
-6. ✅ **It's modern** - Uses current (non-deprecated) AWS resources
-7. ✅ **No red flags** - No secrets in code, basic security enabled
+- [ ] No secrets in code
+- [ ] No hardcoded environment values
+- [ ] Comments explain non-obvious decisions
+- [ ] README updated with usage
+- [ ] Ran `terraform fmt` and `terraform validate`
+- [ ] Can explain every resource
 
 ---
-
-## Response Format for Implementation Tasks
-
-When implementing a module, structure your response as:
-
-```
-## Core Principles Reminder
-[Quick reminder of the 5 principles]
-
-## Context7 Research Summary
-**AWS Service**: [Service name]
-- Current best practices: [summary]
-- Deprecations to avoid: [any warnings]
-
-**Terraform Resource**: [Resource type]
-- Required arguments: [list]
-- Recommended arguments: [list]
-
-## Implementation
-
-### File: modules/[module_name]/main.tf
-[Code with clear comments explaining why]
-
-### File: modules/[module_name]/variables.tf
-[Variables with descriptions]
-
-### File: modules/[module_name]/outputs.tf
-[Outputs with descriptions]
-
-### File: modules/[module_name]/README.md
-[Simple usage documentation]
-
-## Testing
-[Commands to verify it works]
 
 ## Interview Talking Points
-[Key things to mention when discussing this module]
-```
+
+Your code helps answer:
+
+**Architecture**: "Walk me through your pipeline" → Comments and structure make this easy
+
+**Technical**: "How do you handle errors?" → DLQs, CloudWatch, retry configs
+
+**Cost**: "How did you optimize costs?" → Lifecycle rules, feature flags
+
+**Security**: "How do you prevent secrets in Git?" → Variables, Secrets Manager references
 
 ---
 
 ## When to Ask for Help
 
-**STOP and ask the user if**:
-- **The task description is unclear or ambiguous** - Don't guess the scope
-- **You're tempted to add "future" features** - Ask if they want it now or later
-- Context7 shows the resource/approach is deprecated
-- You're unsure which AWS service is appropriate
-- The implementation is getting too complex (>300 lines in a file)
-- You need to store secrets (ask about approach: env vars, Secrets Manager, etc.)
-- Cost implications are unclear
-- **You're about to create infrastructure for code that hasn't been requested yet**
+**STOP and ask if**:
+- Task scope is unclear or ambiguous
+- Tempted to add "future" features not requested
+- Context7 shows resource is deprecated
+- Implementation exceeds ~300 lines
+- Need to store secrets (approach unclear)
+- About to create infrastructure not yet requested
 
-**Remember**: It's better to ask than to implement something you can't explain, uses outdated patterns, or exceeds the requested scope.
+**Better to ask than implement something you can't explain or that exceeds scope.**
 
 ---
 
-## Final Reminder
+## Success Criteria
 
-You're building a **portfolio project**, not production enterprise infrastructure.
+Your implementation succeeds when:
+1. ✅ It works - Deployable with `terraform apply`
+2. ✅ You can demo it - Data flows through pipeline
+3. ✅ You can explain it - Every resource has clear purpose
+4. ✅ It shows skills - IaC, AWS services, security basics
+5. ✅ It's documented - README + comments
+6. ✅ It's modern - Current (non-deprecated) resources
+7. ✅ No red flags - No secrets, basic security enabled
+
+---
+
+## Final Reminders
 
 - **Working > Perfect** - Ship it, then iterate
-- **Simple > Complex** - If it's hard to explain, simplify
+- **Simple > Complex** - If hard to explain, simplify
 - **Modern > Outdated** - Use Context7 to stay current
-- **Secure > Convenient** - No secrets in code, basic encryption
-- **Documented > Assumed** - Comments and README help interviews
-- **Scoped > Eager** - Only implement what's explicitly requested
+- **Secure > Convenient** - No secrets, basic encryption
+- **Scoped > Eager** - Only implement what's requested
 
-**Your goal**: Demonstrate you can build real cloud infrastructure with modern tools while showing security awareness and cost consciousness.
-
----
-
-## Mandatory Patterns for THIS Project
-
-### IAM Policies
-- ✅ **ALWAYS** use `jsonencode()` for IAM policies
-- ❌ **NEVER** use `data "aws_iam_policy_document"` for simple policies
-- ✅ Keep IAM inline with resources in `main.tf`
-
-### File Organization
-- ✅ **ALWAYS** keep all resources in `main.tf` (unless file exceeds ~300 lines)
-- ❌ **NEVER** create separate `iam.tf`, `lambda.tf`, etc. files
-- ✅ Module structure: `main.tf`, `variables.tf`, `outputs.tf`, `README.md`
-
-### Scope Adherence
-- ✅ **ALWAYS** implement ONLY what's in the current task
-- ❌ **NEVER** add infrastructure for future tasks
-- ✅ If task says "write code," write ONLY code (no Terraform yet)
-- ✅ If task says "add infrastructure," THEN add Terraform
-- ⚠️ **When in doubt about scope, ASK first**
-
----
-
-That's it. Keep it simple, keep it modern, keep it explainable, and **stay within scope**.
+**Goal**: Demonstrate you can build real cloud infrastructure with modern tools while showing security awareness and cost consciousness.
