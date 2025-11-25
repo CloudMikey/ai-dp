@@ -70,6 +70,27 @@ module "step_functions" {
   }
 }
 
+#-------------------- DynamoDB Hot Store Module --------------------#
+# Fast query store for AI-enriched data (recent records only)
+
+module "hot_store" {
+  source = "../../modules/hot_store"
+
+  environment  = "dev"
+  project_name = var.project_name
+  aws_region   = var.aws_region
+
+  # Dev configuration: Enable all features for learning/testing
+  enable_point_in_time_recovery = true
+  enable_ttl                    = true
+  ttl_days                      = 30 # 30 days retention for dev
+
+  tags = {
+    Component = "Storage"
+    DataType  = "Enriched"
+  }
+}
+
 #-------------------- Streaming Ingestion Module --------------------#
 # API Gateway HTTP API + Kinesis Data Stream for real-time ingestion
 

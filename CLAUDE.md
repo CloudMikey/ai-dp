@@ -363,15 +363,33 @@ Use Terraform variables for feature toggles:
 - Pass state added `processing_result` field to S3 event, demonstrating input transformation
 - Module wiring pattern established for future AI enrichment tasks (Phase 5+)
 
+**Phase 5: DynamoDB Hot Store (All Tasks Complete)**
+- ✅ Module created: `modules/hot_store/` (main.tf, iam.tf, variables.tf, outputs.tf, README.md)
+- ✅ DynamoDB table deployed: `ai-dp-dev-enriched-data`
+- ✅ Schema: recordId (partition key) + timestamp (sort key)
+- ✅ GSI: `timestamp-index` (recordType + timestamp for time-based queries)
+- ✅ On-demand billing mode (PAY_PER_REQUEST)
+- ✅ TTL enabled: `expiresAt` attribute (30-day retention)
+- ✅ Point-in-time recovery enabled (35-day recovery period)
+- ✅ All CRUD operations tested via AWS CLI
+- ✅ GSI queries verified with time-based filtering
+
+**Key Achievements:**
+- Portfolio-appropriate design: on-demand billing, simple schema, explainable architecture
+- GSI enables analytics queries like "get all text records from last 7 days"
+- TTL provides automatic data lifecycle management (cost optimization)
+- Comprehensive testing: CRUD operations, GSI queries, TTL/PITR verification
+- Error #3 documented: AWS tag value character restrictions (parentheses not allowed)
+
 ### Next Steps
 
-**Phase 5: DynamoDB Hot Store**
-1. Create `modules/hot_store/` module
-2. Design DynamoDB table schema for enriched data
-3. Configure on-demand capacity and TTL
-4. Prepare for Phase 7 merge Lambda integration
+**Phase 6: AI Enrichment Services**
+1. Create `modules/ai_enrichment/` module
+2. Configure IAM role for Step Functions → Comprehend
+3. Update Step Functions state machine to call Comprehend
+4. Test sentiment analysis on S3 objects
 
-**Phases 6-10:** See `docs/roadmap.md` for detailed sequential plan
+**Phases 7-10:** See `docs/roadmap.md` for detailed sequential plan
 
 ### Development Strategy
 
@@ -383,7 +401,7 @@ Use Terraform variables for feature toggles:
 
 ### Progress Tracking
 
-**Overall Completion**: ~50% (5 of 10 phases complete)
+**Overall Completion**: ~60% (6 of 10 phases complete)
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
@@ -391,7 +409,7 @@ Phase 1 (Data Lake):           ████████████████�
 Phase 2 (Streaming):           ████████████████████ 100% ✅
 Phase 3 (Batch EventBridge):  ████████████████████ 100% ✅
 Phase 4 (Step Functions):     ████████████████████ 100% ✅
-Phase 5 (DynamoDB):            ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 5 (DynamoDB):            ████████████████████ 100% ✅
 Phase 6 (AI Enrichment):       ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 7 (Merge & Orchestrate): ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 8 (Analytics):           ░░░░░░░░░░░░░░░░░░░░   0%
@@ -493,7 +511,7 @@ rule {
 - **Portfolio Project**: This is a portfolio project for entry-level to intermediate cloud engineering roles. Focus on working, explainable infrastructure over enterprise perfection. See `.claude/agents/portfolio.md` for implementation guidelines.
 - **Learning Project**: The developer is learning as we go. Keep complexity appropriate (intermediate level), prioritize understanding, and ensure every implementation can be explained in an interview.
 - **Roadmap Reorganization (2025-01-24)**: Roadmap restructured for strict sequential implementation. CI/CD moved from Phase 1 to Phase 10 (final phase). Now building in order: Bootstrap → Data Lake → Streaming → Batch → Step Functions → DynamoDB → AI → Merge → Analytics → Hardening → CI/CD.
-- **Current Status**: Phases 0-2 complete (30% overall progress). Ready to begin Phase 3 (Batch Ingestion EventBridge Rule). See `docs/roadmap.md` for detailed progress.
+- **Current Status**: Phases 0-5 complete (60% overall progress). Ready to begin Phase 6 (AI Enrichment Services). See `docs/roadmap.md` for detailed progress.
 - **Roadmap**: See `docs/roadmap.md` for detailed 10-phase sequential implementation plan
 - **Project Guide**: See `docs/ai-dp overview notion.md` for comprehensive architecture overview
 - **Error Tracking**: Always consult and update `docs/errorlog.md` when debugging issues

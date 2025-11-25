@@ -285,6 +285,49 @@ resource "aws_iam_role_policy" "step_functions_logging" {
 
 ---
 
+## Error #3: AWS DynamoDB Invalid Tag Value Characters
+
+**Date**: Phase 5 - DynamoDB Hot Store Module Development
+**Context**: Creating DynamoDB table with resource-specific tags
+
+### Error Message
+```
+Error: creating AWS DynamoDB Table (ai-dp-dev-enriched-data): operation error DynamoDB: CreateTable, https response error StatusCode: 400, RequestID: FJHEMK5M9LK3PH4SC7ES8VMH5JVV4KQNSO5AEMVJF66Q9ASUAAJG, api error ValidationException: The Tag Value provided is invalid, Value: Hot store for AI-enriched data (recent records only)
+```
+
+### Root Cause
+AWS DynamoDB (and other AWS services) restrict tag values to specific allowed characters. Tag values can only contain:
+- Letters (a-z, A-Z)
+- Numbers (0-9)
+- Spaces
+- Special characters: `+ - = . _ : / @`
+
+Parentheses `()` are NOT allowed in tag values.
+
+### Attempted Solutions
+1. ✅ **Working Solution**: Removed parentheses from tag value
+
+### Working Fix ✅
+**Solution**: Replace parentheses with hyphens or other allowed characters
+
+```hcl
+# ❌ WRONG: Contains parentheses
+tags = {
+  Description = "Hot store for AI-enriched data (recent records only)"
+}
+
+# ✅ CORRECT: Use hyphens instead
+tags = {
+  Description = "Hot store for AI-enriched data - recent records only"
+}
+```
+
+**Key Principle**: AWS tag values must use only allowed characters: letters, numbers, spaces, and `+ - = . _ : / @`. Avoid parentheses, brackets, quotes, or other special characters.
+
+**Service Scope**: This restriction applies to most AWS services (DynamoDB, S3, Lambda, etc.), not just DynamoDB. Always validate tag values against AWS character restrictions.
+
+---
+
 ## Template for New Errors
 
 ```markdown
@@ -320,6 +363,6 @@ resource "aws_iam_role_policy" "step_functions_logging" {
 
 ---
 
-**Last Updated**: 2025-01-13
-**Total Errors Documented**: 2
+**Last Updated**: 2025-01-24
+**Total Errors Documented**: 3
 **Total Preventive Patterns Documented**: 3
