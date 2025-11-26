@@ -7,7 +7,8 @@
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
       "mcp__context7__get-recently-edited-files",
-      "SlashCommand(/study-guide)"
+      "SlashCommand(/study-guide)",
+      "Bash(powershell.exe -Command \"Get-Content ''Z:\\CODE\\notes\\study-guides\\Phase4-Part1-Overview-Architecture.md'' | Select-Object -First 150\")"
     ],
     "deny": [],
     "ask": []

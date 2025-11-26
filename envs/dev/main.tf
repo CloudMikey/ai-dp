@@ -52,7 +52,7 @@ module "data_lake" {
 
 #-------------------- Step Functions Orchestration Module --------------------#
 # State machine for batch data pipeline orchestration
-# Phase 4: Minimal Pass state for EventBridge integration testing
+# Phase 6: Comprehend AI enrichment integration
 
 module "step_functions" {
   source = "../../modules/step_functions"
@@ -61,6 +61,10 @@ module "step_functions" {
   project_name = var.project_name
   aws_region   = var.aws_region
 
+  # AI Enrichment integration
+  data_lake_bucket_arn  = module.data_lake.bucket_arn
+  comprehend_policy_arn = module.ai_enrichment.comprehend_policy_arn
+
   # CloudWatch Logs configuration
   log_retention_days = 7     # 7 days for dev
   log_level          = "ALL" # Full logging for dev debugging
@@ -68,6 +72,16 @@ module "step_functions" {
   tags = {
     Component = "Orchestration"
   }
+}
+
+#-------------------- AI Enrichment Module --------------------#
+# AWS Comprehend integration for sentiment analysis and entity detection
+
+module "ai_enrichment" {
+  source = "../../modules/ai_enrichment"
+
+  environment  = "dev"
+  project_name = var.project_name
 }
 
 #-------------------- DynamoDB Hot Store Module --------------------#

@@ -61,3 +61,34 @@ resource "aws_iam_role_policy" "step_functions_logging" {
     ]
   })
 }
+
+#-------------------- IAM Policy for S3 Read Access --------------------#
+# Allows Step Functions to read objects from data lake (for AI enrichment)
+# Scoped to raw/ prefix where batch ingestion uploads files
+
+resource "aws_iam_role_policy" "step_functions_s3_read" {
+  name = "s3-read-access"
+  role = aws_iam_role.step_functions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion"
+        ]
+        Resource = "${var.data_lake_bucket_arn}/raw/*"
+      }
+    ]
+  })
+}
+
+#-------------------- Attach Comprehend Policy --------------------#
+# Attaches AI enrichment policy for sentiment/entity detection
+
+resource "aws_iam_role_policy_attachment" "comprehend" {
+  role       = aws_iam_role.step_functions.name
+  policy_arn = var.comprehend_policy_arn
+}

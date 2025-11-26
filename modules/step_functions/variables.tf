@@ -41,6 +41,18 @@ variable "log_level" {
   }
 }
 
+#-------------------- Integration Variables --------------------#
+
+variable "data_lake_bucket_arn" {
+  description = "ARN of the data lake S3 bucket for reading objects"
+  type        = string
+}
+
+variable "comprehend_policy_arn" {
+  description = "ARN of the Comprehend IAM policy to attach to Step Functions role"
+  type        = string
+}
+
 #-------------------- Tagging Variables --------------------#
 
 variable "tags" {

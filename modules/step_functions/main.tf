@@ -35,22 +35,112 @@ resource "aws_sfn_state_machine" "orchestrator" {
   name     = local.state_machine_name
   role_arn = aws_iam_role.step_functions.arn
 
-  # ASL definition: Minimal Pass state for integration testing
-  # Pass state doesn't invoke services, just validates event delivery
+  # ASL definition: AI Enrichment workflow with AWS Comprehend
+  # Phase 6: Parallel sentiment analysis and entity detection
   definition = jsonencode({
-    Comment = "Phase 4: Minimal orchestration - validates EventBridge integration"
-    StartAt = "ReceiveEvent"
+    Comment = "Phase 6: AI Enrichment - Comprehend sentiment and entity detection"
+    StartAt = "PrepareComprehendInput"
     States = {
-      ReceiveEvent = {
+      # Extract S3 bucket and key from EventBridge event
+      PrepareComprehendInput = {
         Type    = "Pass"
-        Comment = "Placeholder state - accepts S3 event, no processing yet"
-        Result = {
-          message    = "Event received successfully"
-          phase      = "4-complete"
-          next_steps = "Add Lambda tasks in Phase 5"
+        Comment = "Extract S3 object details from EventBridge event"
+        Parameters = {
+          "bucket.$" = "$.detail.bucket.name"
+          "key.$"    = "$.detail.object.key"
+          "size.$"   = "$.detail.object.size"
         }
-        ResultPath = "$.processing_result"
-        End        = true
+        Next = "ReadS3Object"
+      }
+
+      # Read S3 object content for Comprehend analysis
+      # Uses AWS SDK integration for S3 GetObject
+      ReadS3Object = {
+        Type     = "Task"
+        Comment  = "Read text content from S3 for AI analysis"
+        Resource = "arn:aws:states:::aws-sdk:s3:getObject"
+        Parameters = {
+          "Bucket.$" = "$.bucket"
+          "Key.$"    = "$.key"
+        }
+        ResultPath = "$.s3_response"
+        Next       = "PrepareTextContent"
+      }
+
+      # Extract text content from S3 response and combine with metadata
+      PrepareTextContent = {
+        Type    = "Pass"
+        Comment = "Combine S3 object content with metadata for AI analysis"
+        Parameters = {
+          "text_content.$" = "$.s3_response.Body"
+          "bucket.$"       = "$.bucket"
+          "key.$"          = "$.key"
+          "size.$"         = "$.size"
+        }
+        Next = "ComprehendAnalysis"
+      }
+
+      # Parallel execution of Comprehend sentiment and entity detection
+      ComprehendAnalysis = {
+        Type    = "Parallel"
+        Comment = "Run sentiment analysis and entity detection in parallel"
+        Branches = [
+          {
+            StartAt = "DetectSentiment"
+            States = {
+              DetectSentiment = {
+                Type     = "Task"
+                Comment  = "Analyze text sentiment (positive, negative, neutral, mixed)"
+                Resource = "arn:aws:states:::aws-sdk:comprehend:detectSentiment"
+                Parameters = {
+                  "LanguageCode" = "en"
+                  "Text.$"       = "$.text_content"
+                }
+                End = true
+              }
+            }
+          },
+          {
+            StartAt = "DetectEntities"
+            States = {
+              DetectEntities = {
+                Type     = "Task"
+                Comment  = "Extract named entities (people, places, organizations, etc.)"
+                Resource = "arn:aws:states:::aws-sdk:comprehend:detectEntities"
+                Parameters = {
+                  "LanguageCode" = "en"
+                  "Text.$"       = "$.text_content"
+                }
+                End = true
+              }
+            }
+          }
+        ]
+        ResultPath = "$.comprehend_results"
+        Next       = "FormatResults"
+      }
+
+      # Format results for merge Lambda (Phase 7)
+      FormatResults = {
+        Type    = "Pass"
+        Comment = "Structure AI enrichment results for DynamoDB and S3 processed layer"
+        Parameters = {
+          "source_object" = {
+            "bucket.$" = "$.bucket"
+            "key.$"    = "$.key"
+            "size.$"   = "$.size"
+          }
+          "ai_enrichment" = {
+            "sentiment.$" = "$.comprehend_results[0]"
+            "entities.$"  = "$.comprehend_results[1]"
+          }
+          "processing_metadata" = {
+            "phase"          = "6-comprehend-complete"
+            "timestamp.$"    = "$$.State.EnteredTime"
+            "state_machine" = "ai-dp-dev-orchestrator"
+          }
+        }
+        End = true
       }
     }
   })

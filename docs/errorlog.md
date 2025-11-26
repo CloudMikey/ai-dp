@@ -328,6 +328,86 @@ tags = {
 
 ---
 
+## Error #4: AWS Comprehend Not Available in us-west-1
+
+**Date**: Phase 6 - AI Enrichment Module Development
+**Context**: Testing Step Functions integration with AWS Comprehend for sentiment analysis
+
+### Error Message
+```
+Comprehend.InvalidRequestException: UNSUPPORTED_OPERATION: This operation is not supported in this region (Service: Comprehend, Status Code: 400, Request ID: 94be587f-db96-42fa-900b-70d25ba79f9b)
+```
+
+### Root Cause
+AWS Comprehend is not available in all regions. Specifically, it is NOT available in `us-west-1` (N. California). The project was initially developed in `us-west-1` for cost optimization, but Comprehend requires a different region.
+
+**Comprehend Available Regions** (as of 2025):
+- `us-east-1` (N. Virginia) ✅
+- `us-east-2` (Ohio) ✅
+- `us-west-2` (Oregon) ✅
+- `eu-west-1` (Ireland) ✅
+- `eu-central-1` (Frankfurt) ✅
+- `ap-southeast-1` (Singapore) ✅
+- `ap-southeast-2` (Sydney) ✅
+- And others...
+
+NOT AVAILABLE in:
+- `us-west-1` (N. California) ❌
+
+### Options Considered
+
+**Option 1**: Switch entire project to `us-west-2` ✅ RECOMMENDED
+- **Pros**: Supports all AWS services (Comprehend, Rekognition, SageMaker, etc.)
+- **Pros**: Simple - just update region variable
+- **Pros**: Best for portfolio project (demonstrates full AI service integration)
+- **Cons**: Slightly higher data transfer costs (negligible for dev/portfolio)
+
+**Option 2**: Use cross-region Comprehend calls from `us-west-1`
+- **Pros**: Keep existing infrastructure in `us-west-1`
+- **Cons**: Complex IAM permissions and VPC endpoint configuration
+- **Cons**: Higher latency and data transfer costs
+- **Cons**: Not a clean architecture for portfolio demonstration
+- **Rejected**: Overly complex for portfolio project
+
+**Option 3**: Mock Comprehend with Lambda function
+- **Pros**: Works in any region
+- **Cons**: Not real AWS AI service integration (defeats purpose of portfolio)
+- **Cons**: Doesn't demonstrate actual Comprehend usage
+- **Rejected**: Misses learning opportunity and portfolio value
+
+### Working Fix ✅
+**Solution**: Migrate entire project from `us-west-1` to `us-west-2`
+
+**Migration Steps**:
+1. Update region variable in `envs/dev/terraform.tfvars`:
+   ```hcl
+   aws_region = "us-west-2"
+   ```
+
+2. Update S3 backend bucket name (region-specific):
+   ```hcl
+   # bootstrap/main.tf or manual S3 bucket creation
+   bucket = "tf-state-aidp-us-west-2"  # Instead of existing us-west-1 bucket
+   ```
+
+3. Run `terraform destroy` in us-west-1 (optional - to clean up old resources)
+
+4. Run `terraform init -reconfigure` to reinitialize with new backend
+
+5. Run `terraform apply` to deploy in us-west-2
+
+**Alternative Quick Fix** (for testing Phase 6 only):
+- Just update `aws_region = "us-west-2"` in variables
+- Run `terraform destroy` to clean up us-west-1 resources
+- Run `terraform apply` to redeploy in us-west-2
+- Keep existing S3 backend in us-west-1 (state file can be in different region than resources)
+
+**Key Principle**: Always verify AWS service regional availability BEFORE architecture design. Use [AWS Regional Services List](https://aws.amazon.com/about-aws/global-infrastructure/regional-product-services/) to check service availability.
+
+**Portfolio Recommendation**: Use `us-west-2` or `us-east-1` for projects requiring AI/ML services (Comprehend, Rekognition, SageMaker, Bedrock). These regions have the most comprehensive AWS service coverage.
+
+---
+
 ## Template for New Errors
 
 ```markdown
