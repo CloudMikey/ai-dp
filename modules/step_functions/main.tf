@@ -58,7 +58,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
       ReadS3Object = {
         Type     = "Task"
         Comment  = "Read text content from S3 for AI analysis"
-        Resource = "arn:aws:states:::aws-sdk:s3:getObject"
+        Resource = "arn:aws:states:::aws-sdk:s3:getObject"     #action for this state
         Parameters = {
           "Bucket.$" = "$.bucket"
           "Key.$"    = "$.key"
@@ -88,6 +88,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
           {
             StartAt = "DetectSentiment"
             States = {
+              # Analyzes the sentiment(vibe) of the text
               DetectSentiment = {
                 Type     = "Task"
                 Comment  = "Analyze text sentiment (positive, negative, neutral, mixed)"
@@ -103,6 +104,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
           {
             StartAt = "DetectEntities"
             States = {
+              # Reads the named things in the text
               DetectEntities = {
                 Type     = "Task"
                 Comment  = "Extract named entities (people, places, organizations, etc.)"
@@ -116,7 +118,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
             }
           }
         ]
-        ResultPath = "$.comprehend_results"
+        ResultPath = "$.comprehend_results"  #crate new key in state output
         Next       = "FormatResults"
       }
 
