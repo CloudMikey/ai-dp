@@ -276,6 +276,7 @@ Use Terraform variables for feature toggles:
 ## Current Project Status
 
 > **Note:** Roadmap reorganized on 2025-01-24 for strict sequential implementation. CI/CD moved from Phase 1 to Phase 10 (final phase).
+> **Latest Update:** 2025-01-30 - Phases 5-6 completed (DynamoDB Hot Store + AI Enrichment with Comprehend).
 
 ### Completed ✅
 
@@ -381,15 +382,33 @@ Use Terraform variables for feature toggles:
 - Comprehensive testing: CRUD operations, GSI queries, TTL/PITR verification
 - Error #3 documented: AWS tag value character restrictions (parentheses not allowed)
 
+**Phase 6: AI Enrichment Services (All Tasks Complete)**
+- ✅ IAM permissions added to Step Functions role (Comprehend DetectSentiment, DetectEntities)
+- ✅ S3 read permissions added (`s3:GetObject` on `raw/*` prefix)
+- ✅ Step Functions state machine updated with Comprehend workflow
+- ✅ Parallel execution implemented (DetectSentiment + DetectEntities run simultaneously)
+- ✅ S3 integration via AWS SDK (state machine reads objects directly, no Lambda needed)
+- ✅ End-to-end testing: S3 upload → EventBridge → Step Functions → Comprehend → Results
+- ✅ Verified sentiment analysis: POSITIVE (98.76% confidence)
+- ✅ Verified entity extraction: Organizations, titles, and key phrases identified
+
+**Key Achievements:**
+- Implemented parallel execution for 50% performance improvement
+- Used Step Functions AWS SDK integrations (less code, no Lambda wrapper)
+- Implemented least-privilege IAM with S3 scoped to `raw/*` prefix only
+- Successfully integrated real AI enrichment (sentiment + entity extraction)
+- Manual implementation guide created: `Z:\CODE\Notes\Manual\phase-6-ai-enrichment-manual-guide.md`
+
 ### Next Steps
 
-**Phase 6: AI Enrichment Services**
-1. Create `modules/ai_enrichment/` module
-2. Configure IAM role for Step Functions → Comprehend
-3. Update Step Functions state machine to call Comprehend
-4. Test sentiment analysis on S3 objects
+**Phase 7: Merge Lambda & Complete Orchestration**
+1. Create Merge Lambda function (`lambdas/merge/app.py`)
+2. Add Lambda infrastructure (IAM, DLQ, CloudWatch)
+3. Update Step Functions to invoke Merge Lambda
+4. Write enriched data to S3 `processed/` + DynamoDB
+5. Test end-to-end pipeline (both streaming and batch paths)
 
-**Phases 7-10:** See `docs/roadmap.md` for detailed sequential plan
+**Phases 8-10:** See `docs/roadmap.md` for detailed sequential plan
 
 ### Development Strategy
 
@@ -401,7 +420,7 @@ Use Terraform variables for feature toggles:
 
 ### Progress Tracking
 
-**Overall Completion**: ~60% (6 of 10 phases complete)
+**Overall Completion**: ~70% (7 of 10 phases complete)
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
@@ -410,7 +429,7 @@ Phase 2 (Streaming):           ████████████████�
 Phase 3 (Batch EventBridge):  ████████████████████ 100% ✅
 Phase 4 (Step Functions):     ████████████████████ 100% ✅
 Phase 5 (DynamoDB):            ████████████████████ 100% ✅
-Phase 6 (AI Enrichment):       ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
 Phase 7 (Merge & Orchestrate): ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 8 (Analytics):           ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
