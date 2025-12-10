@@ -137,12 +137,55 @@ resource "aws_sfn_state_machine" "orchestrator" {
             "entities.$"  = "$.comprehend_results[1]"
           }
           "processing_metadata" = {
-            "phase"          = "6-comprehend-complete"
-            "timestamp.$"    = "$$.State.EnteredTime"
+            "phase"         = "6-comprehend-complete"
+            "timestamp.$"   = "$$.State.EnteredTime"
             "state_machine" = "ai-dp-dev-orchestrator"
           }
         }
-        End = true
+        Next = "InvokeMergeLambda"
+      }
+
+      # Invoke Merge Lambda to write to S3 processed/ + DynamoDB
+      InvokeMergeLambda = {
+        Type     = "Task"
+        Comment  = "Merge AI enrichment results and write to S3 processed layer + DynamoDB hot store"
+        Resource = var.merge_lambda_arn
+        Parameters = {
+          "source_object.$"       = "$.source_object"
+          "ai_enrichment.$"       = "$.ai_enrichment"
+          "processing_metadata.$" = "$.processing_metadata"
+        }
+        ResultPath = "$.merge_result"
+        Retry = [
+          {
+            ErrorEquals     = ["Lambda.ServiceException", "Lambda.TooManyRequestsException"]
+            IntervalSeconds = 2
+            MaxAttempts     = 3
+            BackoffRate     = 2.0
+          }
+        ]
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            ResultPath  = "$.error"
+            Next        = "MergeFailed"
+          }
+        ]
+        Next = "MergeComplete"
+      }
+
+      # Success state
+      MergeComplete = {
+        Type    = "Succeed"
+        Comment = "Pipeline complete - enriched data written to S3 processed layer and DynamoDB"
+      }
+
+      # Failure state
+      MergeFailed = {
+        Type    = "Fail"
+        Comment = "Merge Lambda failed - check DLQ and CloudWatch Logs for details"
+        Error   = "MergeLambdaError"
+        Cause   = "Lambda invocation failed after retries"
       }
     }
   })

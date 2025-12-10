@@ -53,6 +53,11 @@ variable "comprehend_policy_arn" {
   type        = string
 }
 
+variable "merge_lambda_arn" {
+  description = "ARN of Merge Lambda function for invoking from Step Functions"
+  type        = string
+}
+
 #-------------------- Tagging Variables --------------------#
 
 variable "tags" {

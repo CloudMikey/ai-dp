@@ -1,8 +1,8 @@
 # Project Status
 
-**Last Updated:** 2025-01-30
+**Last Updated:** 2025-12-07
 
-> **Quick Status:** Phases 0-6 complete (70% overall progress). Ready to begin Phase 7: Merge Lambda & Complete Orchestration.
+> **Quick Status:** Phases 0-7 complete (80% overall progress). Ready to begin Phase 8: Analytics & Query Layer.
 
 ---
 
@@ -67,35 +67,46 @@
 - Verified entity extraction: Organizations, titles, and key phrases identified
 - Manual implementation guide created: `Z:\CODE\Notes\Manual\phase-6-ai-enrichment-manual-guide.md`
 
+### Phase 7: Merge Lambda & Complete Orchestration (100%)
+- Merge Lambda function created: `lambdas/merge/app.py` (180 lines)
+- Orchestration module deployed: `modules/orchestration/` (main.tf, iam.tf, variables.tf, outputs.tf, README.md)
+- Lambda infrastructure: IAM role, SQS DLQ (`ai-dp-dev-merge-dlq`), CloudWatch Logs (`/aws/lambda/ai-dp-dev-merge`)
+- Lambda configuration: Python 3.11, 256MB memory, 60s timeout
+- Step Functions updated: InvokeMergeLambda state added after Comprehend with retry/catch error handling
+- Dual storage strategy operational: S3 `processed/` + DynamoDB hot store
+- End-to-end pipeline tested: Both streaming and batch paths fully functional
+- Data flow verified: API/S3 → Kinesis/EventBridge → ETL → S3 raw → Step Functions → Comprehend → Merge Lambda → S3 processed + DynamoDB
+- S3 partitioning: `processed/year=YYYY/month=MM/day=DD/{uuid}.json`
+- DynamoDB records: recordId, timestamp, sentiment, entities, rawDataLocation, processedDataLocation, TTL (30 days)
+- Error handling verified: DLQ captures failed Lambda invocations
+
 ---
 
 ## Current Phase
 
-**Phase 7: Merge Lambda & Complete Orchestration**
+**Phase 8: Analytics & Query Layer**
 - **Status:** Not started
-- **Goal:** Combine AI outputs and write to `processed/` + DynamoDB
+- **Goal:** Glue + Athena for SQL queries, visualization dashboard
 - **What's needed:**
-  1. Create Merge Lambda function (`lambdas/merge/app.py`)
-  2. Add Lambda infrastructure (IAM, DLQ, CloudWatch)
-  3. Update Step Functions to invoke Merge Lambda
-  4. Write enriched data to S3 `processed/` layer with partitioning
-  5. Write enriched data to DynamoDB hot store
-  6. Test end-to-end pipeline (both streaming and batch paths)
+  1. Create Glue database and crawler for S3 `processed/` layer
+  2. Configure Athena workgroup and query S3 data with SQL
+  3. Choose dashboard platform (QuickSight/React/HTML)
+  4. Build dashboard with key metrics (volume, sentiment, entities)
+  5. Connect dashboard to DynamoDB (real-time) and Athena (historical)
 
 ---
 
 ## Next Phases (Sequential Order)
 
-1. **Phase 7: Merge & Orchestrate** ← **CURRENT**
-2. **Phase 8: Analytics** - Glue, Athena, Dashboard
-3. **Phase 9: Production Hardening** - Testing, security, docs
-4. **Phase 10: CI/CD** - GitHub Actions automation
+1. **Phase 8: Analytics & Query Layer** ← **CURRENT**
+2. **Phase 9: Production Hardening** - Testing, security, docs
+3. **Phase 10: CI/CD** - GitHub Actions automation
 
 **See `docs/roadmap.md` for detailed task breakdowns.**
 
 ---
 
-## Overall Progress: ~70%
+## Overall Progress: ~80%
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
@@ -105,7 +116,7 @@ Phase 3 (Batch EventBridge):  ████████████████�
 Phase 4 (Step Functions):     ████████████████████ 100% ✅
 Phase 5 (DynamoDB):            ████████████████████ 100% ✅
 Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
-Phase 7 (Merge & Orchestrate): ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
 Phase 8 (Analytics):           ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
 Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
@@ -115,7 +126,7 @@ Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░�
 
 ## Key Learnings
 
-### Phase 1-6 Lessons Learned
+### Phase 1-7 Lessons Learned
 
 1. **Tag Conflicts (Error #1):** Centralize tags in provider `default_tags`, only add resource-specific tags in modules to avoid conflicts
 2. **Lifecycle Rules (Error #2):** Use dynamic blocks to avoid creating empty rules (AWS rejects them)
@@ -124,28 +135,31 @@ Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░�
 5. **Least-Privilege IAM:** Always scope permissions to specific resources/prefixes (e.g., S3 `raw/*` only)
 6. **Parallel Execution:** Use Step Functions Parallel state for independent tasks (50% performance improvement)
 7. **AWS SDK Integrations:** Step Functions can call AWS services directly without Lambda wrappers (less code)
+8. **Dual Storage Strategy:** DynamoDB for hot queries (recent data, low latency), S3 for historical analytics (cost-effective, unlimited retention)
+9. **Error Handling Layers:** Implement multiple safety nets: DLQ, retries, catch blocks, CloudWatch alarms
+10. **Date Partitioning:** Always partition S3 data by date (year/month/day) for efficient Athena queries and cost optimization
 
 ---
 
 ## Architecture Summary
 
-### Data Flow (Phases 1-6 Complete)
+### Data Flow (Phases 1-7 Complete)
 
-**Streaming Path:**
+**Streaming Path (FULLY OPERATIONAL):**
 ```
-User → API Gateway → Kinesis Stream → ETL Lambda → S3 raw/ → EventBridge → Step Functions → Comprehend → [Phase 7: Merge Lambda]
-```
-
-**Batch Path:**
-```
-User → S3 raw/ → EventBridge → Step Functions → Comprehend → [Phase 7: Merge Lambda]
+User → API Gateway → Kinesis Stream → ETL Lambda → S3 raw/ → EventBridge → Step Functions → Comprehend → Merge Lambda → S3 processed/ + DynamoDB
 ```
 
-**Phase 7 Will Complete:**
+**Batch Path (FULLY OPERATIONAL):**
 ```
-Comprehend → Merge Lambda → S3 processed/ + DynamoDB
-                                    ↓
-                            [Phase 8: Glue + Athena]
+User → S3 raw/ → EventBridge → Step Functions → Comprehend → Merge Lambda → S3 processed/ + DynamoDB
+```
+
+**Phase 8 Will Add:**
+```
+S3 processed/ → Glue Crawler → Glue Data Catalog → Athena (SQL queries)
+                                                            ↓
+DynamoDB (hot) + Athena (historical) ← Dashboard (QuickSight/React/HTML)
 ```
 
 ---
@@ -175,9 +189,10 @@ Comprehend → Merge Lambda → S3 processed/ + DynamoDB
 
 ### Lambda
 - `ai-dp-dev-etl` (Kinesis consumer, writes to S3 raw/)
+- `ai-dp-dev-merge` (Merge AI enrichment results, writes to S3 processed/ + DynamoDB)
 
 ### Step Functions
-- `ai-dp-dev-orchestrator` (Orchestration state machine with Comprehend integration)
+- `ai-dp-dev-orchestrator` (Orchestration state machine: Comprehend → Merge Lambda)
 
 ### DynamoDB
 - `ai-dp-dev-enriched-data` (Hot store for recent AI-enriched data)
@@ -187,6 +202,7 @@ Comprehend → Merge Lambda → S3 processed/ + DynamoDB
 
 ### SQS
 - `ai-dp-dev-etl-dlq` (Dead Letter Queue for ETL Lambda failures)
+- `ai-dp-dev-merge-dlq` (Dead Letter Queue for Merge Lambda failures)
 
 ### CloudWatch
 - Log groups for Lambda and Step Functions

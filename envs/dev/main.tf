@@ -65,6 +65,9 @@ module "step_functions" {
   data_lake_bucket_arn  = module.data_lake.bucket_arn
   comprehend_policy_arn = module.ai_enrichment.comprehend_policy_arn
 
+  # Merge Lambda integration (Phase 7)
+  merge_lambda_arn = module.orchestration.lambda_function_arn
+
   # CloudWatch Logs configuration
   log_retention_days = 7     # 7 days for dev
   log_level          = "ALL" # Full logging for dev debugging
@@ -102,6 +105,35 @@ module "hot_store" {
   tags = {
     Component = "Storage"
     DataType  = "Enriched"
+  }
+}
+
+#-------------------- Orchestration Module --------------------#
+# Merge Lambda: Combines AI enrichment results and writes to S3 processed/ + DynamoDB
+
+module "orchestration" {
+  source = "../../modules/orchestration"
+
+  environment  = "dev"
+  project_name = var.project_name
+
+  # Data Lake integration
+  data_lake_bucket_name = module.data_lake.bucket_name
+  data_lake_bucket_arn  = module.data_lake.bucket_arn
+  processed_prefix      = "processed/"
+
+  # DynamoDB Hot Store integration
+  dynamodb_table_name = module.hot_store.table_name
+  dynamodb_table_arn  = module.hot_store.table_arn
+  ttl_days            = 30
+
+  # Lambda configuration
+  log_level          = "INFO"
+  log_retention_days = 7
+
+  tags = {
+    Component = "Orchestration"
+    Purpose   = "AIEnrichmentMerge"
   }
 }
 

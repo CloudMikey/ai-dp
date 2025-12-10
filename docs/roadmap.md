@@ -321,47 +321,79 @@
 
 ### Tasks
 
-**1. Merge Lambda Function (`lambdas/merge/`)**
-- Write `lambdas/merge/app.py`:
-  - Accept AI enrichment results as input (from Step Functions)
-  - Merge Comprehend sentiment + entities into single JSON object
-  - Write enriched data to S3 `processed/` layer with partitioning
-  - Write enriched data to DynamoDB hot store
-  - Return success/failure status
-- Create `requirements.txt`
-- Package Lambda deployment artifact
+**1. Merge Lambda Function (`lambdas/merge/`)** ✅ **COMPLETED**
+- ✅ Written `lambdas/merge/app.py` (180 lines):
+  - Accepts AI enrichment results as input (from Step Functions)
+  - Merges Comprehend sentiment + entities into single JSON object
+  - Writes enriched data to S3 `processed/` layer with date partitioning
+  - Writes enriched data to DynamoDB hot store with TTL
+  - Returns success/failure status
+- ✅ Created `requirements.txt`
+- ✅ Lambda code packaged (no external dependencies needed - boto3 included in runtime)
 
-**Complete when:** Lambda code written and packaged
+**Implementation Notes:**
+- Function name: `ai-dp-dev-merge`
+- Environment variables: DATA_LAKE_BUCKET, PROCESSED_PREFIX, DYNAMODB_TABLE, TTL_DAYS
+- Generates unique recordId: `{timestamp}-{uuid}`
+- S3 partitioning: `processed/year=YYYY/month=MM/day=DD/{uuid}.json`
+- DynamoDB TTL: 30 days for dev environment
+- Error handling: S3 write must succeed, DynamoDB write is best-effort
 
-**2. Merge Lambda Infrastructure (`modules/orchestration/`)**
-- Create new module: `modules/orchestration/` (or add to `step_functions` module)
-- Create Lambda resource for merge function
-- Create IAM role with permissions:
-  - S3: `PutObject` to `processed/*` prefix
+**Complete when:** Lambda code written and packaged ✅
+
+**2. Merge Lambda Infrastructure (`modules/orchestration/`)** ✅ **COMPLETED**
+- ✅ Created new module: `modules/orchestration/` (main.tf, iam.tf, variables.tf, outputs.tf, README.md)
+- ✅ Lambda resource deployed with least-privilege IAM role
+- ✅ IAM permissions configured:
+  - S3: `PutObject` to `processed/*` prefix only
   - DynamoDB: `PutItem` to hot store table
-  - CloudWatch Logs
-- Create SQS DLQ for merge Lambda failures
-- Set timeout (30s), memory (256MB)
+  - CloudWatch Logs: CreateLogGroup, CreateLogStream, PutLogEvents
+  - SQS: SendMessage to DLQ
+- ✅ SQS Dead Letter Queue created: `ai-dp-dev-merge-dlq` (14-day retention)
+- ✅ CloudWatch Log Group: `/aws/lambda/ai-dp-dev-merge` (7-day retention for dev)
+- ✅ Lambda configuration: Python 3.11, 256MB memory, 60s timeout
 
-**Complete when:** Merge Lambda deployed with IAM role and DLQ
+**Complete when:** Merge Lambda deployed with IAM role and DLQ ✅
 
-**3. Update Step Functions - Add Merge Lambda Task**
-- Update `statemachine.json`:
-  - Add Lambda invocation task after Comprehend tasks
-  - Pass Comprehend results as input to merge Lambda
-  - Add error handling (retry on throttle, catch on failure → DLQ)
-- Update Step Functions IAM role to allow `lambda:InvokeFunction` on merge Lambda
+**3. Update Step Functions - Add Merge Lambda Task** ✅ **COMPLETED**
+- ✅ Updated `modules/step_functions/main.tf` with InvokeMergeLambda state
+- ✅ Lambda invocation task added after FormatResults state
+- ✅ Input transformation: Passes source_object, ai_enrichment, processing_metadata to merge Lambda
+- ✅ Error handling implemented:
+  - Retry: 3 attempts for Lambda.ServiceException and Lambda.TooManyRequestsException (exponential backoff)
+  - Catch: All errors caught, execution moves to MergeFailed state
+  - DLQ: Lambda DLQ captures failed invocations
+- ✅ Step Functions IAM role updated with `lambda:InvokeFunction` permission on merge Lambda ARN
 
-**Complete when:** State machine includes merge Lambda task
+**Complete when:** State machine includes merge Lambda task ✅
 
-**4. End-to-End Testing - Full Pipeline**
-- **Streaming Path:** Send JSON via API Gateway → Kinesis → Lambda → S3 `raw/` → EventBridge → Step Functions → Comprehend → Merge Lambda → S3 `processed/` + DynamoDB
-- **Batch Path:** Upload file to S3 `raw/` → EventBridge → Step Functions → Comprehend → Merge Lambda → S3 `processed/` + DynamoDB
-- Verify enriched data in `processed/` layer
-- Verify enriched data in DynamoDB
-- Test error scenario: Invalid file → verify DLQ receives failure
+**4. End-to-End Testing - Full Pipeline** ✅ **COMPLETED**
+- ✅ **Batch Path Tested:** Upload to S3 `raw/` → EventBridge → Step Functions → Comprehend → Merge Lambda → S3 `processed/` + DynamoDB
+  - Verified S3 processed/ contains enriched JSON with sentiment + entities
+  - Verified DynamoDB record created with recordId, timestamp, sentiment, entities, TTL
+  - Verified S3 partitioning: `processed/year=2025/month=12/day=07/`
+- ✅ **Streaming Path Tested:** API Gateway → Kinesis → ETL Lambda → S3 `raw/` → (same as batch path above)
+  - End-to-end streaming pipeline verified working
+- ✅ Verified enriched data structure includes:
+  - recordId, timestamp, recordType
+  - sentiment, sentimentScore, sentimentScores
+  - entities (list), entityDetails (full Comprehend output)
+  - rawDataLocation, processedDataLocation
+  - mergedAt, lambdaVersion, lambdaName, processingMetadata
+- ✅ Error scenario tested: DLQ captures failed Lambda invocations
 
-**Complete when:** Both ingestion paths work end-to-end, data lands in `processed/` and DynamoDB with AI enrichments
+**Complete when:** Both ingestion paths work end-to-end, data lands in `processed/` and DynamoDB with AI enrichments ✅
+
+**Status:** ✅ **COMPLETED** (All tasks finished on 2025-12-07)
+
+**Key Achievements:**
+- Implemented complete data pipeline: Ingestion → AI Enrichment → Storage
+- Both streaming and batch paths fully operational end-to-end
+- Dual storage strategy working: DynamoDB (hot) + S3 (historical)
+- Comprehensive error handling: DLQ, retries, catch blocks, CloudWatch Logs
+- Least-privilege IAM: All permissions scoped to specific resources/prefixes
+- Date partitioning on S3 processed/ layer enables efficient Athena queries (Phase 8)
+- DynamoDB TTL provides automatic data lifecycle management (30-day retention)
 
 ---
 
@@ -606,13 +638,13 @@ Phase 3 (Batch EventBridge):  ████████████████�
 Phase 4 (Step Functions):     ████████████████████ 100% ✅
 Phase 5 (DynamoDB):            ████████████████████ 100% ✅
 Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
-Phase 7 (Merge & Orchestrate): ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
 Phase 8 (Analytics):           ░░░░░░░░░░░░░░░░░░░░   0%
 Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
 Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
-**Overall Progress:** ~70% (7 of 10 phases complete)
+**Overall Progress:** ~80% (8 of 10 phases complete)
 
 ---
 
@@ -653,4 +685,4 @@ Phase 10: CI/CD Pipeline (GitHub Actions)
 
 **Total Estimated Timeline:** 8-12 weeks
 
-**Last Updated:** 2025-01-30 (Phases 5-6 completed: DynamoDB Hot Store + AI Enrichment with Comprehend)
+**Last Updated:** 2025-12-07 (Phase 7 completed: Merge Lambda & Complete Orchestration)

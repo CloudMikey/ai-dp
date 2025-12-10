@@ -235,8 +235,8 @@ pytest lambdas/merge/
 
 ## Project Status
 
-**Current Phase**: Phase 4 Complete - Step Functions & EventBridge Wiring
-**Overall Progress**: 50% (5 of 10 phases complete)
+**Current Phase**: Phase 7 Complete - Merge Lambda & Complete Orchestration
+**Overall Progress**: 80% (8 of 10 phases complete)
 
 This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) for detailed implementation phases and completion criteria.
 
@@ -265,19 +265,32 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 - EventBridge → Step Functions integration
 - End-to-end batch path tested and verified
 
+**Phase 5: DynamoDB Hot Store**
+- DynamoDB table deployed: `ai-dp-dev-enriched-data`
+- On-demand billing, TTL (30 days), PITR enabled
+- GSI for time-based queries
+
+**Phase 6: AI Enrichment Services**
+- AWS Comprehend integrated (sentiment + entity detection)
+- Parallel execution in Step Functions
+- Real-time AI enrichment operational
+
+**Phase 7: Merge Lambda & Complete Orchestration**
+- Merge Lambda deployed: `ai-dp-dev-merge`
+- Dual storage strategy: S3 processed/ + DynamoDB
+- End-to-end pipeline fully operational (streaming + batch)
+
 ### 🔄 In Progress
 
-**Phase 5: DynamoDB Hot Store** (Next)
-- Design table schema for enriched data
-- Configure on-demand capacity and TTL
+**Phase 8: Analytics & Query Layer** (Next)
+- Create Glue crawler for S3 processed/ layer
+- Configure Athena for SQL queries
+- Build visualization dashboard
 
 ### 📋 Planned
 
-- Phase 6: AI Enrichment (Comprehend, SageMaker, Rekognition)
-- Phase 7: Merge Lambda & Parallel Orchestration
-- Phase 8: Analytics (Glue, Athena, QuickSight)
-- Phase 9: Production Hardening (Alarms, Monitoring)
-- Phase 10: CI/CD Pipeline (GitHub Actions)
+- Phase 9: Production Hardening (Testing, Alarms, Security Review)
+- Phase 10: CI/CD Pipeline (GitHub Actions with OIDC)
 
 ## Documentation
 

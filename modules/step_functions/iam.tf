@@ -92,3 +92,24 @@ resource "aws_iam_role_policy_attachment" "comprehend" {
   role       = aws_iam_role.step_functions.name
   policy_arn = var.comprehend_policy_arn
 }
+
+#-------------------- IAM Policy for Lambda Invocation --------------------#
+# Allows Step Functions to invoke the Merge Lambda function
+
+resource "aws_iam_role_policy" "step_functions_lambda_invoke" {
+  name = "lambda-invoke"
+  role = aws_iam_role.step_functions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = var.merge_lambda_arn
+      }
+    ]
+  })
+}
