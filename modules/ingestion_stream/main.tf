@@ -1,37 +1,28 @@
 #-------------------- Streaming Ingestion Module --------------------#
-# Creates API Gateway HTTP API and Kinesis Data Stream for real-time data ingestion
-# Direct integration (no Lambda proxy) reduces latency and cost
-# API Gateway → Kinesis → (later) Lambda ETL → S3
+# Direct API Gateway → Kinesis integration (no Lambda proxy for lower latency)
 
 locals {
   resource_prefix       = "${var.project_name}-${var.environment}"
   stream_name           = "${local.resource_prefix}-ingestion-stream"
   api_name              = "${local.resource_prefix}-ingestion-api"
-  lambda_name           = "${local.resource_prefix}-etl" # For Task 3 Lambda function
+  lambda_name           = "${local.resource_prefix}-etl"
   eventbridge_rule_name = "${local.resource_prefix}-s3-batch-ingestion"
 }
 
 #-------------------- Kinesis Data Stream --------------------#
-# Receives real-time data from API Gateway
-# 1 shard = 1 MB/sec write capacity, 2 MB/sec read capacity
-# Data retained for 24 hours by default (configurable 24-8760 hours)
 
 resource "aws_kinesis_stream" "ingestion" {
   name             = local.stream_name
   shard_count      = var.kinesis_shard_count
   retention_period = var.kinesis_retention_hours
 
-  # Encryption: NONE (default, free) or KMS (additional cost)
   encryption_type = var.kinesis_encryption_type
   kms_key_id      = var.kinesis_encryption_type == "KMS" ? var.kinesis_kms_key_id : null
 
-  # Stream mode: PROVISIONED (with shard_count) is simpler for portfolio projects
-  # ON_DEMAND mode available but adds complexity for explaining costs in interviews
   stream_mode_details {
     stream_mode = "PROVISIONED"
   }
 
-  # Tags applied via provider default_tags in envs/*/main.tf
   tags = merge(
     var.tags,
     {
@@ -42,15 +33,12 @@ resource "aws_kinesis_stream" "ingestion" {
 }
 
 #-------------------- API Gateway HTTP API --------------------#
-# Modern HTTP API (vs REST API): Simpler, cheaper, easier to explain
-# ~70% cost reduction vs REST API for this use case
+
 resource "aws_apigatewayv2_api" "ingestion" {
   name          = local.api_name
   protocol_type = "HTTP"
   description   = "HTTP API for real-time data ingestion to Kinesis"
 
-  # CORS config to allowe web clients to call the API during development
-  # Dynamic block for flexibility during prod
   dynamic "cors_configuration" {
     for_each = var.enable_cors ? [1] : []
 
@@ -71,44 +59,34 @@ resource "aws_apigatewayv2_api" "ingestion" {
   )
 }
 
-#-------------------- API Gateway Integration (API → Kinesis) --------------------#
-# Direct integration using Kinesis-PutRecord action
-# Request mapping: JSON body → Kinesis record
-# No Lambda proxy = lower latency, no cold starts
+#-------------------- API Gateway Integration --------------------#
 
 resource "aws_apigatewayv2_integration" "kinesis" {
   api_id              = aws_apigatewayv2_api.ingestion.id
   integration_type    = "AWS_PROXY"
   integration_subtype = "Kinesis-PutRecord"
 
-  # IAM role for API Gateway to call Kinesis
   credentials_arn = aws_iam_role.api_gateway_kinesis.arn
 
-  # Request parameters mapping
-  # Maps API Gateway request to Kinesis PutRecord parameters
   request_parameters = {
     StreamName   = aws_kinesis_stream.ingestion.name
     Data         = "$request.body"
     PartitionKey = "$request.header.X-Partition-Key"
   }
 
-  # Payload format version for AWS service integrations
   payload_format_version = "1.0"
 }
 
 #-------------------- API Gateway Route --------------------#
-# POST /ingest route that triggers Kinesis integration
-# Clients send JSON payloads to this endpoint
+
 resource "aws_apigatewayv2_route" "ingest" {
   api_id    = aws_apigatewayv2_api.ingestion.id
-  route_key = "POST /ingest"                    #<HTTP_METHOD> <PATH>
+  route_key = "POST /ingest"
 
   target = "integrations/${aws_apigatewayv2_integration.kinesis.id}"
 }
 
 #-------------------- API Gateway Stage --------------------#
-# Default stage with auto-deploy
-# HTTP APIs use $default stage for simplicity
 
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.ingestion.id
@@ -121,7 +99,6 @@ resource "aws_apigatewayv2_stage" "default" {
     content {
       destination_arn = aws_cloudwatch_log_group.api_gateway[0].arn
 
-      # Log format for HTTP APIs (JSON format for easy parsing)
       format = jsonencode({
         requestId        = "$context.requestId"
         ip               = "$context.identity.sourceIp"
@@ -145,9 +122,7 @@ resource "aws_apigatewayv2_stage" "default" {
   )
 }
 
-#-------------------- CloudWatch Log Group for API Gateway --------------------#
-# Stores API Gateway access logs for debugging and monitoring
-# Only created if logging is enabled
+#-------------------- CloudWatch Logs (API Gateway) --------------------#
 
 resource "aws_cloudwatch_log_group" "api_gateway" {
   count             = var.enable_api_gateway_logging ? 1 : 0
@@ -164,15 +139,12 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
 }
 
 #-------------------- Lambda Code Packaging --------------------#
-# Archives Lambda Python code into deployment-ready ZIP file
-# Terraform automatically detects code changes via source_code_hash
 
 data "archive_file" "etl_lambda" {
   type        = "zip"
   source_dir  = "${path.module}/../../lambdas/etl"
   output_path = "${path.module}/../../lambdas/etl/lambda_etl.zip"
 
-  # Exclude unnecessary files from package
   excludes = [
     "lambda_etl.zip",
     "__pycache__",
@@ -181,18 +153,12 @@ data "archive_file" "etl_lambda" {
   ]
 }
 
-#-------------------- SQS Dead Letter Queue --------------------#
-# Stores failed Kinesis records for debugging and replay
-# After max retries, failed Lambda invocations send messages here
+#-------------------- Dead Letter Queue --------------------#
 
 resource "aws_sqs_queue" "etl_dlq" {
   name = "${local.resource_prefix}-etl-dlq"
 
-  # Retention period: 14 days (balances debugging time vs. cost)
   message_retention_seconds = 1209600 # 14 days
-
-  # Enable encryption at rest (optional for dev, recommended for prod)
-  # sqs_managed_sse_enabled = true  # Uncomment for encryption
 
   tags = merge(
     var.tags,
@@ -204,14 +170,11 @@ resource "aws_sqs_queue" "etl_dlq" {
   )
 }
 
-#-------------------- CloudWatch Log Group for Lambda --------------------#
-# Stores Lambda function logs for debugging and monitoring
-# Retention period configurable per environment (7d dev, 30d+ prod)
-# NOTE: Lambda function resource will be created in Task 3
+#-------------------- CloudWatch Logs (Lambda) --------------------#
 
 resource "aws_cloudwatch_log_group" "etl_lambda" {
   name              = "/aws/lambda/${local.lambda_name}"
-  retention_in_days = 7 # Default retention, will be made variable in Task 3
+  retention_in_days = 7
 
   tags = merge(
     var.tags,
@@ -223,29 +186,19 @@ resource "aws_cloudwatch_log_group" "etl_lambda" {
 }
 
 #-------------------- Lambda Function --------------------#
-# ETL Lambda: Reads from Kinesis, validates, writes to S3 raw/
-# Triggered automatically by Kinesis event source mapping
 
 resource "aws_lambda_function" "etl" {
   function_name = local.lambda_name
   description   = "ETL function: Kinesis → S3 raw layer with validation and normalization"
 
-  # Deployment package (created by archive_file data source)
   filename         = data.archive_file.etl_lambda.output_path
   source_code_hash = data.archive_file.etl_lambda.output_base64sha256
 
-  # Runtime configuration
-  runtime = "python3.11"
-  handler = "app.lambda_handler"
-  timeout = 60 # 60 seconds (Kinesis batch processing may take time)
-
-  # Memory allocation (128 MB is minimum, increase if processing large batches)
-  memory_size = 256 # 256 MB for JSON processing
-
-  # IAM role for execution
-  role = aws_iam_role.etl_lambda.arn
-
-  # Environment variables
+  runtime     = "python3.11"
+  handler     = "app.lambda_handler"
+  timeout     = 60
+  memory_size = 256
+  role        = aws_iam_role.etl_lambda.arn
   environment {
     variables = {
       DATA_LAKE_BUCKET = var.data_lake_bucket_name
@@ -254,17 +207,10 @@ resource "aws_lambda_function" "etl" {
     }
   }
 
-  # Dead letter queue configuration
   dead_letter_config {
     target_arn = aws_sqs_queue.etl_dlq.arn
   }
 
-  # Tracing configuration (optional - adds X-Ray costs)
-  # tracing_config {
-  #   mode = "Active"
-  # }
-
-  # Ensure log group exists before Lambda
   depends_on = [
     aws_cloudwatch_log_group.etl_lambda,
     aws_iam_role_policy_attachment.lambda_basic_execution
@@ -281,46 +227,33 @@ resource "aws_lambda_function" "etl" {
 }
 
 #-------------------- Lambda Event Source Mapping --------------------#
-# Connects Kinesis stream to Lambda function
-# Lambda polls Kinesis and processes records in batches
 
 resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
   event_source_arn  = aws_kinesis_stream.ingestion.arn
   function_name     = aws_lambda_function.etl.arn
-  starting_position = "LATEST" # Start processing new records (not historical)
-
-  # Batch configuration
-  batch_size                         = 100 # Process up to 100 records per invocation
-  maximum_batching_window_in_seconds = 5   # Wait up to 5 seconds to collect batch
-  parallelization_factor             = 1   # Number of concurrent batches per shard
-
-  # Error handling configuration
-  maximum_retry_attempts = 3 # Retry failed batches 3 times before sending to DLQ
-
-  # Failed records destination (DLQ)
+  starting_position                  = "LATEST"
+  batch_size                         = 100
+  maximum_batching_window_in_seconds = 5
+  parallelization_factor             = 1
+  maximum_retry_attempts             = 3
   destination_config {
     on_failure {
       destination_arn = aws_sqs_queue.etl_dlq.arn
     }
   }
 
-  # Ensure Lambda function is ready before creating mapping
   depends_on = [
     aws_iam_role_policy_attachment.lambda_kinesis_execution,
     aws_lambda_function.etl
   ]
 }
 
-#-------------------- EventBridge Rule (Batch Ingestion Detection) --------------------#
-# Detects batch file uploads to the data lake raw/ layer
-# Triggers on S3 Object Created events, filtered to raw/ prefix only
-# Note: NO target configured yet - target added in Phase 4 after Step Functions exists
+#-------------------- EventBridge Rule (Batch Ingestion) --------------------#
 
 resource "aws_cloudwatch_event_rule" "s3_batch_ingestion" {
   name        = local.eventbridge_rule_name
   description = "Detects batch file uploads to raw/ layer for Step Functions processing"
 
-  # Event pattern: S3 Object Created in data lake bucket, raw/ prefix only
   event_pattern = jsonencode({
     source      = ["aws.s3"]
     detail-type = ["Object Created"]
@@ -348,10 +281,7 @@ resource "aws_cloudwatch_event_rule" "s3_batch_ingestion" {
   )
 }
 
-#-------------------- EventBridge Target (EventBridge → Step Functions) --------------------#
-# Connects the EventBridge rule to the Step Functions state machine
-# When S3 files are uploaded to raw/, EventBridge triggers Step Functions execution
-# Only created when create_eventbridge_target = true (Phase 4, Task 3)
+#-------------------- EventBridge Target --------------------#
 
 resource "aws_cloudwatch_event_target" "step_functions" {
   count     = var.create_eventbridge_target ? 1 : 0

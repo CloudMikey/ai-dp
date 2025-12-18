@@ -1,7 +1,5 @@
-#-------------------- Step Functions Orchestration Module --------------------#
-# Minimal state machine with Pass state for EventBridge integration testing
-# Phase 4: Validates end-to-end batch ingestion path (S3 → EventBridge → Step Functions)
-# Phase 5+: Expand to parallel Lambda tasks for AI enrichment
+#-------------------- Step Functions Orchestration --------------------#
+# AI enrichment orchestration: S3 → EventBridge → Step Functions → Comprehend → Merge Lambda
 
 locals {
   resource_prefix    = "${var.project_name}-${var.environment}"
@@ -9,9 +7,6 @@ locals {
 }
 
 #-------------------- CloudWatch Log Group --------------------#
-# Stores Step Functions execution logs for debugging
-# Created before state machine to ensure logs are captured from first execution
-# Retention: 7 days for dev (increase for prod to meet compliance requirements)
 
 resource "aws_cloudwatch_log_group" "step_functions" {
   name              = "/aws/states/${local.state_machine_name}"
@@ -26,22 +21,16 @@ resource "aws_cloudwatch_log_group" "step_functions" {
   )
 }
 
-#-------------------- Step Functions State Machine --------------------#
-# Minimal Pass state for Phase 4 EventBridge integration testing
-# Accepts S3 event from EventBridge, returns success message
-# Future: Replace Pass state with Parallel tasks for AI enrichment (Phase 5+)
+#-------------------- State Machine --------------------#
 
 resource "aws_sfn_state_machine" "orchestrator" {
   name     = local.state_machine_name
   role_arn = aws_iam_role.step_functions.arn
 
-  # ASL definition: AI Enrichment workflow with AWS Comprehend
-  # Phase 6: Parallel sentiment analysis and entity detection
   definition = jsonencode({
     Comment = "Phase 6: AI Enrichment - Comprehend sentiment and entity detection"
     StartAt = "PrepareComprehendInput"
     States = {
-      # Extract S3 bucket and key from EventBridge event
       PrepareComprehendInput = {
         Type    = "Pass"
         Comment = "Extract S3 object details from EventBridge event"
@@ -53,12 +42,10 @@ resource "aws_sfn_state_machine" "orchestrator" {
         Next = "ReadS3Object"
       }
 
-      # Read S3 object content for Comprehend analysis
-      # Uses AWS SDK integration for S3 GetObject
       ReadS3Object = {
         Type     = "Task"
         Comment  = "Read text content from S3 for AI analysis"
-        Resource = "arn:aws:states:::aws-sdk:s3:getObject"     #action for this state
+        Resource = "arn:aws:states:::aws-sdk:s3:getObject"
         Parameters = {
           "Bucket.$" = "$.bucket"
           "Key.$"    = "$.key"
@@ -67,7 +54,6 @@ resource "aws_sfn_state_machine" "orchestrator" {
         Next       = "PrepareTextContent"
       }
 
-      # Extract text content from S3 response and combine with metadata
       PrepareTextContent = {
         Type    = "Pass"
         Comment = "Combine S3 object content with metadata for AI analysis"
@@ -80,7 +66,6 @@ resource "aws_sfn_state_machine" "orchestrator" {
         Next = "ComprehendAnalysis"
       }
 
-      # Parallel execution of Comprehend sentiment and entity detection
       ComprehendAnalysis = {
         Type    = "Parallel"
         Comment = "Run sentiment analysis and entity detection in parallel"
@@ -88,7 +73,6 @@ resource "aws_sfn_state_machine" "orchestrator" {
           {
             StartAt = "DetectSentiment"
             States = {
-              # Analyzes the sentiment(vibe) of the text
               DetectSentiment = {
                 Type     = "Task"
                 Comment  = "Analyze text sentiment (positive, negative, neutral, mixed)"
@@ -104,7 +88,6 @@ resource "aws_sfn_state_machine" "orchestrator" {
           {
             StartAt = "DetectEntities"
             States = {
-              # Reads the named things in the text
               DetectEntities = {
                 Type     = "Task"
                 Comment  = "Extract named entities (people, places, organizations, etc.)"
@@ -118,11 +101,10 @@ resource "aws_sfn_state_machine" "orchestrator" {
             }
           }
         ]
-        ResultPath = "$.comprehend_results"  #crate new key in state output
+        ResultPath = "$.comprehend_results"
         Next       = "FormatResults"
       }
 
-      # Format results for merge Lambda (Phase 7)
       FormatResults = {
         Type    = "Pass"
         Comment = "Structure AI enrichment results for DynamoDB and S3 processed layer"
@@ -145,7 +127,6 @@ resource "aws_sfn_state_machine" "orchestrator" {
         Next = "InvokeMergeLambda"
       }
 
-      # Invoke Merge Lambda to write to S3 processed/ + DynamoDB
       InvokeMergeLambda = {
         Type     = "Task"
         Comment  = "Merge AI enrichment results and write to S3 processed layer + DynamoDB hot store"
@@ -174,13 +155,11 @@ resource "aws_sfn_state_machine" "orchestrator" {
         Next = "MergeComplete"
       }
 
-      # Success state
       MergeComplete = {
         Type    = "Succeed"
         Comment = "Pipeline complete - enriched data written to S3 processed layer and DynamoDB"
       }
 
-      # Failure state
       MergeFailed = {
         Type    = "Fail"
         Comment = "Merge Lambda failed - check DLQ and CloudWatch Logs for details"
@@ -190,14 +169,12 @@ resource "aws_sfn_state_machine" "orchestrator" {
     }
   })
 
-  # CloudWatch Logs configuration - log level ALL for dev visibility
   logging_configuration {
     log_destination        = "${aws_cloudwatch_log_group.step_functions.arn}:*"
     include_execution_data = true
     level                  = var.log_level
   }
 
-  # Ensure dependencies are created first
   depends_on = [
     aws_cloudwatch_log_group.step_functions,
     aws_iam_role_policy.step_functions_logging

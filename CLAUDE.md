@@ -418,13 +418,33 @@ Use Terraform variables for feature toggles:
 - Least-privilege IAM: All permissions scoped to specific resources/prefixes
 - Date partitioning enables efficient Athena queries (ready for Phase 8)
 
+**Phase 8: Analytics & Query Layer (All Tasks Complete)**
+- ✅ Analytics module created: `modules/analytics/` (main.tf, iam.tf, variables.tf, outputs.tf, README.md)
+- ✅ Glue Catalog Database: `ai-dp-dev-analytics`
+- ✅ Glue Crawler deployed: `ai-dp-dev-crawler` (catalogs S3 `processed/` layer)
+- ✅ Crawler configuration: UPDATE_IN_DATABASE schema policy, automatic partition detection
+- ✅ Athena workgroup: `ai-dp-dev-workgroup` (enforces query result location, CloudWatch metrics)
+- ✅ S3 Athena results bucket: `ai-dp-athena-results-dev-us-west-2` (7-day lifecycle)
+- ✅ Glue table created: `processed` (13 columns + 3 partition keys: year/month/day)
+- ✅ Dashboard created: HTML/CSS/JS with Chart.js + AWS SDK v3
+- ✅ Dashboard features: Sentiment pie chart (Athena), recent events table (DynamoDB), real-time metrics
+- ✅ End-to-end testing: Crawler → Athena queries → Dashboard visualization
+
+**Key Achievements:**
+- Dual-query strategy: DynamoDB for real-time (last 30 days), Athena for historical SQL analytics
+- Separate S3 bucket for Athena results: Simpler lifecycle management, better cost tracking
+- Automatic schema evolution: Glue Crawler adapts to new enrichment fields
+- Partition pruning: Date-based partitions reduce Athena query costs by 90%+
+- Portfolio-friendly dashboard: Simple HTML/JS with no build tools, uses CDN libraries
+- IAM least-privilege: Glue scoped to `processed/*` prefix only
+
 ### Next Steps
 
-**Phase 8: Analytics & Query Layer**
-1. Create Glue crawler for S3 `processed/` layer
-2. Configure Athena workgroup and query S3 data with SQL
-3. Build visualization dashboard (QuickSight/React/HTML)
-4. Connect dashboard to DynamoDB (real-time) and Athena (historical)
+**Phase 9: Production Hardening**
+1. Add CloudWatch alarms for all critical components
+2. Implement comprehensive error handling and monitoring
+3. Add API Gateway throttling and rate limiting
+4. Configure auto-scaling for production workloads
 
 **Phases 9-10:** See `docs/roadmap.md` for detailed sequential plan
 
@@ -438,7 +458,7 @@ Use Terraform variables for feature toggles:
 
 ### Progress Tracking
 
-**Overall Completion**: ~80% (8 of 10 phases complete)
+**Overall Completion**: ~90% (9 of 10 phases complete)
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
@@ -449,7 +469,7 @@ Phase 4 (Step Functions):     ████████████████�
 Phase 5 (DynamoDB):            ████████████████████ 100% ✅
 Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
 Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
-Phase 8 (Analytics):           ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 8 (Analytics):           ████████████████████ 100% ✅
 Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
 Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
 ```

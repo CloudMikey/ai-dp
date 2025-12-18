@@ -1,23 +1,17 @@
 #-------------------- Data Lake S3 Bucket --------------------#
-# Creates a single S3 bucket with three logical layers using prefixes:
-# - raw/: Ingested data (from Kinesis or batch uploads)
-# - processed/: AI-enriched data ready for analytics
-# - curated/: Aggregated, business-ready datasets
+# Three-layer data lake: raw/ (ingested), processed/ (AI-enriched), curated/ (business-ready)
 
 locals {
   bucket_name = "${var.project_name}-data-lake-${var.environment}-${var.aws_region}"
 }
 
-#-------------------- S3 Bucket Resource --------------------#
+#-------------------- S3 Bucket --------------------#
 
 resource "aws_s3_bucket" "data_lake" {
   bucket = local.bucket_name
-
-  # All tags applied via provider default_tags in envs/*/main.tf
-  # Additional resource-specific tags can be added if needed
 }
 
-#-------------------- Versioning Configuration --------------------#
+#-------------------- Versioning --------------------#
 
 resource "aws_s3_bucket_versioning" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
@@ -27,7 +21,7 @@ resource "aws_s3_bucket_versioning" "data_lake" {
   }
 }
 
-#-------------------- Encryption Configuration --------------------#
+#-------------------- Encryption --------------------#
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
@@ -53,12 +47,12 @@ resource "aws_s3_bucket_public_access_block" "data_lake" {
 }
 
 #-------------------- Lifecycle Policies --------------------#
-# Cost optimization: Transition older data to cheaper storage classes
+# Cost optimization: Transition older data to cheaper storage tiers
 
 resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
 
-  # Raw layer lifecycle policy
+
   rule {
     id     = "raw-layer-lifecycle"
     status = "Enabled"
@@ -67,7 +61,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       prefix = "raw/"
     }
 
-    # Transition to Infrequent Access
     dynamic "transition" {
       for_each = var.raw_layer_lifecycle.transition_to_ia_days > 0 ? [1] : []
       content {
@@ -76,7 +69,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
 
-    # Transition to Glacier
     dynamic "transition" {
       for_each = var.raw_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
       content {
@@ -85,7 +77,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
 
-    # Expiration
     dynamic "expiration" {
       for_each = var.raw_layer_lifecycle.expiration_days > 0 ? [1] : []
       content {
@@ -93,7 +84,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
 
-    # Also apply to noncurrent versions if versioning is enabled
+
     dynamic "noncurrent_version_transition" {
       for_each = var.enable_versioning && var.raw_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
       content {
@@ -110,7 +101,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
     }
   }
 
-  # Processed layer lifecycle policy
+
   rule {
     id     = "processed-layer-lifecycle"
     status = "Enabled"
@@ -119,7 +110,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       prefix = "processed/"
     }
 
-    # Transition to Infrequent Access
     dynamic "transition" {
       for_each = var.processed_layer_lifecycle.transition_to_ia_days > 0 ? [1] : []
       content {
@@ -128,7 +118,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
 
-    # Transition to Glacier
     dynamic "transition" {
       for_each = var.processed_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
       content {
@@ -137,7 +126,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
 
-    # Expiration
     dynamic "expiration" {
       for_each = var.processed_layer_lifecycle.expiration_days > 0 ? [1] : []
       content {
@@ -145,7 +133,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
 
-    # Also apply to noncurrent versions
+
     dynamic "noncurrent_version_transition" {
       for_each = var.enable_versioning && var.processed_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
       content {
@@ -162,8 +150,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
     }
   }
 
-  # Curated layer lifecycle policy (only created if at least one action is configured)
-  # If all lifecycle values are 0, this rule is omitted entirely
+  # Curated layer lifecycle (conditionally created only if actions configured)
   dynamic "rule" {
     for_each = var.curated_layer_lifecycle.transition_to_ia_days > 0 || var.curated_layer_lifecycle.transition_to_glacier_days > 0 || var.curated_layer_lifecycle.expiration_days > 0 ? [1] : []
     
@@ -175,7 +162,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
         prefix = "curated/"
       }
 
-      # Transition to Infrequent Access
       dynamic "transition" {
         for_each = var.curated_layer_lifecycle.transition_to_ia_days > 0 ? [1] : []
         content {
@@ -184,7 +170,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
         }
       }
 
-      # Transition to Glacier
       dynamic "transition" {
         for_each = var.curated_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
         content {
@@ -193,7 +178,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
         }
       }
 
-      # Expiration
       dynamic "expiration" {
         for_each = var.curated_layer_lifecycle.expiration_days > 0 ? [1] : []
         content {
@@ -205,7 +189,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
 }
 
 #-------------------- Bucket Policy - TLS Enforcement --------------------#
-# Deny all requests that don't use HTTPS
 
 resource "aws_s3_bucket_policy" "enforce_tls" {
   bucket = aws_s3_bucket.data_lake.id
@@ -233,9 +216,6 @@ resource "aws_s3_bucket_policy" "enforce_tls" {
 }
 
 #-------------------- EventBridge Notification --------------------#
-# Enable EventBridge to receive S3 object-level events
-# Required for batch ingestion path (Phase 3)
-# EventBridge rules will filter specific events (e.g., Object Created in raw/)
 
 resource "aws_s3_bucket_notification" "eventbridge" {
   bucket      = aws_s3_bucket.data_lake.id

@@ -1,18 +1,6 @@
-#-------------------- IAM Resources for Ingestion Stream Module --------------------#
-# This file contains all IAM roles and policies for:
-# - API Gateway → Kinesis integration
-# - Lambda ETL function execution
-# - EventBridge → Step Functions integration
-
-#-------------------- IAM Role for API Gateway → Kinesis --------------------#
-# Allows API Gateway to write records to Kinesis stream
-# Trust policy: API Gateway service can assume this role
-# Permissions: kinesis:PutRecord on the specific stream
-
 resource "aws_iam_role" "api_gateway_kinesis" {
   name = "${local.resource_prefix}-apigw-kinesis-role"
 
-  # Trust policy: Allow API Gateway service to assume this role
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -35,12 +23,10 @@ resource "aws_iam_role" "api_gateway_kinesis" {
   )
 }
 
-# Permissions policy: Allow PutRecord to Kinesis stream (least privilege)
 resource "aws_iam_role_policy" "api_gateway_kinesis" {
   name = "kinesis-put-record"
   role = aws_iam_role.api_gateway_kinesis.id
 
-  # Inline policy granting Kinesis write permissions
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

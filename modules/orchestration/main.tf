@@ -1,5 +1,5 @@
-#-------------------- Orchestration Module --------------------#
-# Merge Lambda: Combines AI enrichment results and writes to S3 processed/ + DynamoDB
+#-------------------- Merge Lambda Module --------------------#
+# Combines AI enrichment → S3 processed/ + DynamoDB
 
 locals {
   resource_prefix = "${var.project_name}-${var.environment}"
@@ -7,7 +7,6 @@ locals {
 }
 
 #-------------------- Lambda Code Packaging --------------------#
-# Archives Lambda Python code into deployment-ready ZIP file
 
 data "archive_file" "merge_lambda" {
   type        = "zip"
@@ -22,13 +21,12 @@ data "archive_file" "merge_lambda" {
   ]
 }
 
-#-------------------- SQS Dead Letter Queue --------------------#
-# Stores failed Lambda invocations for debugging and replay
+#-------------------- Dead Letter Queue --------------------#
 
 resource "aws_sqs_queue" "merge_dlq" {
   name = "${local.resource_prefix}-merge-dlq"
 
-  message_retention_seconds = 1209600 # 14 days
+  message_retention_seconds = 1209600
 
   tags = merge(
     var.tags,
@@ -41,7 +39,6 @@ resource "aws_sqs_queue" "merge_dlq" {
 }
 
 #-------------------- CloudWatch Log Group --------------------#
-# Stores Lambda function logs for debugging and monitoring
 
 resource "aws_cloudwatch_log_group" "merge_lambda" {
   name              = "/aws/lambda/${local.lambda_name}"
@@ -57,8 +54,6 @@ resource "aws_cloudwatch_log_group" "merge_lambda" {
 }
 
 #-------------------- Lambda Function --------------------#
-# Merge Lambda: Combines AI enrichment results, writes to S3 processed/ + DynamoDB
-# Invoked by Step Functions after Comprehend analysis completes
 
 resource "aws_lambda_function" "merge" {
   function_name = local.lambda_name

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-DP Dashboard</title>
+
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "@aws-sdk/client-athena": "https://cdn.jsdelivr.net/npm/@aws-sdk/client-athena@3.478.0/+esm",
+            "@aws-sdk/client-dynamodb": "https://cdn.jsdelivr.net/npm/@aws-sdk/client-dynamodb@3.478.0/+esm",
+            "@aws-sdk/lib-dynamodb": "https://cdn.jsdelivr.net/npm/@aws-sdk/lib-dynamodb@3.478.0/+esm"
+        }
+    }
+    </script>
+</head>
+<body>
+    <h1>AI-DP Analytics Dashboard</h1>
+    <p>Real-time data from DynamoDB + Historical analytics from Athena</p>
+
+    <button onclick="loadData()">Refresh Data</button>
+    <span id="status"></span>
+
+    <div class="card">
+        <h2>Metrics</h2>
+        <p>Total Records: <strong id="totalRecords">-</strong></p>
+        <p>Positive: <strong class="positive" id="positiveCount">-</strong></p>
+        <p>Negative: <strong class="negative" id="negativeCount">-</strong></p>
+        <p>Neutral: <strong class="neutral" id="neutralCount">-</strong></p>
+    </div>
+
+    <div class="card">
+        <h2>Sentiment Distribution (Athena)</h2>
+        <canvas id="sentimentChart" width="400" height="200"></canvas>
+    </div>
+
+    <div class="card">
+        <h2>Recent Events (DynamoDB)</h2>
+        <div id="eventsTable">Loading...</div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

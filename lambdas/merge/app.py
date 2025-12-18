@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime, timezone
 import boto3
 
-# Environment variables (read once at cold start)
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 logger = logging.getLogger()
 logger.setLevel(LOG_LEVEL)
@@ -15,22 +14,12 @@ PROCESSED_PREFIX = os.environ.get('PROCESSED_PREFIX', 'processed/')
 DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE')
 TTL_DAYS = int(os.environ.get('TTL_DAYS', '30'))
 
-# AWS clients (initialized outside handler for connection reuse)
 s3_client = boto3.client('s3')
 dynamodb_client = boto3.client('dynamodb')
 
 
 def lambda_handler(event, context):
-    """
-    Merge AI enrichment results and write to S3 processed/ + DynamoDB
-
-    Args:
-        event (dict): Step Functions output with source_object, ai_enrichment, processing_metadata
-        context: Lambda context object (provides request ID, function name, etc.)
-
-    Returns:
-        dict: Status with written S3 key and DynamoDB recordId
-    """
+    """Merge AI enrichment results and write to S3 processed/ + DynamoDB."""
     logger.info(f"Received event: {json.dumps(event)}")
 
     validate_environment()
@@ -41,10 +30,10 @@ def lambda_handler(event, context):
 
     enriched_data = merge_ai_results(source_object, ai_enrichment, processing_metadata)
 
-    # Write to S3 first (MUST succeed)
+
     s3_key = write_to_s3_processed(enriched_data)
 
-    # Write to DynamoDB (best effort - partial success allowed)
+
     try:
         record_id = write_to_dynamodb(enriched_data, s3_key)
         logger.info(f"✅ Full success: S3={s3_key}, DynamoDB={record_id}")
@@ -60,7 +49,7 @@ def lambda_handler(event, context):
 
 
 def validate_environment():
-    """Validate required environment variables are set"""
+    """Validate required environment variables."""
     if not DATA_LAKE_BUCKET:
         raise ValueError("DATA_LAKE_BUCKET environment variable not set")
     if not DYNAMODB_TABLE:
@@ -70,29 +59,19 @@ def validate_environment():
 
 
 def merge_ai_results(source_object, ai_enrichment, processing_metadata):
-    """
-    Combine Step Functions input into enriched data structure
-
-    Args:
-        source_object (dict): S3 location of raw data
-        ai_enrichment (dict): Comprehend sentiment + entities
-        processing_metadata (dict): Step Functions context
-
-    Returns:
-        dict: Merged record with all AI enrichments and metadata
-    """
+    """Combine Step Functions input into enriched data structure."""
     sentiment = ai_enrichment.get('sentiment', {})
     entities = ai_enrichment.get('entities', {}).get('Entities', [])
 
-    # Extract top sentiment and confidence
+
     top_sentiment = sentiment.get('Sentiment', 'UNKNOWN')
     sentiment_scores = sentiment.get('SentimentScore', {})
     top_sentiment_score = sentiment_scores.get(top_sentiment.capitalize(), 0.0)
 
-    # Extract entity texts for simplified DynamoDB attribute
+
     entity_texts = [entity['Text'] for entity in entities if 'Text' in entity]
 
-    # Generate unique record ID
+
     timestamp_str = processing_metadata.get('timestamp', datetime.now(timezone.utc).isoformat())
     record_id = f"{timestamp_str}-{uuid.uuid4().hex[:8]}"
 
@@ -117,15 +96,7 @@ def merge_ai_results(source_object, ai_enrichment, processing_metadata):
 
 
 def write_to_s3_processed(enriched_data):
-    """
-    Write enriched data to S3 processed/ layer with date partitioning
-
-    Args:
-        enriched_data (dict): Merged record with AI enrichments
-
-    Returns:
-        str: S3 key where data was written
-    """
+    """Write enriched data to S3 processed/ with date partitioning."""
     now = datetime.now(timezone.utc)
     partition = f"year={now.year}/month={now.month:02d}/day={now.day:02d}"
     object_key = f"{PROCESSED_PREFIX}{partition}/{uuid.uuid4()}.json"
@@ -142,20 +113,11 @@ def write_to_s3_processed(enriched_data):
 
 
 def write_to_dynamodb(enriched_data, s3_key):
-    """
-    Write enriched record to DynamoDB hot store with TTL
-
-    Args:
-        enriched_data (dict): Merged record with AI enrichments
-        s3_key (str): S3 key where enriched data was written
-
-    Returns:
-        str: recordId of written item
-    """
+    """Write enriched record to DynamoDB hot store with TTL."""
     record_id = enriched_data['recordId']
     timestamp = enriched_data['timestamp']
 
-    # Calculate TTL expiration (Unix epoch SECONDS)
+
     ttl_expiration = int(datetime.now(timezone.utc).timestamp()) + (TTL_DAYS * 86400)
 
     item = {

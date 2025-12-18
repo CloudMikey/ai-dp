@@ -171,3 +171,23 @@ module "ingestion_stream" {
     DataFlow  = "Streaming"
   }
 }
+
+#-------------------- Analytics Module --------------------#
+# AWS Glue Data Catalog + Athena for SQL queries on enriched data
+
+module "analytics" {
+  source = "../../modules/analytics"
+
+  environment  = "dev"
+  project_name = var.project_name
+  aws_region   = var.aws_region
+
+  # Data Lake integration (crawler reads from processed/ prefix)
+  data_lake_bucket_name = module.data_lake.bucket_name
+  data_lake_bucket_arn  = module.data_lake.bucket_arn
+
+  tags = {
+    Component = "Analytics"
+    Purpose   = "DataCatalogAndQueries"
+  }
+}
