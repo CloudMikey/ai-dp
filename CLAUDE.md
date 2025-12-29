@@ -426,8 +426,8 @@ Use Terraform variables for feature toggles:
 - ✅ Athena workgroup: `ai-dp-dev-workgroup` (enforces query result location, CloudWatch metrics)
 - ✅ S3 Athena results bucket: `ai-dp-athena-results-dev-us-west-2` (7-day lifecycle)
 - ✅ Glue table created: `processed` (13 columns + 3 partition keys: year/month/day)
-- ✅ Dashboard created: HTML/CSS/JS with Chart.js + AWS SDK v3
-- ✅ Dashboard features: Sentiment pie chart (Athena), recent events table (DynamoDB), real-time metrics
+- ✅ Dashboard created: Python Streamlit with Plotly + boto3
+- ✅ Dashboard features: Sentiment pie chart (Athena), recent events table (DynamoDB), real-time metrics, auto-refresh
 - ✅ End-to-end testing: Crawler → Athena queries → Dashboard visualization
 
 **Key Achievements:**
@@ -435,7 +435,8 @@ Use Terraform variables for feature toggles:
 - Separate S3 bucket for Athena results: Simpler lifecycle management, better cost tracking
 - Automatic schema evolution: Glue Crawler adapts to new enrichment fields
 - Partition pruning: Date-based partitions reduce Athena query costs by 90%+
-- Portfolio-friendly dashboard: Simple HTML/JS with no build tools, uses CDN libraries
+- Streamlit dashboard: Server-side AWS authentication, intelligent caching (90% cost reduction), interactive Plotly charts
+- Caching strategy: 5-min TTL for Athena (historical), 1-min TTL for DynamoDB (real-time)
 - IAM least-privilege: Glue scoped to `processed/*` prefix only
 
 ### Next Steps

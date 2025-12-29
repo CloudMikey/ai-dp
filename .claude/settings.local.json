@@ -3,17 +3,19 @@
     "allow": [
       "WebSearch",
       "Bash(claude mcp:*)",
-      "mcp__serena",
-      "mcp__context7__resolve-library-id",
-      "mcp__context7__get-library-docs",
-      "mcp__context7__get-recently-edited-files",
       "SlashCommand(/study-guide)",
       "Bash(powershell.exe -Command \"Get-Content ''Z:\\CODE\\notes\\study-guides\\Phase4-Part1-Overview-Architecture.md'' | Select-Object -First 150\")",
       "Bash(powershell.exe -Command \"Get-Content ''Z:\\CODE\\notes\\study-guides\\Phase5-Part1-Overview-Architecture.md'' | Select-Object -First 50\")",
       "Bash(code:*)",
       "Bash(aws s3 cp:*)",
       "Bash(powershell -Command \"Get-ChildItem ''Z:\\CODE\\Notes\\study-guides\\'' | Sort-Object LastWriteTime -Descending | Select-Object -First 5 Name\")",
-      "SlashCommand(/update)"
+      "SlashCommand(/update)",
+      "Bash(powershell.exe -Command \"Get-Command serena | Select-Object Name, Source, CommandType\")",
+      "Bash(serena --version:*)",
+      "Bash(powershell.exe -Command \"Get-Command context7 -ErrorAction SilentlyContinue | Select-Object Name, Source, CommandType\")",
+      "Bash(serena read:*)",
+      "Bash(context7 --help:*)",
+      "Bash(serena tools:*)"
     ],
     "deny": [],
     "ask": []

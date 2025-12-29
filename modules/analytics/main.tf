@@ -33,7 +33,6 @@ resource "aws_glue_crawler" "processed_data" {
   }
 
   # CRAWL_EVERYTHING: Required for UPDATE_IN_DATABASE schema policy
-  # (CRAWL_NEW_FOLDERS_ONLY only supports LOG-only policies)
   recrawl_policy {
     recrawl_behavior = "CRAWL_EVERYTHING"
   }
@@ -139,18 +138,19 @@ resource "aws_athena_workgroup" "dev" {
   state       = "ENABLED"
 
   configuration {
+    bytes_scanned_cutoff_per_query = 1073741824
     enforce_workgroup_configuration    = true
     publish_cloudwatch_metrics_enabled = true
 
     result_configuration {
       output_location = "s3://${aws_s3_bucket.athena_results.bucket}/query-results/"
 
+      #Secure temp files made in the query process that put into a EBS volume thats part of Athena
       encryption_configuration {
         encryption_option = "SSE_S3"
       }
     }
 
-    # AUTO: Uses latest Athena engine (v3 as of 2025)
     engine_version {
       selected_engine_version = "AUTO"
     }

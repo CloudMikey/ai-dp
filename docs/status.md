@@ -1,8 +1,8 @@
 # Project Status
 
-**Last Updated:** 2025-12-07
+**Last Updated:** 2025-12-27
 
-> **Quick Status:** Phases 0-7 complete (80% overall progress). Ready to begin Phase 8: Analytics & Query Layer.
+> **Quick Status:** Phases 0-8 complete (90% overall progress). Ready to begin Phase 9: Production Hardening.
 
 ---
 
@@ -80,33 +80,48 @@
 - DynamoDB records: recordId, timestamp, sentiment, entities, rawDataLocation, processedDataLocation, TTL (30 days)
 - Error handling verified: DLQ captures failed Lambda invocations
 
+### Phase 8: Analytics & Query Layer (100%)
+- Analytics module created: `modules/analytics/` (main.tf, iam.tf, variables.tf, outputs.tf, README.md)
+- Glue Catalog Database: `ai-dp-dev-analytics`
+- Glue Crawler deployed: `ai-dp-dev-crawler` (catalogs S3 `processed/` layer)
+- Crawler configuration: UPDATE_IN_DATABASE schema policy, automatic partition detection
+- Athena workgroup: `ai-dp-dev-workgroup` (enforces query result location, CloudWatch metrics)
+- S3 Athena results bucket: `ai-dp-athena-results-dev-us-west-2` (7-day lifecycle)
+- Glue table created: `processed` (13 columns + 3 partition keys: year/month/day)
+- Dashboard created: Python Streamlit with Plotly visualizations (`dashboard/streamlit_app.py`, 403 lines)
+- Dashboard features: Sentiment pie chart + bar chart (Athena), recent events table (DynamoDB), real-time metrics, auto-refresh, CSV export
+- Intelligent caching: 5-min TTL for Athena queries (historical), 1-min TTL for DynamoDB scans (real-time)
+- Cost optimization: 90% reduction in API calls through caching strategy
+- End-to-end testing: Glue Crawler → Athena queries → Streamlit dashboard visualization
+- Setup automation: PowerShell setup script for venv and dependencies
+
 ---
 
 ## Current Phase
 
-**Phase 8: Analytics & Query Layer**
-- **Status:** Not started
-- **Goal:** Glue + Athena for SQL queries, visualization dashboard
+**Phase 9: Production Hardening**
+- **Status:** Not started (Next phase to begin)
+- **Goal:** Load testing, security review, monitoring, operational documentation
 - **What's needed:**
-  1. Create Glue database and crawler for S3 `processed/` layer
-  2. Configure Athena workgroup and query S3 data with SQL
-  3. Choose dashboard platform (QuickSight/React/HTML)
-  4. Build dashboard with key metrics (volume, sentiment, entities)
-  5. Connect dashboard to DynamoDB (real-time) and Athena (historical)
+  1. Lambda unit tests (ETL + Merge with pytest + moto)
+  2. Load testing streaming path (1000 events)
+  3. CloudWatch dashboards and alarms
+  4. Security review (IAM audit, tfsec scan)
+  5. Cost optimization review
+  6. Operational runbooks (DLQ replay, troubleshooting)
 
 ---
 
 ## Next Phases (Sequential Order)
 
-1. **Phase 8: Analytics & Query Layer** ← **CURRENT**
-2. **Phase 9: Production Hardening** - Testing, security, docs
-3. **Phase 10: CI/CD** - GitHub Actions automation
+1. **Phase 9: Production Hardening** ← **CURRENT**
+2. **Phase 10: CI/CD** - GitHub Actions automation
 
 **See `docs/roadmap.md` for detailed task breakdowns.**
 
 ---
 
-## Overall Progress: ~80%
+## Overall Progress: ~90%
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
@@ -117,7 +132,7 @@ Phase 4 (Step Functions):     ████████████████�
 Phase 5 (DynamoDB):            ████████████████████ 100% ✅
 Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
 Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
-Phase 8 (Analytics):           ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 8 (Analytics):           ████████████████████ 100% ✅
 Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
 Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
 ```
@@ -126,7 +141,7 @@ Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░�
 
 ## Key Learnings
 
-### Phase 1-7 Lessons Learned
+### Phase 1-8 Lessons Learned
 
 1. **Tag Conflicts (Error #1):** Centralize tags in provider `default_tags`, only add resource-specific tags in modules to avoid conflicts
 2. **Lifecycle Rules (Error #2):** Use dynamic blocks to avoid creating empty rules (AWS rejects them)
@@ -138,6 +153,8 @@ Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░�
 8. **Dual Storage Strategy:** DynamoDB for hot queries (recent data, low latency), S3 for historical analytics (cost-effective, unlimited retention)
 9. **Error Handling Layers:** Implement multiple safety nets: DLQ, retries, catch blocks, CloudWatch alarms
 10. **Date Partitioning:** Always partition S3 data by date (year/month/day) for efficient Athena queries and cost optimization
+11. **Streamlit for Data Dashboards:** Python Streamlit provides server-side AWS authentication (more secure than browser-based), built-in caching with `@st.cache_data`, single-file simplicity, widely used in industry for ML/data visualization
+12. **Caching Strategy:** Different TTLs for different data freshness needs: 5-min for historical (Athena), 1-min for real-time (DynamoDB) = 90% cost reduction
 
 ---
 
@@ -155,11 +172,14 @@ User → API Gateway → Kinesis Stream → ETL Lambda → S3 raw/ → EventBrid
 User → S3 raw/ → EventBridge → Step Functions → Comprehend → Merge Lambda → S3 processed/ + DynamoDB
 ```
 
-**Phase 8 Will Add:**
+**Phase 8 (COMPLETE):**
 ```
 S3 processed/ → Glue Crawler → Glue Data Catalog → Athena (SQL queries)
                                                             ↓
-DynamoDB (hot) + Athena (historical) ← Dashboard (QuickSight/React/HTML)
+DynamoDB (hot) + Athena (historical) ← Streamlit Dashboard (Python)
+                                       - Plotly visualizations
+                                       - Intelligent caching (5-min/1-min TTL)
+                                       - Auto-refresh, CSV export
 ```
 
 ---

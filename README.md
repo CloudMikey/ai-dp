@@ -237,8 +237,8 @@ pytest lambdas/merge/
 
 ## Project Status
 
-**Current Phase**: Phase 7 Complete - Merge Lambda & Complete Orchestration
-**Overall Progress**: 80% (8 of 10 phases complete)
+**Current Phase**: Phase 8 Complete - Analytics & Query Layer
+**Overall Progress**: 90% (9 of 10 phases complete)
 
 This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) for detailed implementation phases and completion criteria.
 
@@ -282,16 +282,23 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 - Dual storage strategy: S3 processed/ + DynamoDB
 - End-to-end pipeline fully operational (streaming + batch)
 
-### 🔄 In Progress
+**Phase 8: Analytics & Query Layer**
+- Glue Crawler + Athena: SQL queries on S3 data lake
+- Python Streamlit dashboard with Plotly visualizations
+- Dual-query strategy: DynamoDB (real-time) + Athena (historical)
+- Intelligent caching: 5-min TTL (Athena), 1-min TTL (DynamoDB)
+- Interactive features: Auto-refresh, CSV export, color-coded sentiment
 
-**Phase 8: Analytics & Query Layer** (Next)
-- Create Glue crawler for S3 processed/ layer
-- Configure Athena for SQL queries
-- Build visualization dashboard
+### 🔄 Next Phase
+
+**Phase 9: Production Hardening** (Next)
+- Lambda unit tests with pytest + moto
+- CloudWatch alarms for critical components
+- Load testing streaming path (1000 events)
+- Security review and cost optimization
 
 ### 📋 Planned
 
-- Phase 9: Production Hardening (Testing, Alarms, Security Review)
 - Phase 10: CI/CD Pipeline (GitHub Actions with OIDC)
 
 ## Documentation
