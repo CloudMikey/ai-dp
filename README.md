@@ -289,7 +289,8 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 **Phase 8: Analytics & Query Layer**
 - Glue Crawler + Athena: SQL queries on S3 data lake
 - Browser-based dashboard (HTML/CSS/JS + Chart.js)
-- Dual-query strategy: DynamoDB (real-time) + Athena (historical)
+- Three-tier data strategy: Curated S3 (~100ms) + DynamoDB (~50ms) + Athena (~3s)
+- Optimized dashboard: Sentiment chart from pre-aggregated Curated S3 for instant loading
 - Responsive design: Real-time metrics, sentiment charts, entity analysis
 - Zero dependencies: Runs directly from file system or S3 static hosting
 
@@ -309,6 +310,7 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 ## Documentation
 
 - **[Project Overview](docs/ai-dp%20overview%20notion.md)**: Comprehensive architecture guide
+- **[Interview Walkthrough](docs/explained.md)**: How to explain this project in interviews
 - **[Data Flow](docs/data_flow.md)**: End-to-end data flow documentation
 - **[Roadmap](docs/roadmap.md)**: Implementation phases and tasks
 - **[CLAUDE.md](CLAUDE.md)**: Development standards and patterns
