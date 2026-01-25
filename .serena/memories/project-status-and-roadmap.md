@@ -1,6 +1,6 @@
 # AI-DP Project Status & Roadmap
 
-**Last Updated:** 2025-12-27 (Phase 8 Complete)
+**Last Updated:** 2026-01-24 (Phase 8 Complete, documentation region fix)
 
 ## Current Status: 90% Complete (9 of 10 Phases)
 
@@ -12,17 +12,17 @@
 - All environments initialized (dev, stg, prod)
 
 #### Phase 1: Data Lake Foundation
-**Bucket:** `ai-dp-data-lake-dev-us-west-1`
+**Bucket:** `ai-dp-data-lake-dev-us-west-2`
 
 **Achievements:**
 - Three-layer S3 architecture (raw/processed/curated)
 - Lifecycle policies with dynamic blocks (avoid empty rule errors)
 - Security: SSE-AES256, versioning, public access blocked, TLS enforced
-- EventBridge notifications enabled (`aws_s3_bucket_notification.eventbridge`)
+- EventBridge notifications enabled
 - Provider `default_tags` pattern (no tag conflicts)
 
 #### Phase 2: Streaming Ingestion Path
-**API:** `https://57cnx9jpje.execute-api.us-west-1.amazonaws.com//ingest`
+**API:** `https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest`
 
 **Components:**
 - Kinesis: `ai-dp-dev-ingestion-stream` (1 shard, 24h retention)
@@ -30,80 +30,78 @@
 - Lambda ETL: `ai-dp-dev-etl` (Python 3.11, 256MB, 60s)
 - Event source mapping (batch=100, retry=3)
 - SQS DLQ: `ai-dp-dev-etl-dlq` (14-day retention)
+- **Idempotent writes:** Kinesis sequence numbers used as S3 filenames (prevents duplicates on retry)
 
-**Testing:**
-- ✅ End-to-end: API → Kinesis → Lambda → S3 raw/
-- ✅ S3 partitioning: `raw/year=2025/month=10/day=27/`
-- ✅ DLQ error handling verified
-
-#### Phase 3: Batch Ingestion Path (EventBridge Rule)
-**Goal:** Detect S3 uploads to raw/ layer
-
-**Task 1 - EventBridge Rule Implementation:**
-- EventBridge rule deployed: `ai-dp-dev-s3-batch-ingestion`
-- Event pattern configured: S3 Object Created in raw/ prefix
-- Filtered to bucket: `ai-dp-data-lake-dev-us-west-1`
-- CloudWatch metrics available
-- Outputs added: `eventbridge_rule_name`, `eventbridge_rule_arn`
-
-**Task 2 - Testing:**
-- ✅ Uploaded to raw/ → EventBridge rule triggered (CloudWatch Metrics verified)
-- ✅ Uploaded to processed/ and curated/ → No invocations (filter working)
-- ✅ CloudWatch Metrics confirmed rule invocations
-
-**Key Achievements:**
-- Event pattern filters to `raw/` prefix only (prevents infinite loops)
-- No target configured yet (target added in Phase 4)
-- Module files: `modules/ingestion_stream/main.tf` (lines 454-489), `outputs.tf` (lines 88-98), `README.md`
-- Successfully tested: raw/ uploads trigger rule, other layers ignored
+#### Phase 3: Batch Ingestion Path
+- EventBridge rule: `ai-dp-dev-s3-batch-ingestion`
+- Event pattern: S3 Object Created in `raw/` prefix only
+- Outputs: `eventbridge_rule_name`, `eventbridge_rule_arn`
 
 #### Phase 4: Step Functions & EventBridge Wiring
-**Goal:** Batch ingestion triggers Step Functions (minimal state machine)
+- State machine: `ai-dp-dev-orchestrator`
+- EventBridge → Step Functions integration
+- CloudWatch Logs: `/aws/states/ai-dp-dev-orchestrator`
+- End-to-end batch path: S3 → EventBridge → Step Functions → SUCCESS
 
-**Task 1 - Step Functions Module:**
-- Module created: `modules/step_functions/`
-- State machine deployed: `ai-dp-dev-orchestrator`
-- IAM role: `ai-dp-dev-step-functions-role` (CloudWatch Logs permissions)
-- CloudWatch Logs: `/aws/states/ai-dp-dev-orchestrator` (7-day retention, ALL level)
-- ASL definition: Minimal Pass state (ReceiveEvent)
+#### Phase 5: DynamoDB Hot Store
+- Table: `ai-dp-dev-enriched-data`
+- Schema: recordId (PK) + timestamp (SK)
+- GSI: `timestamp-index` (recordType + timestamp)
+- On-demand billing, TTL enabled (30 days), PITR enabled
 
-**Task 2 - EventBridge Target Configuration:**
-- Variables added to `ingestion_stream` module: `state_machine_arn`, `create_eventbridge_target`
-- IAM role created: `ai-dp-dev-eventbridge-sfn-role` (EventBridge → Step Functions)
-- IAM policy: `states:StartExecution` permission scoped to state machine
-- EventBridge target: `StepFunctionsOrchestrator` (conditional creation)
+#### Phase 6: AI Enrichment Services
+- Comprehend integration (DetectSentiment + DetectEntities)
+- Parallel execution in Step Functions
+- S3 read via AWS SDK (no Lambda wrapper needed)
+- Verified: sentiment analysis (98.76% confidence), entity extraction
 
-**Task 3 - Module Wiring:**
-- Step Functions module added to `envs/dev/main.tf`
-- Ingestion stream module wired with Step Functions integration
-- 7 resources deployed successfully
+#### Phase 7: Merge Lambda & Complete Orchestration
+- Module: `modules/orchestration/`
+- Merge Lambda: `lambdas/merge/app.py` (180 lines)
+- Dual storage: S3 `processed/` + DynamoDB hot store
+- Both streaming and batch paths fully operational
+- S3 partitioning: `processed/year=YYYY/month=MM/day=DD/`
 
-**Task 4 - Integration Testing:**
-- ✅ Test file uploaded: `s3://ai-dp-data-lake-dev-us-west-1/raw/phase4-test.json`
-- ✅ EventBridge rule triggered Step Functions execution
-- ✅ Execution SUCCEEDED in 53ms
-- ✅ Pass state output: `processing_result` added to S3 event
-- ✅ CloudWatch Logs: 4 events captured (ExecutionStarted, PassStateEntered, PassStateExited, ExecutionSucceeded)
+#### Phase 8: Analytics & Query Layer ✅ COMPLETE
+**Glue & Athena:**
+- Glue Database: `ai-dp-dev-analytics`
+- Glue Crawler: `ai-dp-dev-crawler` (catalogs `processed/` layer)
+- Glue Table: `processed` (13 columns + 3 partition keys)
+- Athena Workgroup: `ai-dp-dev-workgroup`
+- Athena Results Bucket: `ai-dp-athena-results-dev-us-west-2` (7-day lifecycle)
+
+**Dashboard (HTML/CSS/JS - Browser-Based):**
+- Location: `dashboard/` directory
+- Tech Stack: Vanilla HTML/CSS/JavaScript + Chart.js v4.4.0 + AWS SDK for JavaScript v2
+- Files: `index.html`, `styles.css`, `app.js`, `config.js` (gitignored), `README.md`
+- Design: Modern dark theme, responsive (desktop/tablet/mobile)
+- Features:
+  - 5 real-time metrics cards: Total, Positive, Neutral, Negative, Mixed (DynamoDB)
+  - Sentiment distribution pie chart (**Curated S3** - pre-aggregated, instant loading)
+  - Entity type analysis doughnut chart (Athena with UNNEST - demonstrates SQL skills)
+  - Recent events table (20 most recent from DynamoDB)
+  - Pipeline status: Total processed (**Curated S3**), last record time, DLQ health check
+  - Auto-refresh every 60 seconds
+  - Parallel queries (DynamoDB + S3 + Athena run simultaneously)
+- **Optimized Data Sources** (2026-01-24):
+  - Sentiment chart: Curated S3 (~100ms) - pre-aggregated by Merge Lambda
+  - Total processed count: Curated S3 (~100ms) - pre-calculated
+  - Entity type chart: Athena (~3s) - demonstrates UNNEST SQL skill
+  - Metrics cards: DynamoDB (~50ms) - real-time, last 30 days
+  - Recent events table: DynamoDB (~50ms) - real-time, last 30 days
+- Authentication: Local credentials in `config.js` for demo only
+- Note: Zero dependencies - runs directly from browser (file system or S3 static hosting)
 
 **Key Achievements:**
-- End-to-end batch path working: S3 upload → EventBridge → Step Functions → SUCCESS
-- Least-privilege IAM: EventBridge (`states:StartExecution`), Step Functions (CloudWatch Logs only)
-- Conditional resource creation pattern established (`count = var.create_eventbridge_target ? 1 : 0`)
-- Module wiring pattern ready for Phase 5+ AI enrichment expansion
-- State machine ARN passed between modules via outputs
-
-**State Machine ARN:** `arn:aws:states:us-west-1:061039801477:stateMachine:ai-dp-dev-orchestrator`
-
-#### Phase 5-8: COMPLETED ✅
-
-**Phase 5:** DynamoDB Hot Store - Complete
-**Phase 6:** AI Enrichment (Comprehend) - Complete
-**Phase 7:** Merge Lambda & Complete Orchestration - Complete
-**Phase 8:** Analytics & Query Layer - Complete
-- Glue Crawler + Athena SQL queries
-- Python Streamlit dashboard with Plotly visualizations
-- Intelligent caching (5-min Athena, 1-min DynamoDB)
-- 90% cost reduction through caching
+- **Dashboard Optimization (2026-01-24):** Moved sentiment chart and total count from Athena to Curated S3 for instant loading
+- Three-tier data strategy: Curated S3 (pre-computed aggregates), DynamoDB (real-time hot data), Athena (complex SQL analytics)
+- Demonstrates understanding of when to use each AWS service (interview talking point)
+- Glue Crawler + Athena for SQL analytics on processed layer
+- Partition pruning reduces Athena costs by 90%+
+- Browser-based dashboard: Zero installation, no server needed
+- Simple to demo in portfolio (open index.html in browser)
+- Entity analysis with UNNEST: Tracks ORGANIZATION, PERSON, LOCATION, DATE, etc.
+- Responsive design: 5-column (desktop), 3-column (tablet), 2-column (mobile)
 
 ### 🔄 Next Phase
 
@@ -111,12 +109,13 @@
 **Goal:** Load testing, security review, monitoring, operational documentation
 
 **Tasks:**
-1. Lambda unit tests (pytest + moto)
-2. Load testing streaming path (1000 events)
-3. CloudWatch dashboards and alarms
-4. Security review (IAM audit, tfsec scan)
-5. Cost optimization review
-6. Operational runbooks
+1. CloudWatch alarms for all critical components
+2. API Gateway throttling and rate limiting
+3. Lambda unit tests (pytest + moto)
+4. Load testing streaming path
+5. Security review (IAM audit, tfsec scan)
+6. Cost optimization review
+7. Operational runbooks
 
 ### 📋 Remaining Phases
 
@@ -126,13 +125,14 @@
 ## Key Infrastructure Outputs
 
 ```hcl
-data_lake_bucket_name = "ai-dp-data-lake-dev-us-west-1"
-kinesis_stream_name = "ai-dp-dev-ingestion-stream"
-api_gateway_invoke_url = "https://57cnx9jpje.execute-api.us-west-1.amazonaws.com//ingest"
-eventbridge_rule_name = "ai-dp-dev-s3-batch-ingestion"
-eventbridge_rule_arn = "arn:aws:events:us-west-1:061039801477:rule/ai-dp-dev-s3-batch-ingestion"
-state_machine_arn = "arn:aws:states:us-west-1:061039801477:stateMachine:ai-dp-dev-orchestrator"
-state_machine_name = "ai-dp-dev-orchestrator"
+data_lake_bucket_name     = "ai-dp-data-lake-dev-us-west-2"
+kinesis_stream_name       = "ai-dp-dev-ingestion-stream"
+api_gateway_invoke_url    = "https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest"
+eventbridge_rule_name     = "ai-dp-dev-s3-batch-ingestion"
+state_machine_arn         = "arn:aws:states:us-west-2:<account-id>:stateMachine:ai-dp-dev-orchestrator"
+dynamodb_table_name       = "ai-dp-dev-enriched-data"
+glue_database_name        = "ai-dp-dev-analytics"
+athena_workgroup_name     = "ai-dp-dev-workgroup"
 ```
 
 ## Module Structure
@@ -141,7 +141,10 @@ state_machine_name = "ai-dp-dev-orchestrator"
 modules/
 ├── data_lake/           # Phase 1 - S3 + EventBridge notifications
 ├── ingestion_stream/    # Phase 2 & 3 - API Gateway + Kinesis + Lambda + EventBridge
-└── step_functions/      # Phase 4 - State machine orchestration
+├── step_functions/      # Phase 4 - State machine orchestration
+├── hot_store/           # Phase 5 - DynamoDB tables
+├── orchestration/       # Phase 7 - Merge Lambda
+└── analytics/           # Phase 8 - Glue + Athena
 ```
 
 ## Development Commands
@@ -154,28 +157,20 @@ terraform -chdir=envs/dev plan
 terraform -chdir=envs/dev apply
 
 # Test streaming ingestion
-curl -X POST "https://57cnx9jpje.execute-api.us-west-1.amazonaws.com//ingest" `
+curl -X POST "https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest" `
   -H "Content-Type: application/json" `
   -H "X-Partition-Key: test-key" `
-  -d '{"event_type":"test","event_timestamp":"2025-10-27T20:00:00Z"}'
+  -d '{"event_type":"test","event_timestamp":"2026-01-24T12:00:00Z"}'
 
-# Test batch ingestion (EventBridge)
-echo '{"test": "data"}' > test.json
-aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/raw/test.json
+# Test batch ingestion
+aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 
-# Verify EventBridge rule triggered and Step Functions execution
-# AWS Console: Step Functions → State machines → ai-dp-dev-orchestrator → Executions
-aws stepfunctions list-executions --state-machine-arn arn:aws:states:us-west-1:061039801477:stateMachine:ai-dp-dev-orchestrator --max-results 5
+# Run Glue Crawler
+aws glue start-crawler --name ai-dp-dev-crawler --region us-west-2
 
-# Check Step Functions CloudWatch Logs
-# Note: Use MSYS_NO_PATHCONV=1 on Windows Git Bash to prevent path conversion
-MSYS_NO_PATHCONV=1 aws logs tail /aws/states/ai-dp-dev-orchestrator --since 10m
-
-# Verify S3 data
-aws s3 ls s3://ai-dp-data-lake-dev-us-west-1/raw/ --recursive --region us-west-1
-
-# Check DLQ
-aws sqs get-queue-attributes --queue-url https://sqs.us-west-1.amazonaws.com/061039801477/ai-dp-dev-etl-dlq --attribute-names ApproximateNumberOfMessages --region us-west-1
+# Query via Athena
+aws athena start-query-execution --query-string "SELECT * FROM processed LIMIT 10" \
+  --work-group ai-dp-dev-workgroup --region us-west-2
 ```
 
 ## Important Lessons Learned
@@ -183,6 +178,6 @@ aws sqs get-queue-attributes --queue-url https://sqs.us-west-1.amazonaws.com/061
 1. **Tag Conflicts:** Use provider `default_tags` for global tags; modules add resource-specific tags only
 2. **Lifecycle Rules:** Use dynamic blocks with `for_each` to avoid empty rule errors
 3. **IAM Least Privilege:** Scope S3 permissions to specific prefixes (e.g., `raw/*`)
-4. **EventBridge Filtering:** Always filter to specific prefix (e.g., `raw/`) to prevent infinite loops
-5. **AWS Managed Policies:** Using AWS managed policy ARNs is standard practice, not hardcoding
-6. **EventBridge Testing:** Use CloudWatch Metrics to verify rule invocations (no logs needed for basic detection)
+4. **EventBridge Filtering:** Always filter to specific prefix to prevent infinite loops
+5. **Idempotent Writes:** Use Kinesis sequence numbers as S3 filenames to prevent duplicates on retry
+6. **Dashboard Strategy:** Static HTML/JS dashboard avoids server dependencies; use Cognito for production auth

@@ -145,6 +145,23 @@ When using specialized agents (like `.claude/agents/portfolio.md`), follow this 
 
 **Example**: CLAUDE.md says "no secrets in code" (fundamental security rule). Portfolio.md says "use Context7 before implementing" (specific workflow). Both apply - no conflict. Portfolio.md adds specificity without contradicting fundamentals.
 
+### Serena MCP Tools (MANDATORY)
+**ALWAYS use Serena's semantic code navigation tools when available:**
+
+1. **BEFORE reading entire files**: Use `mcp__serena__get_symbols_overview` to understand file structure
+2. **BEFORE searching for code**: Use `mcp__serena__find_symbol` with `name_path_pattern` for precise targeting
+3. **For understanding relationships**: Use `mcp__serena__find_referencing_symbols` to trace dependencies
+4. **For pattern searches**: Use `mcp__serena__search_for_pattern` instead of Grep when applicable
+5. **For code edits**: Use `mcp__serena__replace_symbol_body` for precise symbol-level changes
+
+**Why Serena?**
+- **Token-efficient**: Read only what you need, not entire files
+- **Precise targeting**: Navigate by symbol names, not line numbers
+- **Context-aware**: Understand code structure before reading bodies
+- **Refactoring-safe**: Symbol-based edits are more maintainable
+
+**Rule**: When exploring or editing code, check if Serena tools can do it more efficiently. Only fall back to Read/Edit/Grep when Serena isn't applicable (non-code files, line-specific edits within symbols).
+
 ### Code Quality
 - Prefer simple solutions over complex ones
 - Avoid code duplication—check for existing similar functionality first
@@ -203,15 +220,17 @@ Example `backend.tf`:
 ```hcl
 terraform {
   required_version = ">= 1.11.0"
-  
+
   backend "s3" {
-    bucket       = "tf-state-<account>-<region>"
+    bucket       = "tf-state-aidp"
     key          = "envs/dev/terraform.tfstate"
-    region       = "us-west-1"
+    region       = "us-west-1"  # Backend bucket in us-west-1 (separate from application resources)
     encrypt      = true
     use_lockfile = true  # Native S3 locking, no DynamoDB needed
   }
 }
+
+# Application resources deployed in us-west-2 (see envs/dev/variables.tf)
 ```
 
 ### Module Wiring Pattern
@@ -276,7 +295,7 @@ Use Terraform variables for feature toggles:
 ## Current Project Status
 
 > **Note:** Roadmap reorganized on 2025-01-24 for strict sequential implementation. CI/CD moved from Phase 1 to Phase 10 (final phase).
-> **Latest Update:** 2025-12-07 - Phase 7 completed (Merge Lambda & Complete Orchestration).
+> **Latest Update:** 2026-01-24 - Dashboard optimization: Moved sentiment chart and total count from Athena to Curated S3 for instant loading (~100ms vs ~3s).
 
 ### Completed ✅
 
@@ -288,15 +307,18 @@ Use Terraform variables for feature toggles:
 
 **Backend Configuration Details:**
 - **Bucket**: `tf-state-aidp`
-- **Region**: `us-west-1`
+- **Backend Region**: `us-west-1` (S3 state bucket only)
+- **Application Region**: `us-west-2` (all application resources)
 - **Encryption**: Enabled
 - **State Paths**:
   - Dev: `envs/dev/terraform.tfstate`
   - Staging: `envs/stg/terraform.tfstate`
   - Production: `envs/prod/terraform.tfstate`
 
+**Note**: The backend S3 bucket remains in `us-west-1` for state management, while all application infrastructure (Lambda, API Gateway, Kinesis, DynamoDB, Glue, etc.) is deployed in `us-west-2`.
+
 **Phase 1: Data Lake Foundation (All Tasks Complete)**
-- ✅ S3 bucket deployed: `ai-dp-data-lake-dev-us-west-1`
+- ✅ S3 bucket deployed: `ai-dp-data-lake-dev-us-west-2`
 - ✅ Three-layer architecture implemented:
   - `raw/` - Ingested data (30d→IA, 90d→Glacier, 180d expiration)
   - `processed/` - AI-enriched data (60d→IA, 120d→Glacier, 365d expiration)
@@ -319,7 +341,7 @@ Use Terraform variables for feature toggles:
 - EventBridge integration ready for Phase 3 batch ingestion path
 
 **Phase 2: Streaming Ingestion Path (All Tasks Complete)**
-- ✅ HTTP API Gateway deployed: `https://57cnx9jpje.execute-api.us-west-1.amazonaws.com//ingest`
+- ✅ HTTP API Gateway deployed: `https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest`
 - ✅ Kinesis Data Stream operational: `ai-dp-dev-ingestion-stream` (1 shard)
 - ✅ API Gateway → Kinesis direct integration (no Lambda proxy)
 - ✅ ETL Lambda function deployed: `ai-dp-dev-etl` (Python 3.11, 256MB, 60s timeout)
@@ -328,12 +350,14 @@ Use Terraform variables for feature toggles:
 - ✅ End-to-end streaming path tested: API → Kinesis → Lambda → S3 `raw/`
 - ✅ S3 partitioning verified: `raw/year=2025/month=10/day=27/`
 - ✅ DLQ error handling tested: Invalid records sent to SQS after 3 retries
+- ✅ **Idempotent writes implemented:** Kinesis sequence numbers used as S3 filenames (prevents duplicates on retry)
 
 **Key Achievements:**
 - Implemented least-privilege IAM roles (S3 write scoped to `raw/*` only)
 - Successfully processed streaming events with JSON validation and normalization
 - Confirmed automatic retry mechanism and DLQ integration
 - Lambda adds metadata: `processed_at`, `lambda_version`, `lambda_name`
+- **Idempotent S3 writes:** Replaced UUID filenames with Kinesis sequence numbers to prevent duplicate files on retry (2026-01-11)
 
 **Phase 3: Batch Ingestion Path (All Tasks Complete)**
 - ✅ EventBridge rule deployed: `ai-dp-dev-s3-batch-ingestion`
@@ -426,17 +450,34 @@ Use Terraform variables for feature toggles:
 - ✅ Athena workgroup: `ai-dp-dev-workgroup` (enforces query result location, CloudWatch metrics)
 - ✅ S3 Athena results bucket: `ai-dp-athena-results-dev-us-west-2` (7-day lifecycle)
 - ✅ Glue table created: `processed` (13 columns + 3 partition keys: year/month/day)
-- ✅ Dashboard created: Python Streamlit with Plotly + boto3
-- ✅ Dashboard features: Sentiment pie chart (Athena), recent events table (DynamoDB), real-time metrics, auto-refresh
-- ✅ End-to-end testing: Crawler → Athena queries → Dashboard visualization
+- ✅ Dashboard created: Vanilla HTML/CSS/JavaScript with Chart.js and AWS SDK v2
+- ✅ Dashboard files: `index.html`, `styles.css`, `app.js`, `config.js`, `README.md`
+- ✅ Dashboard features (optimized 2026-01-24):
+  - Sentiment distribution pie chart (**Curated S3** - pre-aggregated, ~100ms)
+  - Entity type analysis doughnut chart (Athena with UNNEST - demonstrates SQL skills)
+  - Real-time metrics cards (DynamoDB, ~50ms): Total, Positive, Neutral, Negative, Mixed
+  - Recent events table (DynamoDB, ~50ms): 20 most recent records
+  - Pipeline status: Total processed (**Curated S3**, ~100ms), last record time, DLQ health check
+- ✅ Performance: Parallel queries (DynamoDB + S3 + Athena), 60s auto-refresh, responsive design (desktop/tablet/mobile)
+- ✅ End-to-end testing: Crawler → Athena queries → Browser dashboard visualization
+
+**Dashboard Optimization (2026-01-24):**
+| Feature | Before | After | Why |
+|---------|--------|-------|-----|
+| Sentiment Chart | Athena (~3s) | Curated S3 (~100ms) | Pre-aggregated, instant |
+| Total Processed | Athena (~3s) | Curated S3 (~100ms) | Pre-calculated by Merge Lambda |
+| Entity Chart | Athena (~3s) | Athena (~3s) | Kept - demonstrates UNNEST SQL |
+| Metrics Cards | DynamoDB (~50ms) | DynamoDB (~50ms) | Real-time, last 30 days |
 
 **Key Achievements:**
-- Dual-query strategy: DynamoDB for real-time (last 30 days), Athena for historical SQL analytics
+- Three-tier data strategy: Curated S3 (pre-computed), DynamoDB (real-time), Athena (complex SQL)
+- Dashboard optimization demonstrates understanding of when to use each AWS service (interview talking point)
 - Separate S3 bucket for Athena results: Simpler lifecycle management, better cost tracking
 - Automatic schema evolution: Glue Crawler adapts to new enrichment fields
 - Partition pruning: Date-based partitions reduce Athena query costs by 90%+
-- Streamlit dashboard: Server-side AWS authentication, intelligent caching (90% cost reduction), interactive Plotly charts
-- Caching strategy: 5-min TTL for Athena (historical), 1-min TTL for DynamoDB (real-time)
+- Browser-based dashboard: Zero dependencies, runs from file system or S3 static hosting, simple to demo
+- Parallel execution: DynamoDB + S3 + Athena queries run simultaneously for optimal performance
+- Responsive design: 5-column (desktop), 3-column (tablet), 2-column (mobile) layout
 - IAM least-privilege: Glue scoped to `processed/*` prefix only
 
 ### Next Steps

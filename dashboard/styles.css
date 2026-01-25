@@ -1,0 +1,466 @@
+/* ===== BASIC RESET ===== */
+/* Remove default browser spacing */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* ===== BODY STYLES ===== */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+    line-height: 1.6;
+}
+
+/* ===== MAIN CONTAINER ===== */
+/* This centers everything and adds padding */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* ===== HEADER ===== */
+header {
+    text-align: center;
+    padding: 30px 0;
+    background: linear-gradient(135deg, #000000 0%, #333333 100%);
+    color: white;
+    border-radius: 10px;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+}
+
+.subtitle {
+    font-size: 1.2em;
+    opacity: 0.9;
+}
+
+/* ===== METRICS CARDS ===== */
+/* Grid layout - 5 boxes in a row */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr); /* 5 equal columns */
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+/* Individual metric card styling */
+.metric-card {
+    background: white;
+    padding: 25px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    transition: transform 0.2s; /* Smooth hover effect */
+}
+
+/* Hover effect - card lifts slightly */
+.metric-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+}
+
+/* Big number inside card */
+.metric-card h3 {
+    font-size: 2.5em;
+    color: #000000;
+    margin-bottom: 10px;
+}
+
+/* Label below number */
+.metric-card p {
+    color: #666;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Color coding for sentiment cards */
+.metric-card.positive h3 {
+    color: #10b981; /* Green */
+}
+
+.metric-card.neutral h3 {
+    color: #f59e0b; /* Orange */
+}
+
+.metric-card.negative h3 {
+    color: #ef4444; /* Red */
+}
+
+.metric-card.mixed h3 {
+    color: #8b5cf6; /* Purple */
+}
+
+/* ===== PIPELINE STATUS SECTION ===== */
+.pipeline-status {
+    background: white;
+    padding: 25px 30px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.pipeline-status h2 {
+    margin-bottom: 20px;
+    color: #333;
+    font-size: 1.3em;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+}
+
+.status-card {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: #f9fafb;
+    border-radius: 8px;
+    border-left: 4px solid #000;
+}
+
+.status-icon {
+    font-size: 1.8em;
+}
+
+.status-info h4 {
+    font-size: 1.4em;
+    color: #000;
+    margin-bottom: 2px;
+}
+
+.status-info p {
+    font-size: 0.8em;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Health status colors */
+.status-card.healthy {
+    border-left-color: #10b981;
+}
+
+.status-card.warning {
+    border-left-color: #f59e0b;
+}
+
+.status-card.error {
+    border-left-color: #ef4444;
+}
+
+/* ===== CHARTS ROW (side by side) ===== */
+.charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+/* ===== CHART SECTION ===== */
+.chart-section {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.chart-section h2 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+/* Container for the chart canvas */
+.chart-container {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* ===== TABLE SECTION ===== */
+.table-section {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+}
+
+/* Header with title and refresh button */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-header h2 {
+    color: #333;
+}
+
+/* Refresh button styling */
+#refresh-btn {
+    background: #000000;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background 0.2s;
+}
+
+#refresh-btn:hover {
+    background: #1a1a1a;
+}
+
+#refresh-btn:active {
+    transform: scale(0.98);
+}
+
+/* ===== TABLE STYLES ===== */
+table {
+    width: 100%;
+    border-collapse: collapse; /* Remove gaps between cells */
+}
+
+/* Table header cells */
+thead th {
+    background: #000000;
+    color: white;
+    padding: 15px;
+    text-align: left;
+    font-weight: bold;
+}
+
+/* Table body cells */
+tbody td {
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+/* Alternate row colors for readability */
+tbody tr:nth-child(even) {
+    background: #f9f9f9;
+}
+
+/* Hover effect on table rows */
+tbody tr:hover {
+    background: #f0f0f0;
+}
+
+/* Sentiment badge styling */
+.sentiment-badge {
+    display: inline-block;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 0.85em;
+    text-transform: uppercase;
+}
+
+.sentiment-badge.positive {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.sentiment-badge.neutral {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.sentiment-badge.negative {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.sentiment-badge.mixed {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.sentiment-badge.unknown {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+/* ===== LOADING & ERROR STATES ===== */
+.loading, .no-data {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+}
+
+.error {
+    text-align: center;
+    color: #ef4444;
+    font-style: italic;
+    padding: 20px;
+}
+
+.chart-loading {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+    background: #f9fafb;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.chart-error {
+    text-align: center;
+    color: #f59e0b;
+    font-size: 0.9em;
+    padding: 10px;
+    background: #fffbeb;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+/* Text preview column - compact with native tooltip on hover */
+td.text-preview {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85em;
+    color: #555;
+    cursor: help;
+}
+
+/* ===== ENTITY BADGES IN TABLE ===== */
+.entity-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-width: 350px;
+}
+
+.entity-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+}
+
+.entity-badge .entity-text {
+    font-weight: 500;
+    color: #374151;
+}
+
+.entity-badge .entity-type {
+    font-size: 0.85em;
+    color: #6b7280;
+    text-transform: uppercase;
+}
+
+/* Entity type colors */
+.entity-badge.organization {
+    background: #dbeafe;
+    border-color: #93c5fd;
+}
+
+.entity-badge.person {
+    background: #fce7f3;
+    border-color: #f9a8d4;
+}
+
+.entity-badge.location {
+    background: #d1fae5;
+    border-color: #6ee7b7;
+}
+
+.entity-badge.date {
+    background: #fef3c7;
+    border-color: #fcd34d;
+}
+
+.entity-badge.quantity {
+    background: #e0e7ff;
+    border-color: #a5b4fc;
+}
+
+.entity-badge.title {
+    background: #f3e8ff;
+    border-color: #c4b5fd;
+}
+
+.entity-badge.other {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+/* ===== FOOTER ===== */
+footer {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+/* On medium screens, show 3 columns then 2 columns */
+@media (max-width: 1024px) {
+    .metrics-grid {
+        grid-template-columns: repeat(3, 1fr); /* 3 columns on tablets */
+    }
+
+    .status-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .charts-row {
+        grid-template-columns: 1fr; /* Stack charts vertically */
+    }
+}
+
+/* On smaller screens, stack the metric cards vertically */
+@media (max-width: 768px) {
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 columns on mobile */
+    }
+
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    header h1 {
+        font-size: 1.8em;
+    }
+
+    .chart-container {
+        padding: 10px;
+    }
+
+    /* Make table scrollable on mobile */
+    .table-section {
+        overflow-x: auto;
+    }
+
+    table {
+        min-width: 600px;
+    }
+}
+
+@media (max-width: 480px) {
+    .metrics-grid {
+        grid-template-columns: 1fr; /* 1 column on very small screens */
+    }
+}

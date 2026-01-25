@@ -141,6 +141,42 @@ Every Lambda and service has scoped permissions:
 
 **Why this matters:** If one component is compromised, the blast radius is limited. An attacker with ETL Lambda credentials can't access processed data or DynamoDB.
 
+### Decision 6: Idempotent S3 Writes with Kinesis Sequence Numbers
+
+**Problem:** When Lambda retries a failed Kinesis record, using random UUIDs for S3 filenames creates duplicate files—same data written twice to different files.
+
+**Solution:** Use Kinesis sequence numbers as S3 filenames instead of UUIDs.
+
+**How it works:**
+```python
+# Extract sequence number from Kinesis record
+sequence_number = record['kinesis']['sequenceNumber']  # e.g., "49670192848271239..."
+
+# Use as filename for idempotent writes
+s3_key = f"raw/year={year}/month={month}/day={day}/{sequence_number}.json"
+```
+
+**Why sequence numbers work:**
+- Kinesis guarantees each record gets a unique sequence number per shard
+- **On retry, the SAME sequence number is sent** → Same S3 key → Overwrites previous attempt
+- No duplicates in S3, no deduplication logic needed
+
+**Before (UUID):**
+```
+Attempt 1: raw/year=2025/month=01/day=11/abc-123.json  ✅ Success
+Retry (same record): raw/year=2025/month=01/day=11/def-456.json  ❌ Duplicate!
+```
+
+**After (Sequence Number):**
+```
+Attempt 1: raw/year=2025/month=01/day=11/49670192848271239...json  ✅ Success
+Retry (same record): raw/year=2025/month=01/day=11/49670192848271239...json  ✅ Overwrites (idempotent!)
+```
+
+**Key Insight:** For streaming pipelines, use deterministic identifiers (sequence numbers, event IDs) as filenames to ensure idempotent writes. Avoid random identifiers (UUIDs) that create duplicates on retry.
+
+**Note:** This only applies to the streaming path. Batch uploads (direct S3) bypass the ETL Lambda, so clients control their own filenames.
+
 ---
 
 ## Key Tradeoffs & Design Decisions
@@ -223,24 +259,24 @@ Every architectural decision involves tradeoffs. Here are the key choices I made
 
 ---
 
-### Tradeoff 5: Streamlit vs. React/Vue for Dashboard
+### Tradeoff 5: Vanilla HTML/JS vs. React/Vue for Dashboard
 
-**Choice:** Python Streamlit with server-side rendering
+**Choice:** Vanilla HTML/CSS/JavaScript with Chart.js and AWS SDK v2
 
 **Benefits I gained:**
-- Security (AWS credentials never exposed to browser)
-- Simplicity (single Python file, no build process)
-- Built-in caching (`@st.cache_data` decorator)
-- Python consistency (same language as Lambda functions)
-- Fast development (working dashboard in < 400 lines)
+- Zero dependencies (no npm, no build process, no transpilation)
+- Instant load time (open `index.html` directly in browser)
+- Full control over layout and styling
+- Easy to demo (works from file system or S3 static hosting)
+- Lightweight (~500 lines total across 3 files)
 
 **What I gave up:**
-- Less UI customization (Streamlit's layout is opinionated)
-- Not ideal for public-facing apps (designed for internal tools)
-- Slower page loads (server renders on every interaction)
-- Can't leverage browser caching as effectively as SPA
+- No component reusability (everything in one place)
+- Manual DOM manipulation (no virtual DOM)
+- Credentials in browser (for local demo only - not production-ready)
+- No state management library (manual data flow)
 
-**Why I made this choice:** For an internal data pipeline dashboard querying AWS services, Streamlit is the perfect tool. The security benefits alone (server-side credentials) made this an easy choice. If this were a customer-facing app with millions of users, I'd choose React.
+**Why I made this choice:** For a portfolio project dashboard, simplicity wins. No build process means anyone can clone the repo and open `index.html` to see it working. The AWS SDK v2 for JavaScript works directly in the browser. For production, I'd add Cognito for secure authentication.
 
 ---
 
@@ -300,21 +336,22 @@ Every architectural decision involves tradeoffs. Here are the key choices I made
 
 ---
 
-### Tradeoff 9: Caching Strategy (Different TTLs)
+### Tradeoff 9: Dashboard Data Source Strategy (Three-Tier)
 
-**Choice:** 5-min cache for Athena, 1-min cache for DynamoDB
+**Choice:** Three-tier data strategy: Curated S3 (pre-computed) + DynamoDB (real-time) + Athena (complex SQL)
 
 **Benefits I gained:**
-- 90% cost reduction (Athena queries drop from 60/hour to 12/hour)
-- Balanced freshness (DynamoDB data refreshes every minute)
-- No user impact (5-min staleness acceptable for historical analytics)
+- Instant dashboard load (~100ms for sentiment chart from Curated S3)
+- Real-time metrics (~50ms from DynamoDB)
+- Complex analytics capability (Athena UNNEST for entity analysis)
+- Demonstrates understanding of when to use each AWS service
 
 **What I gave up:**
-- Not truly real-time (1-min delay for DynamoDB, 5-min for Athena)
-- Complexity (have to manage two different TTLs)
-- Potential confusion (users might see different data in dashboard vs. direct DynamoDB query)
+- Some data staleness (Curated S3 updated per-record by Merge Lambda)
+- More complex Merge Lambda (updates Curated summary on each write)
+- Athena still needed for complex queries (~3s latency)
 
-**Why I made this choice:** Dashboard users expect near-real-time data, not true real-time. 1-minute freshness is acceptable for operational dashboards. 5-minute historical analytics is more than enough. The 90% cost savings made this a no-brainer.
+**Why I made this choice:** The Merge Lambda pre-aggregates sentiment counts to `curated/latest_summary.json` on every record. This means the sentiment pie chart loads instantly from S3 instead of waiting 3+ seconds for an Athena query. Entity analysis uses Athena because the UNNEST SQL demonstrates advanced skills and the 3s latency is acceptable for that chart.
 
 ---
 
@@ -508,7 +545,7 @@ dynamic "rule" {
 - Deployed AWS Glue Crawler (`ai-dp-dev-crawler`) to catalog S3 `processed/` data
 - Created Glue Database (`ai-dp-dev-analytics`)
 - Configured Athena workgroup (`ai-dp-dev-workgroup`) with dedicated S3 results bucket
-- Built **Python Streamlit dashboard** with Plotly visualizations + boto3
+- Built **vanilla HTML/JS dashboard** with Chart.js visualizations + AWS SDK v2
 
 **Key Components:**
 
@@ -523,56 +560,61 @@ dynamic "rule" {
 - CloudWatch metrics enabled for query monitoring
 - 7-day lifecycle policy on query results (automatic cleanup)
 
-**Streamlit Dashboard (`dashboard/streamlit_app.py`, 403 lines):**
-1. **Real-time metrics (DynamoDB with 1-min cache TTL):**
-   - Recent events table (configurable limit: 5-50 records)
-   - Color-coded sentiment values (green/red/gray)
-   - CSV export functionality
+**Dashboard (`dashboard/` - Vanilla HTML/CSS/JavaScript):**
 
-2. **Historical analytics (Athena with 5-min cache TTL):**
-   - Interactive Plotly pie chart (sentiment distribution)
-   - Bar chart alternative view
-   - SQL aggregations with partition pruning
+**Files:**
+- `index.html` - Main page structure
+- `styles.css` - Dark theme styling, responsive layout
+- `app.js` - Chart.js + AWS SDK v2 integration (~350 lines)
+- `config.js` - AWS credentials (gitignored)
 
-3. **Interactive features:**
-   - Auto-refresh toggle (60-second interval)
-   - Manual refresh button (clears cache)
-   - Sidebar configuration display
+**Features:**
+1. **Real-time metrics (DynamoDB, ~50ms):**
+   - 5 metric cards: Total, Positive, Neutral, Negative, Mixed counts
+   - Recent events table (20 most recent records)
+   - Color-coded sentiment badges
 
-**Key Decision:** I chose **Python Streamlit** instead of HTML/JavaScript for several compelling reasons:
+2. **Pre-computed analytics (Curated S3, ~100ms):**
+   - Sentiment distribution pie chart (pre-aggregated by Merge Lambda)
+   - Total processed count (instant access)
 
-1. **Security**: AWS credentials stay server-side (boto3 clients), never exposed to browser
-2. **Performance**: Built-in `@st.cache_data` decorator provides intelligent caching (5-min for Athena, 1-min for DynamoDB)
-3. **Cost Optimization**: Caching reduced Athena queries by 80% (from ~60/hour to ~12/hour)
-4. **Simplicity**: Single Python file (403 lines) vs multi-file frontend stack
-5. **Industry Standard**: Streamlit is widely used for ML/data dashboards in production environments
-6. **No Build Process**: No webpack, no npm, no transpilation - just `streamlit run streamlit_app.py`
+3. **Complex analytics (Athena, ~3s):**
+   - Entity type analysis doughnut chart (uses UNNEST SQL)
+   - Demonstrates advanced SQL skills
 
-**Caching Strategy Example:**
-```python
-@st.cache_data(ttl=300)  # 5 minutes - historical data doesn't change frequently
-def get_sentiment_distribution():
-    # Expensive Athena query cached for 5 minutes
+4. **Interactive features:**
+   - Auto-refresh every 60 seconds
+   - Manual refresh button
+   - Responsive design (desktop/tablet/mobile)
 
-@st.cache_data(ttl=60)  # 1 minute - real-time data needs fresher updates
-def get_dynamodb_data():
-    # DynamoDB scan cached for 1 minute
-```
+**Key Decision:** I chose **vanilla HTML/JavaScript** instead of React for simplicity:
 
-**Query Example (Athena via boto3):**
+1. **Zero build process**: Open `index.html` in browser - that's it
+2. **Easy to demo**: Works from file system or S3 static hosting
+3. **Lightweight**: ~500 lines total across 3 files
+4. **AWS SDK v2**: Works directly in browser with Chart.js
+
+**Three-Tier Data Strategy (Dashboard Optimization):**
+| Feature | Data Source | Latency | Why |
+|---------|-------------|---------|-----|
+| Sentiment Chart | Curated S3 | ~100ms | Pre-aggregated by Merge Lambda |
+| Total Processed | Curated S3 | ~100ms | Pre-calculated |
+| Entity Chart | Athena | ~3s | Demonstrates UNNEST SQL |
+| Metrics Cards | DynamoDB | ~50ms | Real-time, last 30 days |
+| Recent Events | DynamoDB | ~50ms | Real-time |
+
+**Why this optimization matters:** The Merge Lambda updates `curated/latest_summary.json` on every record with pre-aggregated sentiment counts. This means the sentiment pie chart loads instantly instead of waiting for Athena. I kept the entity chart on Athena to demonstrate the UNNEST query skill.
+
+**Query Example (Entity Analysis via Athena):**
 ```sql
-SELECT sentiment, COUNT(*) as count
+SELECT entity.Type as entity_type, COUNT(*) as count
 FROM "ai-dp-dev-analytics"."processed"
-WHERE year = '2025' AND month = '12'
-GROUP BY sentiment;
+CROSS JOIN UNNEST(entitydetails) AS t(entity)
+GROUP BY entity.Type
+ORDER BY count DESC
 ```
 
-The `WHERE year = '2025' AND month = '12'` partition filter means Athena only scans December 2025 data, reducing query costs by 90%+ compared to full table scans.
-
-**Performance Impact:**
-- Without caching: ~60 Athena queries/hour = $0.15/month
-- With caching: ~12 Athena queries/hour = $0.03/month
-- **80% cost reduction** while maintaining data freshness
+This query demonstrates flattening nested arrays in Athena - a valuable skill for data engineering interviews.
 
 ---
 
@@ -703,10 +745,10 @@ This flattened the nested structure and made subsequent states easier to write.
    - Dead Letter Queues and retry logic
 
 4. **Data Visualization & Optimization:**
-   - Streamlit for Python-based dashboards (server-side authentication)
-   - Plotly for interactive charts (pie, bar, line graphs)
-   - Intelligent caching strategies (different TTLs for different data freshness needs)
-   - Cost optimization through cache hit rates (90% reduction in API calls)
+   - Vanilla HTML/JS dashboards with Chart.js (simple, no build process)
+   - Three-tier data strategy (Curated S3 + DynamoDB + Athena)
+   - Pre-computed aggregations for instant dashboard loading
+   - AWS SDK v2 for browser-based AWS API calls
 
 ### Soft Skills
 
@@ -787,7 +829,7 @@ This flattened the nested structure and made subsequent states easier to write.
 2. **TTL on DynamoDB:** Records auto-delete after 30 days, reducing storage costs
 3. **On-demand billing:** DynamoDB uses pay-per-request (no idle capacity costs)
 4. **Partition pruning:** Date-based S3 partitions let Athena skip irrelevant data, reducing query costs by 90%+
-5. **Intelligent caching:** Streamlit dashboard uses different cache TTLs—5 minutes for Athena (historical), 1 minute for DynamoDB (real-time). This reduced Athena queries by 80%, cutting query costs from $0.15/month to $0.03/month.
+5. **Three-tier data strategy:** Dashboard uses Curated S3 (~100ms) for pre-aggregated sentiment data, DynamoDB (~50ms) for real-time metrics, and Athena (~3s) only for complex queries like entity UNNEST. This optimizes both performance and cost.
 6. **Serverless compute:** Lambda and Step Functions scale to zero when idle
 7. **Separate Athena results bucket:** 7-day lifecycle policy auto-deletes query results
 
@@ -795,21 +837,24 @@ My dev environment runs at < $50/month because resources are right-sized and aut
 
 ---
 
-### "Why did you choose Streamlit over HTML/JavaScript for the dashboard?"
+### "Why did you choose vanilla HTML/JavaScript over React for the dashboard?"
 
-**Response:** "I evaluated three options for the dashboard and chose Streamlit for several technical and practical reasons:
+**Response:** "I chose vanilla HTML/CSS/JavaScript with Chart.js for several practical reasons:
 
-**Security**: With Streamlit, AWS credentials live server-side in boto3 clients. The browser never sees my access keys, unlike a pure JavaScript approach where the AWS SDK would require credentials in the browser or a separate authentication service.
+**Zero build process**: Anyone can clone the repo, open `index.html`, and see the dashboard working. No npm install, no webpack, no transpilation. This makes it perfect for a portfolio project where you want to demo quickly.
 
-**Performance & Cost**: Streamlit's built-in `@st.cache_data` decorator made implementing intelligent caching trivial. I configured different TTLs for different data sources—5 minutes for Athena queries (historical data changes slowly) and 1 minute for DynamoDB scans (near real-time). This reduced our Athena query volume by 80%, cutting costs from ~$0.15/month to ~$0.03/month while keeping data fresh.
+**Simplicity**: It's about 500 lines across 3 files (`index.html`, `styles.css`, `app.js`). The AWS SDK v2 for JavaScript works directly in the browser, and Chart.js provides beautiful charts with minimal configuration.
 
-**Simplicity**: It's a single 403-line Python file. No webpack, no npm, no build process, no transpilation. To run it: `streamlit run streamlit_app.py`. That's it. Compare that to a React app with separate frontend/backend repositories.
+**Three-tier data strategy**: The real optimization isn't in the frontend—it's in how I source the data:
+- **Curated S3** (~100ms): Sentiment pie chart loads instantly from pre-aggregated data
+- **DynamoDB** (~50ms): Real-time metrics from the hot store
+- **Athena** (~3s): Only for complex queries like entity UNNEST that demonstrate SQL skills
 
-**Industry Relevance**: Streamlit is the de facto standard for ML and data dashboards in industry. Companies like Uber, Snowflake, and many data science teams use it for internal tools and customer-facing analytics. It shows I know the tools data teams actually use.
+This shows I understand when to use each AWS service rather than just defaulting to 'query everything from Athena.'
 
-**Maintainability**: Pure Python means no context switching between languages. The same developer who writes the backend (Lambda functions, Terraform) can maintain the dashboard without learning React, TypeScript, or frontend frameworks.
+**Easy to demo**: Works from the file system or S3 static hosting. I can record a portfolio video without setting up any backend.
 
-The tradeoff? Streamlit isn't ideal for highly customized UIs or public-facing applications with thousands of users. But for a data pipeline dashboard querying AWS services, it's the perfect tool."
+The tradeoff? For production, I'd add AWS Cognito for secure browser authentication instead of local credentials. But for a portfolio demo that runs on my machine, this approach is simple and effective."
 
 ---
 
@@ -836,7 +881,7 @@ This project demonstrates my ability to:
 ✅ **Integrate AI/ML services** (Comprehend) into production pipelines
 ✅ **Build production-grade reliability** (DLQs, retries, monitoring)
 ✅ **Optimize for cost** (lifecycle policies, TTL, partition pruning, intelligent caching)
-✅ **Create data visualizations** (Streamlit dashboard with Plotly charts)
+✅ **Create data visualizations** (HTML/JS dashboard with Chart.js)
 ✅ **Document systematically** (errorlog, roadmap, architecture diagrams)
 ✅ **Iterate sequentially** (10-phase roadmap, 90% complete)
 

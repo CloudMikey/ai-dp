@@ -87,14 +87,17 @@
 │     - Partition pruning: Only scans relevant year/month/day folders     │
 │                                                                         │
 │  ⑨ Visualization Dashboard (dashboard/index.html)                      │
-│     ┌─────────────────────┬──────────────────────┐                     │
-│     │ Real-time Metrics   │ Historical Analytics │                     │
-│     │ (DynamoDB)          │ (Athena/S3)          │                     │
-│     │ - Last 20 records   │ - Sentiment pie chart│                     │
-│     │ - Events table      │ - SQL aggregations   │                     │
-│     │ - Recent sentiment  │ - Trend analysis     │                     │
-│     └─────────────────────┴──────────────────────┘                     │
-│     Tech: HTML/CSS/JS + Chart.js + AWS SDK v3                           │
+│     ┌─────────────────┬────────────────────┬──────────────────────┐    │
+│     │ Pre-aggregated  │ Real-time Metrics  │ Complex Analytics    │    │
+│     │ (Curated S3)    │ (DynamoDB)         │ (Athena)             │    │
+│     │ ~100ms          │ ~50ms              │ ~3s                  │    │
+│     │                 │                    │                      │    │
+│     │ - Sentiment     │ - Last 20 records  │ - Entity chart       │    │
+│     │   pie chart     │ - Events table     │   (UNNEST SQL)       │    │
+│     │ - Total count   │ - Metrics cards    │ - Historical SQL     │    │
+│     └─────────────────┴────────────────────┴──────────────────────┘    │
+│     Tech: HTML/CSS/JS + Chart.js + AWS SDK v2                           │
+│     Optimized 2026-01-24: Moved sentiment/count from Athena to S3      │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -128,9 +131,10 @@ Kinesis Data Stream (ai-dp-dev-ingestion-stream)
 ETL Lambda (ai-dp-dev-etl)
     │
     │ Processing:
-    │ 1. Validate JSON (recordId, recordType, content required)
-    │ 2. Normalize data (add processed_at, lambda_version)
-    │ 3. Date partition calculation (year, month, day)
+    │ 1. Extract Kinesis sequence number (for idempotent writes)
+    │ 2. Validate JSON (recordId, recordType, content required)
+    │ 3. Normalize data (add processed_at, lambda_version)
+    │ 4. Date partition calculation (year, month, day)
     │
     │ Output:
     │ {
@@ -144,7 +148,8 @@ ETL Lambda (ai-dp-dev-etl)
     ↓
 S3 raw/ (ai-dp-data-lake-dev-us-west-1)
     │
-    │ Path: raw/year=2025/month=12/day=13/rec-123.json
+    │ Path: raw/year=2025/month=12/day=13/49670192848271239842602659163669398716174920392225325058.json
+    │ Note: Filename = Kinesis sequence number (idempotent writes - retries overwrite same file)
     │ Triggers S3 Event Notification
     ↓
 [CONTINUES TO ORCHESTRATION LAYER BELOW]
@@ -438,15 +443,34 @@ WHERE sentiment = 'POSITIVE'
 LIMIT 10;
 ```
 
-### Dashboard Data Sources
+### Dashboard Data Sources (Optimized 2026-01-24)
 
-**DynamoDB (Real-time):**
+**Curated S3 (Pre-aggregated, ~100ms):**
+- Sentiment distribution pie chart (pre-aggregated counts by Merge Lambda)
+- Total processed count (pre-calculated, updated on each record)
+
+**DynamoDB (Real-time, ~50ms):**
 - Last 20 records (ScanCommand with Limit)
 - Recent events table with timestamp/sentiment/type
+- Metrics cards: Total, Positive, Neutral, Negative, Mixed counts
 
-**Athena (Historical):**
-- Sentiment distribution pie chart (GROUP BY sentiment)
+**Athena (Complex SQL, ~3s):**
+- Entity type analysis doughnut chart (UNNEST for nested entity arrays)
 - Long-term trend analysis across date partitions
+- Demonstrates SQL skills for interviews
+
+**Dashboard Optimization Summary:**
+| Feature | Before | After | Why |
+|---------|--------|-------|-----|
+| Sentiment Chart | Athena (~3s) | Curated S3 (~100ms) | Pre-aggregated, instant |
+| Total Processed | Athena COUNT (~3s) | Curated S3 (~100ms) | Pre-calculated by Merge Lambda |
+| Entity Chart | Athena | Athena (~3s) | Kept - demonstrates UNNEST SQL skill |
+| Metrics Cards | DynamoDB | DynamoDB (~50ms) | Real-time, last 30 days |
+
+**Why This Optimization:**
+- **Performance:** Sentiment chart loads instantly instead of waiting 3+ seconds
+- **Cost:** Fewer Athena queries = lower cost (Athena charges per data scanned)
+- **Demonstrates understanding:** Shows you know when to use each AWS service
 
 ---
 

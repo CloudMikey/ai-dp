@@ -127,7 +127,7 @@
 **1. EventBridge Rule (`modules/ingestion_stream/` - Part 3)** ✅ **COMPLETED**
 - ✅ EventBridge rule added to `ingestion_stream` module
 - ✅ Event pattern configured: source=`aws.s3`, detail-type=`Object Created`, prefix=`raw/`
-- ✅ Filtered to data lake bucket: `ai-dp-data-lake-dev-us-west-1`
+- ✅ Filtered to data lake bucket: `ai-dp-data-lake-dev-us-west-2`
 - ✅ CloudWatch Metrics available (rule invocations tracked automatically)
 - ✅ Outputs added: `eventbridge_rule_name`, `eventbridge_rule_arn`
 
@@ -429,43 +429,58 @@
 **Complete when:** ✅ Can query `processed/` data via SQL in Athena, partitions work, query performance acceptable
 
 **3. Visualization Dashboard - Choose Platform**
-- ✅ **Decision:** Python Streamlit (data science standard, server-side authentication)
-- **Rationale:** Server-side AWS credentials, built-in caching, no frontend build process, interactive Plotly charts, widely used for ML/data dashboards
+- ✅ **Decision:** Vanilla HTML/CSS/JavaScript with AWS SDK for JavaScript (browser-based)
+- **Rationale:** Zero dependencies, no backend needed, runs anywhere (local browser or S3 static hosting), Chart.js for visualizations, simple to understand and explain in interviews
 
 **Complete when:** ✅ Platform chosen and documented
 
 **4. Build Dashboard (Based on Chosen Platform)**
-- ✅ Implement Streamlit dashboard with key metrics:
-  - Sentiment distribution (interactive Plotly pie chart + bar chart) - Athena query
-  - Total records metric (from DynamoDB)
-  - Positive/Negative/Neutral counts with delta indicators (Athena aggregation)
-  - Recent events table (DynamoDB scan, configurable limit 5-50 records)
-- ✅ Connect to Athena for historical queries (boto3 client)
-- ✅ Connect to DynamoDB for real-time view (boto3 client + resource)
+- ✅ Implement browser-based dashboard with key metrics:
+  - Sentiment distribution (interactive Chart.js pie chart) - **Curated S3** (pre-aggregated, ~100ms)
+  - Entity type analysis (doughnut chart) - Athena query with UNNEST for entity arrays (~3s)
+  - Total records metric (**Curated S3** - pre-calculated, ~100ms)
+  - Positive/Negative/Neutral/Mixed counts with color-coded cards (DynamoDB aggregation, ~50ms)
+  - Recent events table (DynamoDB scan, shows 20 most recent records, ~50ms)
+  - Pipeline status monitoring (total processed from **Curated S3**, last record time, DLQ health check)
+- ✅ Connect to Curated S3 for pre-aggregated metrics (AWS SDK for JavaScript v2)
+- ✅ Connect to Athena for complex SQL queries with UNNEST (AWS SDK for JavaScript v2)
+- ✅ Connect to DynamoDB for real-time view (AWS SDK for JavaScript v2)
 - ✅ Dashboard files created:
-  - `dashboard/streamlit_app.py` - Main application (403 lines)
-  - `dashboard/requirements.txt` - Python dependencies (streamlit, boto3, pandas, plotly)
-  - `dashboard/setup.ps1` - Automated setup script
+  - `dashboard/index.html` - Main page structure
+  - `dashboard/styles.css` - All styling (responsive design)
+  - `dashboard/app.js` - JavaScript logic, AWS SDK integration, chart rendering
+  - `dashboard/config.js` - AWS credentials (gitignored, local only)
   - `dashboard/README.md` - Setup instructions
-- ✅ Intelligent caching implemented:
-  - Athena queries: 5-min TTL (historical data)
-  - DynamoDB scans: 1-min TTL (real-time data)
-  - 90% cost reduction from reduced API calls
-- ✅ Interactive features: Auto-refresh toggle, manual refresh button, CSV export, color-coded sentiment
+- ✅ Performance features:
+  - Parallel queries (DynamoDB + S3 + Athena run simultaneously)
+  - Auto-refresh every 60 seconds
+  - Loading states for user feedback
+- ✅ Interactive features: Auto-refresh, color-coded sentiment badges, responsive layout (desktop/tablet/mobile)
 
-**Complete when:** ✅ Dashboard shows live data from both DynamoDB (recent) and Athena (historical)
+**Complete when:** ✅ Dashboard shows live data from Curated S3 (aggregates), DynamoDB (real-time), and Athena (complex SQL)
 
-**Status:** ✅ **COMPLETED** (2025-12-27)
+**Status:** ✅ **COMPLETED** (2026-01-20, **Optimized 2026-01-24**)
 - Task 1: Analytics module deployed with Glue database, crawler, Athena workgroup, S3 results bucket
 - Task 2: Athena queries working, partitions detected, query results validated
-- Task 3: Dashboard platform selected (Streamlit - changed from HTML/JS)
-- Task 4: Dashboard implemented with Streamlit, Plotly visualizations, dual caching strategy, server-side AWS authentication
+- Task 3: Dashboard platform selected (Vanilla HTML/CSS/JS - portfolio simplicity)
+- Task 4: Dashboard implemented with Chart.js visualizations, three-tier data strategy, browser-based AWS SDK
+
+**Dashboard Optimization (2026-01-24):**
+| Feature | Before | After | Why |
+|---------|--------|-------|-----|
+| Sentiment Chart | Athena (~3s) | Curated S3 (~100ms) | Pre-aggregated counts, instant |
+| Total Processed | Athena COUNT (~3s) | Curated S3 (~100ms) | Pre-calculated by Merge Lambda |
+| Entity Type Chart | Athena | Athena (~3s) | Kept - demonstrates UNNEST SQL skill |
+| Metrics Cards | DynamoDB | DynamoDB (~50ms) | Real-time, last 30 days |
+| Recent Events Table | DynamoDB | DynamoDB (~50ms) | Real-time, last 30 days |
 
 **Key Learnings:**
 - AWS Glue constraint: `CRAWL_NEW_FOLDERS_ONLY` requires `LOG`-only schema policies. Used `CRAWL_EVERYTHING` instead to allow `UPDATE_IN_DATABASE`.
 - IAM permission `glue:BatchGetPartition` required for partition operations (not in initial policy).
-- Streamlit benefits: Server-side credentials (more secure than browser-based), `@st.cache_data` decorator for performance, single Python file simplicity.
-- Caching strategy: Different TTLs for different data freshness needs (5-min for historical, 1-min for real-time).
+- Browser-based dashboard benefits: No server needed, zero installation, runs directly from file system or S3 static hosting, simple to demo in portfolio.
+- **Three-tier data strategy:** Curated S3 for pre-aggregated metrics (instant), DynamoDB for real-time hot data (last 30 days), Athena for complex SQL analytics (UNNEST).
+- **Dashboard optimization demonstrates understanding of when to use each AWS service** (interview talking point).
+- Responsive design: Desktop (5-column metrics grid), tablet (3-column), mobile (2-column).
 
 ---
 
@@ -709,4 +724,4 @@ Phase 10: CI/CD Pipeline (GitHub Actions)
 
 **Total Estimated Timeline:** 8-12 weeks
 
-**Last Updated:** 2025-12-07 (Phase 7 completed: Merge Lambda & Complete Orchestration)
+**Last Updated:** 2026-01-24 (Dashboard optimization: Moved sentiment chart and total count from Athena to Curated S3 for instant loading)

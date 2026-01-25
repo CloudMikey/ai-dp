@@ -1,56 +1,87 @@
 # AI-Powered Serverless Data Pipeline - Project Overview
 
 ## Project Type
-This is an **AI-Powered Serverless Data Pipeline** built on AWS, managed entirely with Terraform Infrastructure as Code.
+This is an **AI-Powered Serverless Data Pipeline** built on AWS, managed entirely with Terraform Infrastructure as Code. It's a **portfolio project** designed for entry-level to intermediate cloud engineering roles.
 
 ## High-Level Architecture
 
 ### Purpose
-Ingests both batch and streaming data, enriches it with AWS AI/ML services, and provides actionable insights through dual storage strategy (hot + historical).
+Ingests both batch and streaming data, enriches it with AWS AI/ML services (Comprehend), and provides actionable insights through dual storage strategy (DynamoDB hot store + S3 data lake).
 
 ### Core Data Flow
-1. **Ingestion Layer**: API Gateway → Kinesis Data Streams (real-time) OR S3 uploads → EventBridge (batch)
-2. **ETL Layer**: Lambda consumes Kinesis → validates/normalizes → writes to S3 `raw/`
-3. **Orchestration**: Step Functions orchestrates parallel AI enrichment tasks
-4. **AI Enrichment**: 
-   - Amazon Comprehend (sentiment analysis, entity extraction)
-   - SageMaker real-time endpoint (anomaly detection)
-   - Amazon Rekognition (optional, feature-flagged for image labeling)
-5. **Merge & Store**: Lambda combines AI outputs → writes to:
-   - S3 `processed/` and `curated/` (historical data lake)
-   - DynamoDB (hot store for low-latency queries)
-6. **Analytics**: Glue crawler catalogs S3 data → Athena queries → QuickSight/React dashboards
+1. **Ingestion Layer**: 
+   - Streaming: API Gateway → Kinesis Data Streams → ETL Lambda → S3 `raw/`
+   - Batch: S3 uploads → EventBridge → Step Functions
+2. **Orchestration**: Step Functions orchestrates AI enrichment tasks
+3. **AI Enrichment**: Amazon Comprehend (sentiment analysis + entity extraction) running in parallel
+4. **Merge & Store**: Merge Lambda combines AI outputs → writes to:
+   - S3 `processed/` (historical data lake with date partitioning)
+   - DynamoDB (hot store for low-latency queries, 30-day TTL)
+5. **Analytics**: 
+   - Glue Crawler catalogs `processed/` data → Athena SQL queries
+   - Static HTML/JS dashboard with Chart.js visualizations
 
 ### Error Handling Pattern
 - All Lambdas configured with SQS Dead Letter Queues (DLQs)
-- CloudWatch alarms monitor DLQ depth
-- Dedicated replay Lambda processes failed messages
-- X-Ray tracing for distributed debugging
+- CloudWatch Logs for all components
+- Step Functions retry logic with catch blocks
+- Idempotent S3 writes using Kinesis sequence numbers
 
 ## Technology Stack
 
 ### Infrastructure & IaC
-- **Terraform**: >= 1.11.0 with S3 backend using native locking (`use_lockfile = true`, no DynamoDB needed)
-- **Environments**: dev, stg, prod with separate state files and IAM roles
+- **Terraform**: >= 1.11.0 with S3 backend using native locking (`use_lockfile = true`)
+- **Environments**: dev, stg, prod with separate state files
 
 ### AWS Services
-- **Compute**: Lambda, Step Functions, EventBridge
+- **Compute**: Lambda (Python 3.11), Step Functions, EventBridge
 - **Data Ingestion**: API Gateway (HTTP API), Kinesis Data Streams
-- **Storage**: S3 (multi-tier data lake), DynamoDB
-- **AI/ML**: Comprehend, SageMaker, Rekognition (optional)
-- **Analytics**: Glue, Athena, QuickSight
-- **Observability**: CloudWatch Logs/Dashboards/Alarms, X-Ray
+- **Storage**: S3 (three-tier data lake), DynamoDB (on-demand billing)
+- **AI/ML**: Amazon Comprehend (sentiment + entities)
+- **Analytics**: Glue Crawler, Athena, static dashboard
 
-### CI/CD (Planned)
-- GitHub Actions with OIDC authentication (no long-term AWS credentials)
-- Automated workflows: terraform fmt/validate/plan on PRs, apply on main branch
-- Environment promotion with manual approval gates
+### Dashboard
+- **Tech**: Vanilla HTML/CSS/JavaScript + Chart.js v4.4.0 + AWS SDK for JavaScript v2
+- **Features**: 
+  - Sentiment pie chart (**Curated S3** - pre-aggregated, instant ~100ms)
+  - Entity doughnut chart (Athena with UNNEST - demonstrates SQL skills)
+  - 5 real-time metrics cards (DynamoDB): Total, Positive, Neutral, Negative, Mixed
+  - Recent events table (20 most recent from DynamoDB)
+  - Pipeline status: Total processed (**Curated S3**), last record time, DLQ health check
+  - Auto-refresh (60s), parallel queries
+- **Optimized Data Sources** (2026-01-24):
+  | Feature | Before | After | Why |
+  |---------|--------|-------|-----|
+  | Sentiment Chart | Athena (~3s) | Curated S3 (~100ms) | Pre-aggregated counts, instant |
+  | Total Processed | Athena (~3s) | Curated S3 (~100ms) | Pre-calculated by Merge Lambda |
+  | Entity Chart | Athena (~3s) | Athena (~3s) | Kept - demonstrates UNNEST SQL skill |
+  | Metrics Cards | DynamoDB (~50ms) | DynamoDB (~50ms) | Real-time, last 30 days |
+- **Location**: `dashboard/` directory (index.html, styles.css, app.js, config.js, README.md)
+- **Auth**: Local credentials in `config.js` (gitignored) - for demo only; production would use Cognito
+- **Design**: Modern dark theme, responsive layout (desktop/tablet/mobile)
+- **Deployment**: Zero dependencies - runs from file system or S3 static hosting
 
 ## Current Project Status
-The project is in **early development** (Phase 0-1 of roadmap). Directory structure exists but most modules and Lambda functions are not yet implemented. See `docs/roadmap.md` for detailed implementation phases.
+
+**90% Complete (9 of 10 phases)**
+
+✅ **Completed:**
+- Phase 0: Bootstrap (S3 state bucket)
+- Phase 1: Data Lake (S3 three-tier)
+- Phase 2: Streaming Ingestion (API → Kinesis → Lambda → S3)
+- Phase 3: Batch Ingestion (S3 → EventBridge)
+- Phase 4: Step Functions Orchestration
+- Phase 5: DynamoDB Hot Store
+- Phase 6: AI Enrichment (Comprehend)
+- Phase 7: Merge Lambda & Complete Pipeline
+- Phase 8: Analytics & Dashboard (Glue, Athena, Chart.js)
+
+🔄 **Next:** Phase 9 (Production Hardening), Phase 10 (CI/CD)
 
 ## Key Design Principles
+
+- **Portfolio-appropriate**: Simple enough to explain in interviews, complex enough to demonstrate skills
 - **Serverless-first**: No EC2, fully managed services
-- **Security-first**: OIDC auth, least-privilege IAM, encryption at rest/transit
-- **Cost-optimized**: Feature flags, lifecycle policies, on-demand scaling
-- **Production-ready**: DLQs, retries, monitoring, alarms from day one
+- **Security-first**: Least-privilege IAM, encryption at rest/transit
+- **Cost-optimized**: On-demand billing, lifecycle policies, partition pruning
+- **Production-ready patterns**: DLQs, retries, monitoring from day one

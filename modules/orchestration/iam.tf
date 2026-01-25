@@ -29,7 +29,7 @@ resource "aws_iam_role" "merge_lambda" {
 }
 
 #-------------------- S3 Write Policy --------------------#
-# Least-privilege: Lambda can ONLY write to processed/* prefix
+# Least-privilege: Lambda can write to processed/* and curated/* prefixes
 
 resource "aws_iam_role_policy" "s3_write" {
   name = "${local.resource_prefix}-merge-s3-write"
@@ -43,7 +43,38 @@ resource "aws_iam_role_policy" "s3_write" {
         Action = [
           "s3:PutObject"
         ]
-        Resource = "${var.data_lake_bucket_arn}/processed/*"
+        Resource = [
+          "${var.data_lake_bucket_arn}/processed/*",
+          "${var.data_lake_bucket_arn}/curated/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = "${var.data_lake_bucket_arn}/curated/*"
+      }
+    ]
+  })
+}
+
+#-------------------- S3 Read Policy --------------------#
+# Allows Lambda to read raw/* prefix for text preview extraction
+
+resource "aws_iam_role_policy" "s3_read" {
+  name = "${local.resource_prefix}-merge-s3-read"
+  role = aws_iam_role.merge_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = "${var.data_lake_bucket_arn}/raw/*"
       }
     ]
   })

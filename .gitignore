@@ -97,6 +97,9 @@ credentials
 credentials.json
 config
 
+# Dashboard configuration with AWS credentials
+dashboard/config.js
+
 # AWS SAM
 .aws-sam/
 samconfig.toml
@@ -204,3 +207,7 @@ mock-data/
 # Local scripts (user-specific utilities)
 local/
 scratch/
+
+# Gemini CLI specific files
+GEMINI.md
+.gemini-clipboard/

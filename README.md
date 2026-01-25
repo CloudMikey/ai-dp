@@ -97,9 +97,9 @@ For detailed architecture documentation, see [`docs/ai-dp overview notion.md`](d
 | **Infrastructure** | Terraform >= 1.11.0, AWS |
 | **Compute** | Lambda (Python 3.11+), Step Functions |
 | **Ingestion** | API Gateway, Kinesis Data Streams, EventBridge |
-| **AI/ML** | Comprehend, SageMaker, Rekognition |
+| **AI/ML** | Comprehend (sentiment, entities) |
 | **Storage** | S3 (Data Lake), DynamoDB |
-| **Analytics** | Glue, Athena, QuickSight |
+| **Analytics** | Glue, Athena, Chart.js Dashboard |
 | **Observability** | CloudWatch, X-Ray, SQS DLQs |
 | **CI/CD** | GitHub Actions (OIDC) |
 
@@ -115,16 +115,19 @@ AI-DP/
 ├── modules/             # Reusable Terraform modules
 │   ├── data_lake/           # S3 buckets (raw/processed/curated) ✅
 │   ├── ingestion_stream/    # API Gateway, Kinesis, EventBridge ✅
-│   ├── step_functions/      # Orchestration state machine ✅
-│   ├── ai_enrichment/       # Comprehend, Rekognition, SageMaker (Phase 6)
-│   ├── hot_store/           # DynamoDB tables (Phase 5)
-│   ├── analytics/           # Glue crawler, Athena (Phase 8)
+│   ├── step_functions/      # State machine + Comprehend AI ✅
+│   ├── hot_store/           # DynamoDB tables ✅
+│   ├── orchestration/       # Merge Lambda ✅
+│   ├── analytics/           # Glue crawler, Athena ✅
 │   └── observability/       # CloudWatch dashboards, alarms (Phase 9)
 ├── lambdas/             # Python Lambda function code
 │   ├── etl/            # Kinesis consumer (normalize & write to S3)
 │   ├── merge/          # Merge AI outputs, write to storage
-│   └── replay/         # DLQ replay utility
-├── scripts/            # Utility scripts for testing/operations
+│   └── replay/         # DLQ replay utility (Phase 9)
+├── dashboard/          # Browser-based analytics dashboard ✅
+│   ├── index.html     # Main HTML file
+│   ├── styles.css     # Dark theme styling
+│   └── app.js         # Chart.js + AWS SDK integration
 └── docs/               # Project documentation
 ```
 
@@ -249,13 +252,14 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 - All environments initialized (dev, stg, prod)
 
 **Phase 1: Data Lake Foundation**
-- S3 bucket: `ai-dp-data-lake-dev-us-west-1`
+- S3 bucket: `ai-dp-data-lake-dev-us-west-2`
 - Three-layer architecture (raw/processed/curated)
 - Lifecycle policies, versioning, encryption
 
 **Phase 2: Streaming Ingestion**
 - API Gateway HTTP API + Kinesis Data Streams
 - ETL Lambda function (Python 3.11)
+- Idempotent writes (Kinesis sequence numbers as S3 filenames)
 - End-to-end tested: API → Kinesis → Lambda → S3
 
 **Phase 3: Batch Ingestion EventBridge**
@@ -284,18 +288,19 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 
 **Phase 8: Analytics & Query Layer**
 - Glue Crawler + Athena: SQL queries on S3 data lake
-- Python Streamlit dashboard with Plotly visualizations
+- Browser-based dashboard (HTML/CSS/JS + Chart.js)
 - Dual-query strategy: DynamoDB (real-time) + Athena (historical)
-- Intelligent caching: 5-min TTL (Athena), 1-min TTL (DynamoDB)
-- Interactive features: Auto-refresh, CSV export, color-coded sentiment
+- Responsive design: Real-time metrics, sentiment charts, entity analysis
+- Zero dependencies: Runs directly from file system or S3 static hosting
 
 ### 🔄 Next Phase
 
 **Phase 9: Production Hardening** (Next)
-- Lambda unit tests with pytest + moto
-- CloudWatch alarms for critical components
-- Load testing streaming path (1000 events)
-- Security review and cost optimization
+- CloudWatch alarms for all critical components
+- API Gateway throttling and rate limiting
+- Lambda unit tests (pytest + moto)
+- Load testing streaming path
+- Security review (IAM audit, tfsec scan)
 
 ### 📋 Planned
 
@@ -304,6 +309,7 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 ## Documentation
 
 - **[Project Overview](docs/ai-dp%20overview%20notion.md)**: Comprehensive architecture guide
+- **[Data Flow](docs/data_flow.md)**: End-to-end data flow documentation
 - **[Roadmap](docs/roadmap.md)**: Implementation phases and tasks
 - **[CLAUDE.md](CLAUDE.md)**: Development standards and patterns
 - **[Error Log](docs/errorlog.md)**: Common issues and solutions
@@ -316,30 +322,32 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 4. **SECURITY-FIRST**: OIDC authentication, least-privilege IAM, no long-term credentials
 5. **ENVIRONMENT ISOLATION**: Strict separation between dev/staging/prod
 
-## CI/CD Pipeline
+## CI/CD Pipeline (Phase 10)
 
-The project uses GitHub Actions with AWS OIDC for secure, automated deployments:
+> **Note:** CI/CD deferred to Phase 10 after all infrastructure is built and proven working.
 
+**Planned implementation:**
 - **CI Workflow** (Pull Requests): Terraform fmt, validate, plan, security scanning
 - **Deploy Workflow** (Main Branch): Automated deployment with approval gates
 - **Environment Promotion**: dev → staging → production
+- **OIDC Authentication**: No long-term credentials
 
 ## Cost Optimization
 
-- S3 lifecycle policies for data archival
-- DynamoDB on-demand pricing (or provisioned with auto-scaling)
-- Lambda reserved concurrency for predictable workloads
-- Kinesis shard scaling based on traffic patterns
-- SageMaker endpoint auto-scaling
+- S3 lifecycle policies (IA → Glacier → expiration)
+- DynamoDB on-demand pricing + TTL auto-cleanup
+- Athena partition pruning (90%+ cost reduction)
+- Kinesis single-shard for dev (scale as needed)
+- Separate Athena results bucket with 7-day lifecycle
 
 ## Security
 
-- All data encrypted at rest (S3, DynamoDB)
-- TLS for data in transit
-- IAM least-privilege roles
-- VPC endpoints for AWS service access
-- DLQs for error handling
-- CloudWatch alarms for anomaly detection
+- All data encrypted at rest (S3 SSE-AES256, DynamoDB)
+- TLS/HTTPS enforced via bucket policies
+- IAM least-privilege roles (scoped to specific prefixes)
+- Public access blocked on all S3 buckets
+- SQS DLQs for error handling and retry
+- Point-in-time recovery enabled on DynamoDB
 
 ## Contributing
 
@@ -355,13 +363,6 @@ This is a personal portfolio project. Contributions, suggestions, and feedback a
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Contact
-
-**Project Author**: [Your Name]
-- GitHub: [@your-username](https://github.com/your-username)
-- LinkedIn: [Your Profile](https://linkedin.com/in/your-profile)
-- Email: your.email@example.com
-
 ## Acknowledgments
 
 - AWS Architecture Center for best practices
@@ -370,4 +371,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Built with AWS, Terraform, and Python**
+**Built with AWS, Terraform, and Python** | **Portfolio Project for Cloud Engineering Roles**

@@ -3,14 +3,60 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 import boto3
 
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """Custom JSON encoder that formats floats without scientific notation.
+
+    This fixes Athena HIVE_CURSOR_ERROR caused by OpenX JsonSerDe not parsing
+    scientific notation (e.g., 3.683771e-06) in nested structs.
+    """
+    def encode(self, obj):
+        
+        if isinstance(obj, dict):
+            parts = []
+
+            for key, value in obj.items():
+                key_text = json.dumps(key)          # make key JSON-safe
+                value_text = self.encode(value)     # encode value (recursive)
+                parts.append(f"{key_text}: {value_text}")
+
+            body = ", ".join(parts)
+            return "{" + body + "}"
+        
+        elif isinstance(obj, list):
+            items = []
+
+            for item in obj:
+                items.append(self.encode(item))     # encode each item
+
+            body = ", ".join(items)
+            return "[" + body + "]"
+        
+        elif isinstance(obj, float):
+            # Convert to decimal (no scientific notation)
+            text = f"{obj:.10f}"
+            text = text.rstrip("0").rstrip(".")
+            return text
+        
+        elif isinstance(obj, (int, bool)) or obj is None:
+            return json.dumps(obj)
+        elif isinstance(obj, str):
+            return json.dumps(obj)
+        else:
+            return json.dumps(obj)
+
+
 logger = logging.getLogger()
 logger.setLevel(LOG_LEVEL)
 
 DATA_LAKE_BUCKET = os.environ.get('DATA_LAKE_BUCKET')
 PROCESSED_PREFIX = os.environ.get('PROCESSED_PREFIX', 'processed/')
+CURATED_PREFIX = os.environ.get('CURATED_PREFIX', 'curated/')
 DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE')
 TTL_DAYS = int(os.environ.get('TTL_DAYS', '30'))
 
@@ -36,11 +82,20 @@ def lambda_handler(event, context):
 
     try:
         record_id = write_to_dynamodb(enriched_data, s3_key)
-        logger.info(f"✅ Full success: S3={s3_key}, DynamoDB={record_id}")
+
+        # Update curated layer summary (non-critical, don't fail if this errors)
+        try:
+            curated_key = update_curated_summary(enriched_data)
+        except Exception as curated_error:
+            logger.warning(f"⚠️ Curated summary update failed (non-critical): {str(curated_error)}")
+            curated_key = None
+
+        logger.info(f"✅ Full success: S3={s3_key}, DynamoDB={record_id}, Curated={curated_key}")
         return {
             'statusCode': 200,
             'processed_s3_key': s3_key,
             'dynamodb_record_id': record_id,
+            'curated_summary_key': curated_key,
             'message': 'Full merge complete'
         }
     except Exception as dynamodb_error:
@@ -58,19 +113,82 @@ def validate_environment():
     logger.info(f"✅ Environment validated: bucket={DATA_LAKE_BUCKET}, table={DYNAMODB_TABLE}, ttl={TTL_DAYS}d")
 
 
+def get_text_preview(bucket, key, max_length=500):
+    """Fetch original text from S3 raw file for dashboard preview.
+
+    Args:
+        bucket: S3 bucket name
+        key: S3 object key
+        max_length: Maximum characters to store (default 500)
+
+    Returns:
+        Truncated text preview string, or None if extraction fails
+    """
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        raw_data = json.loads(response['Body'].read().decode('utf-8'))
+
+        # Extract text from common field names
+        text = (
+            raw_data.get('text') or
+            raw_data.get('content') or
+            raw_data.get('message') or
+            raw_data.get('body') or
+            None
+        )
+
+        if not text:
+            logger.debug("No text field found in raw data")
+            return None
+
+        # Truncate for DynamoDB storage efficiency
+        if len(text) > max_length:
+            return text[:max_length] + "..."
+        return text
+
+    except Exception as e:
+        logger.warning(f"Could not fetch text preview from s3://{bucket}/{key}: {e}")
+        return None
+
+
 def merge_ai_results(source_object, ai_enrichment, processing_metadata):
     """Combine Step Functions input into enriched data structure."""
+    # Fetch text preview from raw S3 file for dashboard display
+    text_preview = get_text_preview(
+        source_object.get('bucket'),
+        source_object.get('key')
+    )
+
     sentiment = ai_enrichment.get('sentiment', {})
     entities = ai_enrichment.get('entities', {}).get('Entities', [])
 
-
     top_sentiment = sentiment.get('Sentiment', 'UNKNOWN')
-    sentiment_scores = sentiment.get('SentimentScore', {})
-    top_sentiment_score = sentiment_scores.get(top_sentiment.capitalize(), 0.0)
+    raw_scores = sentiment.get('SentimentScore', {})
+    top_sentiment_score = raw_scores.get(top_sentiment.capitalize(), 0.0)
+
+    # Format sentiment scores without scientific notation (fixes Athena HIVE_CURSOR_ERROR)
+    # Python's default JSON serialization uses scientific notation for very small floats
+    # which the OpenX JsonSerDe in Athena/Glue cannot parse correctly
+    sentiment_scores = {
+        'Positive': float(f"{raw_scores.get('Positive', 0.0):.10f}"),
+        'Negative': float(f"{raw_scores.get('Negative', 0.0):.10f}"),
+        'Neutral': float(f"{raw_scores.get('Neutral', 0.0):.10f}"),
+        'Mixed': float(f"{raw_scores.get('Mixed', 0.0):.10f}")
+    }
 
 
     entity_texts = [entity['Text'] for entity in entities if 'Text' in entity]
 
+    # Format entity details without scientific notation in Score field
+    entity_details = []
+    for entity in entities:
+        entity_details.append({
+            'BeginOffset': entity.get('BeginOffset', 0),
+            'EndOffset': entity.get('EndOffset', 0),
+            'Score': float(f"{entity.get('Score', 0.0):.10f}"),
+            'Text': entity.get('Text', ''),
+            'Type': entity.get('Type', '')
+        })
 
     timestamp_str = processing_metadata.get('timestamp', datetime.now(timezone.utc).isoformat())
     record_id = f"{timestamp_str}-{uuid.uuid4().hex[:8]}"
@@ -79,11 +197,12 @@ def merge_ai_results(source_object, ai_enrichment, processing_metadata):
         'recordId': record_id,
         'timestamp': int(datetime.now(timezone.utc).timestamp() * 1000),
         'recordType': 'text',
+        'textPreview': text_preview,
         'sentiment': top_sentiment,
         'sentimentScore': round(top_sentiment_score, 4),
         'sentimentScores': sentiment_scores,
         'entities': entity_texts,
-        'entityDetails': entities,
+        'entityDetails': entity_details,
         'rawDataLocation': f"s3://{source_object.get('bucket')}/{source_object.get('key')}",
         'processingMetadata': processing_metadata,
         'mergedAt': datetime.now(timezone.utc).isoformat() + 'Z',
@@ -101,10 +220,13 @@ def write_to_s3_processed(enriched_data):
     partition = f"year={now.year}/month={now.month:02d}/day={now.day:02d}"
     object_key = f"{PROCESSED_PREFIX}{partition}/{uuid.uuid4()}.json"
 
+    # Use custom encoder to avoid scientific notation in floats
+    json_body = DecimalEncoder().encode(enriched_data)
+
     s3_client.put_object(
         Bucket=DATA_LAKE_BUCKET,
         Key=object_key,
-        Body=json.dumps(enriched_data, indent=2),
+        Body=json_body,
         ContentType='application/json'
     )
 
@@ -133,6 +255,10 @@ def write_to_dynamodb(enriched_data, s3_key):
         'expiresAt': {'N': str(ttl_expiration)}
     }
 
+    # Add textPreview if available (optional field for dashboard display)
+    if enriched_data.get('textPreview'):
+        item['textPreview'] = {'S': enriched_data['textPreview']}
+
     dynamodb_client.put_item(
         TableName=DYNAMODB_TABLE,
         Item=item
@@ -140,3 +266,67 @@ def write_to_dynamodb(enriched_data, s3_key):
 
     logger.info(f"🗄️ Wrote to DynamoDB: recordId={record_id}, TTL expires at {ttl_expiration} ({TTL_DAYS}d)")
     return record_id
+
+
+def update_curated_summary(enriched_data):
+    """Update the curated layer with a running summary for fast dashboard access.
+
+    This demonstrates the 3-tier data lake pattern:
+    - Raw: Original ingested data
+    - Processed: AI-enriched data
+    - Curated: Business-ready aggregated summaries
+    """
+    summary_key = f"{CURATED_PREFIX}latest_summary.json"
+
+    # Try to read existing summary, or create new one
+    try:
+        response = s3_client.get_object(Bucket=DATA_LAKE_BUCKET, Key=summary_key)
+        summary = json.loads(response['Body'].read().decode('utf-8'))
+    except s3_client.exceptions.NoSuchKey:
+        # First record - initialize summary
+        summary = {
+            'sentiment_counts': {'POSITIVE': 0, 'NEGATIVE': 0, 'NEUTRAL': 0, 'MIXED': 0},
+            'total_records': 0,
+            'top_entities': {},
+            'first_record_at': enriched_data['mergedAt']
+        }
+    except Exception as e:
+        logger.warning(f"Could not read existing summary, creating new: {e}")
+        summary = {
+            'sentiment_counts': {'POSITIVE': 0, 'NEGATIVE': 0, 'NEUTRAL': 0, 'MIXED': 0},
+            'total_records': 0,
+            'top_entities': {},
+            'first_record_at': enriched_data['mergedAt']
+        }
+
+    # Update counts
+    sentiment = enriched_data.get('sentiment', 'UNKNOWN')
+    if sentiment in summary['sentiment_counts']:
+        summary['sentiment_counts'][sentiment] += 1
+    summary['total_records'] += 1
+
+    # Track top entities (keep top 10 by count)
+    for entity in enriched_data.get('entities', []):
+        if entity and len(entity) > 2:  # Skip very short strings
+            summary['top_entities'][entity] = summary['top_entities'].get(entity, 0) + 1
+
+    # Sort and keep only top 10 entities
+    sorted_entities = sorted(summary['top_entities'].items(), key=lambda x: x[1], reverse=True)[:10]
+    summary['top_entities'] = dict(sorted_entities)
+
+    # Update metadata
+    summary['last_updated'] = enriched_data['mergedAt']
+    summary['latest_sentiment'] = sentiment
+    summary['latest_confidence'] = enriched_data.get('sentimentScore', 0)
+    summary['latest_text_preview'] = enriched_data.get('textPreview', '')[:100] if enriched_data.get('textPreview') else ''
+
+    # Write updated summary
+    s3_client.put_object(
+        Bucket=DATA_LAKE_BUCKET,
+        Key=summary_key,
+        Body=json.dumps(summary, indent=2),
+        ContentType='application/json'
+    )
+
+    logger.info(f"📈 Updated curated summary: total={summary['total_records']}, sentiment={sentiment}")
+    return summary_key

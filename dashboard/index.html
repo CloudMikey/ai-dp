@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-DP Analytics Dashboard</title>
+
+    <!-- Our custom styles -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Chart.js library for making charts (pie chart, bar chart, etc.) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <!-- AWS SDK to connect to DynamoDB (our database) -->
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1543.0.min.js"></script>
+</head>
+<body>
+    <!-- Main container holds everything -->
+    <div class="container">
+
+        <!-- Top header section -->
+        <header>
+            <h1>AI-DP Analytics Dashboard</h1>
+            <p class="subtitle">Real-time Sentiment Analysis</p>
+        </header>
+
+        <!-- Five boxes showing key numbers (real-time from DynamoDB) -->
+        <section class="metrics-grid">
+            <!-- Box 1: Total records -->
+            <div class="metric-card">
+                <h3 id="total-records">-</h3>
+                <p>Total Records</p>
+            </div>
+
+            <!-- Box 2: Positive sentiment count -->  
+            <div class="metric-card positive">
+                <h3 id="positive-count">-</h3>
+                <p>Positive</p>
+            </div>
+
+            <!-- Box 3: Neutral sentiment count -->
+            <div class="metric-card neutral">
+                <h3 id="neutral-count">-</h3>
+                <p>Neutral</p>
+            </div>
+
+            <!-- Box 4: Negative sentiment count -->
+            <div class="metric-card negative">
+                <h3 id="negative-count">-</h3>
+                <p>Negative</p>
+            </div>
+
+            <!-- Box 5: Mixed sentiment count -->
+            <div class="metric-card mixed">
+                <h3 id="mixed-count">-</h3>
+                <p>Mixed</p>
+            </div>
+        </section>
+
+        <!-- Pipeline Status Section (shows operational health) -->
+        <section class="pipeline-status">
+            <h2>Pipeline Status</h2>
+            <div class="status-grid">
+                <div class="status-card">
+                    <span class="status-icon">📊</span>
+                    <div class="status-info">
+                        <h4 id="total-processed">-</h4>
+                        <p>Total Processed</p>
+                    </div>
+                </div>
+                <div class="status-card">
+                    <span class="status-icon">🕐</span>
+                    <div class="status-info">
+                        <h4 id="last-record-time">-</h4>
+                        <p>Last Record</p>
+                    </div>
+                </div>
+                <div class="status-card">
+                    <span class="status-icon">⚡</span>
+                    <div class="status-info">
+                        <h4 id="pipeline-health">-</h4>
+                        <p>Pipeline Health</p>
+                    </div>
+                </div>
+                <div class="status-card">
+                    <span class="status-icon">⚠️</span>
+                    <div class="status-info">
+                        <h4 id="dlq-count">-</h4>
+                        <p>DLQ Messages</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Section (side by side: Sentiment + Entity Types) -->
+        <section class="charts-row">
+            <!-- Pie chart showing sentiment breakdown -->
+            <div class="chart-section">
+                <h2>Sentiment Distribution</h2>
+                <div class="chart-container">
+                    <canvas id="sentiment-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Entity Type Breakdown (from Comprehend NLP) -->
+            <div class="chart-section">
+                <h2>Entity Types Detected</h2>
+                <div class="chart-container">
+                    <canvas id="entity-chart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Table showing recent records from DynamoDB -->
+        <section class="table-section">
+            <div class="section-header"> 
+                <h2>Recent Events</h2>
+                <button id="refresh-btn" onclick="loadData()">Refresh</button>
+            </div>
+
+            <table id="events-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Text</th>
+                        <th>Sentiment</th>
+                        <th>Confidence</th>
+                        <th>Entities</th>
+                    </tr>
+                </thead>
+                <tbody id="events-tbody">
+                    <!-- Data will be added here by JavaScript -->
+                    <tr>
+                        <td colspan="5">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Footer at bottom -->
+        <footer>
+            <p>Last updated: <span id="last-update">Never</span></p>
+        </footer>
+    </div>
+
+    <!-- Load our configuration (AWS credentials) -->
+    <script src="config.js"></script>
+
+    <!-- Load our main JavaScript code -->
+    <script src="app.js"></script>
+</body>
+</html>

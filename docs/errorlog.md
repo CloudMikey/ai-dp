@@ -443,6 +443,68 @@ NOT AVAILABLE in:
 
 ---
 
-**Last Updated**: 2025-01-24
-**Total Errors Documented**: 3
-**Total Preventive Patterns Documented**: 3
+### Pattern #4: Idempotent S3 Writes with Kinesis Sequence Numbers (Phase 2 Enhancement)
+
+**Phase**: Phase 2 - Streaming Ingestion Path Enhancement
+**Date**: 2026-01-11
+**Context**: Improving ETL Lambda to prevent duplicate S3 files on retry
+
+**Pattern Used**: Replaced UUID-based filenames with Kinesis sequence numbers for idempotent writes
+
+**Implementation**:
+```python
+# lambdas/etl/app.py
+
+def process_record(record: Dict[str, Any]) -> Dict[str, str]:
+    """Decode Kinesis record → Validate → Normalize → Write to S3."""
+
+    # Extract sequence number for idempotent S3 writes (prevents duplicates on retry)
+    sequence_number = record['kinesis']['sequenceNumber']
+
+    # ... validation and normalization ...
+
+    s3_key = write_to_s3(normalized_data, timestamp, sequence_number)
+    return {'s3_key': s3_key, 'status': 'success'}
+
+def write_to_s3(data: Dict[str, Any], timestamp: datetime, sequence_number: str) -> str:
+    """Write to S3 with date partitions.
+
+    Uses Kinesis sequence number for idempotent writes - retries overwrite same file.
+    """
+    year = timestamp.strftime('%Y')
+    month = timestamp.strftime('%m')
+    day = timestamp.strftime('%d')
+
+    # Use sequence number instead of UUID for idempotent writes
+    s3_key = f"{RAW_PREFIX}year={year}/month={month}/day={day}/{sequence_number}.json"
+
+    # ... write to S3 ...
+```
+
+**Before (UUID):**
+- Filename: `raw/year=2025/month=01/day=11/abc123-def456-789.json`
+- Retry behavior: Creates NEW file with different UUID → Duplicates in S3
+- Problem: Same record processed twice = two S3 files
+
+**After (Sequence Number):**
+- Filename: `raw/year=2025/month=01/day=11/49670192848271239842602659163669398716174920392225325058.json`
+- Retry behavior: Overwrites SAME file → No duplicates
+- Benefit: Same record processed twice = one S3 file (idempotent)
+
+**Why This Works**:
+- Kinesis sequence numbers are unique per shard and guaranteed by AWS
+- When Lambda retries a failed record, it sends the **same sequence number**
+- Writing to the same S3 key overwrites the previous attempt instead of creating duplicates
+- No additional infrastructure needed (no deduplication logic, no DynamoDB tracking)
+
+**Key Principle**: For streaming data pipelines, use deterministic identifiers (sequence numbers, event IDs) as filenames to ensure idempotent writes. Avoid random identifiers (UUIDs) that create duplicates on retry.
+
+**Result**: ETL Lambda now implements production-ready idempotent writes for streaming ingestion path
+
+**Note**: Batch ingestion path (direct S3 uploads) bypasses ETL Lambda, so clients control filenames. Deduplication for batch uploads is the client's responsibility.
+
+---
+
+**Last Updated**: 2026-01-11
+**Total Errors Documented**: 4
+**Total Preventive Patterns Documented**: 4

@@ -1,8 +1,8 @@
 # Project Status
 
-**Last Updated:** 2025-12-27
+**Last Updated:** 2026-01-24
 
-> **Quick Status:** Phases 0-8 complete (90% overall progress). Ready to begin Phase 9: Production Hardening.
+> **Quick Status:** Phases 0-8 complete (90% overall progress). Recent enhancement: Dashboard optimization - moved sentiment chart and total count from Athena to Curated S3 for instant loading (~100ms vs ~3s). Ready to begin Phase 9: Production Hardening.
 
 ---
 
@@ -14,7 +14,7 @@
 - Terraform 1.13.0 with native S3 locking (`use_lockfile = true`)
 
 ### Phase 1: Data Lake Foundation (100%)
-- S3 bucket deployed: `ai-dp-data-lake-dev-us-west-1`
+- S3 bucket deployed: `ai-dp-data-lake-dev-us-west-2`
 - Three-layer architecture: `raw/`, `processed/`, `curated/`
 - Lifecycle policies configured per layer (different retention periods)
 - Security: AES256 encryption, versioning, public access blocked, TLS enforced
@@ -22,7 +22,7 @@
 - All layers tested with sample data
 
 ### Phase 2: Streaming Ingestion Path (100%)
-- HTTP API Gateway deployed: `https://57cnx9jpje.execute-api.us-west-1.amazonaws.com/ingest`
+- HTTP API Gateway deployed: `https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest`
 - Kinesis Data Stream operational: `ai-dp-dev-ingestion-stream` (1 shard)
 - API Gateway → Kinesis direct integration (no Lambda proxy)
 - ETL Lambda function deployed: `ai-dp-dev-etl` (Python 3.11, 256MB, 60s timeout)
@@ -30,6 +30,7 @@
 - SQS Dead Letter Queue configured: `ai-dp-dev-etl-dlq` (14-day retention)
 - End-to-end streaming path tested: API → Kinesis → Lambda → S3 `raw/`
 - S3 partitioning verified: `raw/year=YYYY/month=MM/day=DD/`
+- **Idempotent writes:** Kinesis sequence numbers used as S3 filenames (prevents duplicates on retry) ✅ 2026-01-11
 
 ### Phase 3: Batch Ingestion Path (100%)
 - EventBridge rule deployed: `ai-dp-dev-s3-batch-ingestion`
@@ -88,12 +89,25 @@
 - Athena workgroup: `ai-dp-dev-workgroup` (enforces query result location, CloudWatch metrics)
 - S3 Athena results bucket: `ai-dp-athena-results-dev-us-west-2` (7-day lifecycle)
 - Glue table created: `processed` (13 columns + 3 partition keys: year/month/day)
-- Dashboard created: Python Streamlit with Plotly visualizations (`dashboard/streamlit_app.py`, 403 lines)
-- Dashboard features: Sentiment pie chart + bar chart (Athena), recent events table (DynamoDB), real-time metrics, auto-refresh, CSV export
-- Intelligent caching: 5-min TTL for Athena queries (historical), 1-min TTL for DynamoDB scans (real-time)
-- Cost optimization: 90% reduction in API calls through caching strategy
-- End-to-end testing: Glue Crawler → Athena queries → Streamlit dashboard visualization
-- Setup automation: PowerShell setup script for venv and dependencies
+- Dashboard created: Vanilla HTML/CSS/JavaScript with Chart.js and AWS SDK v2
+- Dashboard files: `index.html`, `styles.css`, `app.js`, `config.js`, `README.md`
+- Dashboard features:
+  - Sentiment distribution pie chart (**Curated S3** - pre-aggregated, ~100ms) ✅ Optimized 2026-01-24
+  - Entity type analysis doughnut chart (Athena with UNNEST - demonstrates SQL skills)
+  - Real-time metrics cards: Total, Positive, Neutral, Negative, Mixed (DynamoDB, ~50ms)
+  - Recent events table (20 most recent from DynamoDB, ~50ms)
+  - Pipeline status: Total processed (**Curated S3**, ~100ms), last record time, DLQ health check
+- **Dashboard Optimization (2026-01-24):**
+  | Feature | Before | After | Why |
+  |---------|--------|-------|-----|
+  | Sentiment Chart | Athena (~3s) | Curated S3 (~100ms) | Pre-aggregated, instant |
+  | Total Processed | Athena (~3s) | Curated S3 (~100ms) | Pre-calculated by Merge Lambda |
+  | Entity Chart | Athena (~3s) | Athena (~3s) | Kept - demonstrates UNNEST SQL |
+  | Metrics Cards | DynamoDB (~50ms) | DynamoDB (~50ms) | Real-time, last 30 days |
+- Performance: Parallel queries (DynamoDB + S3 + Athena run simultaneously), 60s auto-refresh
+- Responsive design: Desktop (5-column), tablet (3-column), mobile (2-column)
+- End-to-end testing: Glue Crawler → Athena queries → Browser dashboard visualization
+- Zero dependencies: Runs directly from browser (local file or S3 static hosting)
 
 ---
 
@@ -153,8 +167,12 @@ Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░�
 8. **Dual Storage Strategy:** DynamoDB for hot queries (recent data, low latency), S3 for historical analytics (cost-effective, unlimited retention)
 9. **Error Handling Layers:** Implement multiple safety nets: DLQ, retries, catch blocks, CloudWatch alarms
 10. **Date Partitioning:** Always partition S3 data by date (year/month/day) for efficient Athena queries and cost optimization
-11. **Streamlit for Data Dashboards:** Python Streamlit provides server-side AWS authentication (more secure than browser-based), built-in caching with `@st.cache_data`, single-file simplicity, widely used in industry for ML/data visualization
-12. **Caching Strategy:** Different TTLs for different data freshness needs: 5-min for historical (Athena), 1-min for real-time (DynamoDB) = 90% cost reduction
+11. **Browser-Based Dashboards:** Vanilla HTML/CSS/JavaScript with AWS SDK provides zero-dependency deployment (runs from file system or S3 static hosting), no server needed, simple to demo in portfolio, easy to understand and explain in interviews
+12. **Three-Tier Data Strategy:** Use the right data source for each feature:
+    - **Curated S3:** Pre-aggregated metrics (instant ~100ms, Merge Lambda updates on each record)
+    - **DynamoDB:** Real-time hot data (last 30 days with TTL, ~50ms latency)
+    - **Athena:** Complex SQL analytics (UNNEST for nested arrays, ~3s but demonstrates SQL skills)
+13. **Dashboard Optimization (2026-01-24):** Moved sentiment chart and total count from Athena to Curated S3 for instant loading - demonstrates understanding of when to use each AWS service (interview talking point)
 
 ---
 
@@ -176,17 +194,18 @@ User → S3 raw/ → EventBridge → Step Functions → Comprehend → Merge Lam
 ```
 S3 processed/ → Glue Crawler → Glue Data Catalog → Athena (SQL queries)
                                                             ↓
-DynamoDB (hot) + Athena (historical) ← Streamlit Dashboard (Python)
-                                       - Plotly visualizations
-                                       - Intelligent caching (5-min/1-min TTL)
-                                       - Auto-refresh, CSV export
+DynamoDB (hot) + Athena (historical) ← Browser Dashboard (HTML/CSS/JS)
+                                       - Chart.js visualizations (pie, doughnut)
+                                       - AWS SDK for JavaScript v2
+                                       - Parallel queries, 60s auto-refresh
+                                       - Responsive design
 ```
 
 ---
 
 ## Development Environment
 
-- **AWS Region:** us-west-1
+- **AWS Region:** us-west-2
 - **AWS Account:** Development account
 - **Terraform Version:** >= 1.11.0
 - **Backend:** S3 with native locking (`use_lockfile = true`)
@@ -199,10 +218,10 @@ DynamoDB (hot) + Athena (historical) ← Streamlit Dashboard (Python)
 
 ### S3
 - `tf-state-aidp` (Terraform state bucket)
-- `ai-dp-data-lake-dev-us-west-1` (Data lake with raw/, processed/, curated/ layers)
+- `ai-dp-data-lake-dev-us-west-2` (Data lake with raw/, processed/, curated/ layers)
 
 ### API Gateway
-- HTTP API: `https://57cnx9jpje.execute-api.us-west-1.amazonaws.com/ingest`
+- HTTP API: `https://57cnx9jpje.execute-api.us-west-2.amazonaws.com/ingest`
 
 ### Kinesis
 - `ai-dp-dev-ingestion-stream` (1 shard)
@@ -272,7 +291,7 @@ terraform destroy
 ### Testing Streaming Path
 ```powershell
 # Send test event to API Gateway
-curl -X POST https://57cnx9jpje.execute-api.us-west-1.amazonaws.com/ingest `
+curl -X POST https://57cnx9jpje.execute-api.us-west-2.amazonaws.com/ingest `
   -H "Content-Type: application/json" `
   -d '{"message": "test", "timestamp": "2025-01-30T12:00:00Z"}'
 ```
@@ -280,14 +299,14 @@ curl -X POST https://57cnx9jpje.execute-api.us-west-1.amazonaws.com/ingest `
 ### Testing Batch Path
 ```powershell
 # Upload file to S3 raw/ (triggers EventBridge → Step Functions)
-aws s3 cp sample-text.txt s3://ai-dp-data-lake-dev-us-west-1/raw/sample-text.txt
+aws s3 cp sample-text.txt s3://ai-dp-data-lake-dev-us-west-2/raw/sample-text.txt
 ```
 
 ### Check Step Functions Executions
 ```powershell
 # List recent executions
 aws stepfunctions list-executions `
-  --state-machine-arn "arn:aws:states:us-west-1:ACCOUNT:stateMachine:ai-dp-dev-orchestrator" `
+  --state-machine-arn "arn:aws:states:us-west-2:ACCOUNT:stateMachine:ai-dp-dev-orchestrator" `
   --max-results 5
 ```
 

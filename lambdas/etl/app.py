@@ -4,8 +4,7 @@ import base64
 import json
 import logging
 import os
-import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 import boto3
@@ -56,9 +55,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 def process_record(record: Dict[str, Any]) -> Dict[str, str]:
     """Decode Kinesis record → Validate → Normalize → Write to S3."""
 
+    # Extract sequence number for idempotent S3 writes (prevents duplicates on retry)
+    sequence_number = record['kinesis']['sequenceNumber']
+
     encoded_data = record['kinesis']['data']
     decoded_data = base64.b64decode(encoded_data).decode('utf-8')
     data = json.loads(decoded_data)
+    #Base64 String > Bytes > UTF-8 String > Python Dictionary
 
     validated_data = validate_json(data)
     normalized_data = normalize_data(validated_data)
@@ -67,7 +70,7 @@ def process_record(record: Dict[str, Any]) -> Dict[str, str]:
     timestamp_str = normalized_data.get('event_timestamp') or normalized_data.get('processed_at')
     timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
 
-    s3_key = write_to_s3(normalized_data, timestamp)
+    s3_key = write_to_s3(normalized_data, timestamp, sequence_number)
 
     return {
         's3_key': s3_key,
@@ -92,7 +95,7 @@ def validate_json(data: Dict[str, Any]) -> Dict[str, Any]:
 def normalize_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Standardize timestamps to ISO8601, add metadata."""
     normalized = data.copy()
-
+    #Prevent mutation of orginal data
 
     if 'timestamp' in normalized and 'event_timestamp' not in normalized:
         normalized['event_timestamp'] = normalized.pop('timestamp')
@@ -104,25 +107,27 @@ def normalize_data(data: Dict[str, Any]) -> Dict[str, Any]:
             datetime.fromisoformat(str(timestamp_value).replace('Z', '+00:00'))
         except (ValueError, TypeError):
             logger.warning(f"Invalid timestamp '{timestamp_value}', using current time")
-            normalized['event_timestamp'] = datetime.utcnow().isoformat() + 'Z'
+            normalized['event_timestamp'] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
-
-    normalized['processed_at'] = datetime.utcnow().isoformat() + 'Z'
+    normalized['processed_at'] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     normalized['lambda_version'] = os.environ.get('AWS_LAMBDA_FUNCTION_VERSION', 'unknown')
     normalized['lambda_name'] = os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'unknown')
 
     return normalized
 
 
-def write_to_s3(data: Dict[str, Any], timestamp: datetime) -> str:
-    """Write to S3 with date partitions (raw/year=YYYY/month=MM/day=DD/) for Athena."""
+def write_to_s3(data: Dict[str, Any], timestamp: datetime, sequence_number: str) -> str:
+    """Write to S3 with date partitions (raw/year=YYYY/month=MM/day=DD/) for Athena.
+
+    Uses Kinesis sequence number for idempotent writes - retries overwrite same file.
+    """
 
     year = timestamp.strftime('%Y')
     month = timestamp.strftime('%m')
     day = timestamp.strftime('%d')
-    unique_id = str(uuid.uuid4())
 
-    s3_key = f"{RAW_PREFIX}year={year}/month={month}/day={day}/{unique_id}.json"
+    # Use sequence number instead of UUID for idempotent writes
+    s3_key = f"{RAW_PREFIX}year={year}/month={month}/day={day}/{sequence_number}.json"
 
 
     json_data = json.dumps(data, indent=2)
