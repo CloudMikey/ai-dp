@@ -155,8 +155,7 @@ module "ingestion_stream" {
   state_machine_arn         = module.step_functions.state_machine_arn
   create_eventbridge_target = true
 
-  # Kinesis configuration (1 shard = 1 MB/sec write capacity)
-  kinesis_shard_count     = 1
+  # Kinesis configuration (on-demand mode - pay per use)
   kinesis_retention_hours = 24
   kinesis_encryption_type = "NONE" # Use KMS in production
 

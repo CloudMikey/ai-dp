@@ -63,7 +63,7 @@ resource "aws_lambda_function" "merge" {
   source_code_hash = data.archive_file.merge_lambda.output_base64sha256
 
   runtime     = "python3.11"
-  handler     = "app.lambda_handler"
+  handler     = "merge_handler.lambda_handler"
   timeout     = 60
   memory_size = 256
 

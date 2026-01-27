@@ -489,25 +489,39 @@
 
 ### Tasks
 
-**1. Lambda Unit Tests**
-- Write unit tests for ETL Lambda (`lambdas/etl/test_app.py`)
-- Write unit tests for Merge Lambda (`lambdas/merge/test_app.py`)
-- Use `pytest` and `moto` for mocking AWS services
-- Achieve >70% code coverage (portfolio-appropriate)
+**1. Lambda Unit Tests** ✅ **COMPLETED**
+- ✅ Write unit tests for ETL Lambda (`lambdas/etl/test_etl.py`) - 17 tests
+- ✅ Write unit tests for Merge Lambda (`lambdas/merge/test_merge.py`) - 16 tests
+- ✅ Use `pytest` and `moto` for mocking AWS services
+- ✅ Achieve >70% code coverage (portfolio-appropriate) - **96% achieved**
 
-**Complete when:** Tests written, all tests pass, coverage threshold met
+**Implementation Notes:**
+- Renamed Lambda files to avoid module collision: `app.py` → `etl_handler.py` / `merge_handler.py`
+- Updated Terraform handler references in `modules/ingestion_stream/main.tf` and `modules/orchestration/main.tf`
+- Added `get_config()` lazy loading pattern for testability (env vars read at runtime, not import time)
+- Shared fixtures in `lambdas/conftest.py` (AWS credentials, sys.path setup)
+- Documentation: `docs/lambdatest.md`
 
-**2. Load Testing - Streaming Path**
-- Create load test script: `scripts/load-test-streaming.ps1`
-- Send 1000 events to API Gateway endpoint
-- Monitor:
-  - Lambda concurrency
-  - Kinesis iterator age
-  - Error rates
-  - P95 latency
-- Identify bottlenecks
+**Complete when:** ✅ Tests written, all tests pass, coverage threshold met
 
-**Complete when:** System handles 1000 events without errors, latency acceptable (<5s P95)
+**2. Load Testing - Streaming Path** ✅
+- Created load test script: `scripts/load-test-streaming.ps1`
+- Sent 1000 events to API Gateway endpoint
+- Monitored:
+  - Lambda concurrency (max: 1)
+  - Kinesis iterator age (0 seconds - no backlog)
+  - Error rates (0%)
+  - P95 latency (2044ms - well under 5s threshold)
+- Results: No bottlenecks identified at 1000-event scale
+
+**Load Test Results (Test Run: 993afa22):**
+- Events Sent: 1000 (100% success)
+- API Gateway Avg Latency: 267ms
+- Lambda P95 Duration: 2044ms
+- Lambda Errors: 0
+- DLQ Messages: 0
+
+**Complete when:** ✅ System handles 1000 events without errors, latency acceptable (<5s P95)
 
 **3. CloudWatch Dashboards**
 - Create operational dashboard in `modules/observability/`:
@@ -679,7 +693,7 @@ Phase 5 (DynamoDB):            ████████████████�
 Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
 Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
 Phase 8 (Analytics):           ████████████████████ 100% ✅
-Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
+Phase 9 (Production Hardening):██░░░░░░░░░░░░░░░░░░  11% (1/9 tasks)
 Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
@@ -724,4 +738,4 @@ Phase 10: CI/CD Pipeline (GitHub Actions)
 
 **Total Estimated Timeline:** 8-12 weeks
 
-**Last Updated:** 2026-01-24 (Dashboard optimization: Moved sentiment chart and total count from Athena to Curated S3 for instant loading)
+**Last Updated:** 2026-01-26 (Phase 9 Task 1: Lambda unit tests completed - 33 tests, 96% coverage)

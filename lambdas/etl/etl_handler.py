@@ -15,17 +15,23 @@ logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 
 s3_client = boto3.client('s3')
 
-DATA_LAKE_BUCKET = os.environ.get('DATA_LAKE_BUCKET')
-RAW_PREFIX = os.environ.get('RAW_PREFIX', 'raw/')
+
+def get_config():
+    """Get configuration from environment variables."""
+    bucket = os.environ.get('DATA_LAKE_BUCKET')
+    if not bucket:
+        raise ValueError("DATA_LAKE_BUCKET environment variable is not set")
+    return {
+        'bucket': bucket,
+        'raw_prefix': os.environ.get('RAW_PREFIX', 'raw/')
+    }
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Process Kinesis records and write to S3. Failed batches go to DLQ."""
     logger.info(f"Processing {len(event['Records'])} records from Kinesis")
 
-
-    if not DATA_LAKE_BUCKET:
-        raise ValueError("DATA_LAKE_BUCKET environment variable is not set")
+    config = get_config()
 
     successful = 0
     failed = 0
@@ -121,26 +127,28 @@ def write_to_s3(data: Dict[str, Any], timestamp: datetime, sequence_number: str)
 
     Uses Kinesis sequence number for idempotent writes - retries overwrite same file.
     """
+    config = get_config()
+    bucket = config['bucket']
+    raw_prefix = config['raw_prefix']
 
     year = timestamp.strftime('%Y')
     month = timestamp.strftime('%m')
     day = timestamp.strftime('%d')
 
     # Use sequence number instead of UUID for idempotent writes
-    s3_key = f"{RAW_PREFIX}year={year}/month={month}/day={day}/{sequence_number}.json"
-
+    s3_key = f"{raw_prefix}year={year}/month={month}/day={day}/{sequence_number}.json"
 
     json_data = json.dumps(data, indent=2)
 
     try:
         s3_client.put_object(
-            Bucket=DATA_LAKE_BUCKET,
+            Bucket=bucket,
             Key=s3_key,
             Body=json_data,
             ContentType='application/json'
         )
 
-        logger.info(f"Wrote to s3://{DATA_LAKE_BUCKET}/{s3_key}")
+        logger.info(f"Wrote to s3://{bucket}/{s3_key}")
         return s3_key
 
     except ClientError as e:

@@ -210,4 +210,4 @@ scratch/
 
 # Gemini CLI specific files
 GEMINI.md
-.gemini-clipboard/
+#.gemini-clipboard/

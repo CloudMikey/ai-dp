@@ -83,10 +83,6 @@ module "ingestion_stream" {
 - **`aws_region`**: AWS region for resources
 
 ### Kinesis Configuration
-- **`kinesis_shard_count`**: Number of shards (default: 1)
-  - 1 shard = 1 MB/sec write, 2 MB/sec read
-  - Scale based on throughput: 10 req/sec @ 1KB = 0.01 MB/sec (well within 1 shard)
-
 - **`kinesis_retention_hours`**: Data retention (default: 24, max: 8760)
   - 24 hours: Good for dev, low cost
   - 168 hours (7 days): Good for production debugging
@@ -292,25 +288,15 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/curated/test.json
 
 ## Capacity Planning
 
-### Shard Sizing Guide
+With **on-demand billing**, you no longer need to provision or manage shards. Kinesis automatically scales capacity based on your workload. This model is ideal for unpredictable or spiky workloads, as it eliminates the need for manual capacity planning.
 
-| Expected Throughput | Shard Count | Cost (approx) |
-|---------------------|-------------|---------------|
-| < 1 MB/sec          | 1           | ~$0.015/hr    |
-| 1-2 MB/sec          | 2           | ~$0.030/hr    |
-| 2-5 MB/sec          | 3-5         | ~$0.045-0.075/hr |
-
-**Example Calculations**:
-- 10 requests/sec × 1 KB payload = 10 KB/sec = 0.01 MB/sec → **1 shard**
-- 100 requests/sec × 5 KB payload = 500 KB/sec = 0.5 MB/sec → **1 shard**
-- 1000 requests/sec × 2 KB payload = 2000 KB/sec = 2 MB/sec → **2 shards**
-
-### Cost Breakdown (us-west-1, as of 2025)
+### Cost Breakdown (us-west-1, as of 2025 - On-Demand)
 
 **Kinesis**:
-- Shard Hour: $0.015/hour ($10.80/month per shard)
-- PUT Payload Unit (25KB): $0.014 per million units
-- Extended Retention: $0.02 per shard-hour for > 24 hours
+- Per-stream hour: ~$0.04 per hour
+- Data written: ~$0.20 per GB
+- Data read: ~$0.02 per GB
+- Extended Retention: $0.02 per hour for > 24 hours (billed per shard)
 
 **API Gateway HTTP API**:
 - First 300M requests: $1.00 per million
@@ -413,9 +399,9 @@ kinesis_kms_key_id      = aws_kms_key.kinesis.id
 
 ### Issue: High API Gateway latency
 
-**Cause**: Kinesis throttling or shard limit reached
-**Check**: Kinesis CloudWatch metrics for `WriteProvisionedThroughputExceeded`
-**Fix**: Increase `kinesis_shard_count` or implement client-side retry
+**Cause**: Kinesis throttling due to stream capacity limits.
+**Check**: Kinesis CloudWatch metrics for `WriteThroughputExceeded` (on-demand mode metric).
+**Fix**: Although Kinesis scales automatically in on-demand mode, there are still account and stream-level limits. If throttling occurs, you may need to request a service quota increase or analyze your partition key strategy to ensure even distribution.
 
 ---
 

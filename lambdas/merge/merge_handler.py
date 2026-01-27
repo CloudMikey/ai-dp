@@ -54,14 +54,21 @@ class DecimalEncoder(json.JSONEncoder):
 logger = logging.getLogger()
 logger.setLevel(LOG_LEVEL)
 
-DATA_LAKE_BUCKET = os.environ.get('DATA_LAKE_BUCKET')
-PROCESSED_PREFIX = os.environ.get('PROCESSED_PREFIX', 'processed/')
-CURATED_PREFIX = os.environ.get('CURATED_PREFIX', 'curated/')
-DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE')
-TTL_DAYS = int(os.environ.get('TTL_DAYS', '30'))
-
 s3_client = boto3.client('s3')
 dynamodb_client = boto3.client('dynamodb')
+
+
+def get_config():
+    """Get configuration from environment variables."""
+    bucket = os.environ.get('DATA_LAKE_BUCKET')
+    table = os.environ.get('DYNAMODB_TABLE')
+    return {
+        'bucket': bucket,
+        'table': table,
+        'processed_prefix': os.environ.get('PROCESSED_PREFIX', 'processed/'),
+        'curated_prefix': os.environ.get('CURATED_PREFIX', 'curated/'),
+        'ttl_days': int(os.environ.get('TTL_DAYS', '30'))
+    }
 
 
 def lambda_handler(event, context):
@@ -105,12 +112,13 @@ def lambda_handler(event, context):
 
 def validate_environment():
     """Validate required environment variables."""
-    if not DATA_LAKE_BUCKET:
+    config = get_config()
+    if not config['bucket']:
         raise ValueError("DATA_LAKE_BUCKET environment variable not set")
-    if not DYNAMODB_TABLE:
+    if not config['table']:
         raise ValueError("DYNAMODB_TABLE environment variable not set")
 
-    logger.info(f"✅ Environment validated: bucket={DATA_LAKE_BUCKET}, table={DYNAMODB_TABLE}, ttl={TTL_DAYS}d")
+    logger.info(f"✅ Environment validated: bucket={config['bucket']}, table={config['table']}, ttl={config['ttl_days']}d")
 
 
 def get_text_preview(bucket, key, max_length=500):
@@ -216,31 +224,32 @@ def merge_ai_results(source_object, ai_enrichment, processing_metadata):
 
 def write_to_s3_processed(enriched_data):
     """Write enriched data to S3 processed/ with date partitioning."""
+    config = get_config()
     now = datetime.now(timezone.utc)
     partition = f"year={now.year}/month={now.month:02d}/day={now.day:02d}"
-    object_key = f"{PROCESSED_PREFIX}{partition}/{uuid.uuid4()}.json"
+    object_key = f"{config['processed_prefix']}{partition}/{uuid.uuid4()}.json"
 
     # Use custom encoder to avoid scientific notation in floats
     json_body = DecimalEncoder().encode(enriched_data)
 
     s3_client.put_object(
-        Bucket=DATA_LAKE_BUCKET,
+        Bucket=config['bucket'],
         Key=object_key,
         Body=json_body,
         ContentType='application/json'
     )
 
-    logger.info(f"💾 Wrote to S3: s3://{DATA_LAKE_BUCKET}/{object_key}")
+    logger.info(f"💾 Wrote to S3: s3://{config['bucket']}/{object_key}")
     return object_key
 
 
 def write_to_dynamodb(enriched_data, s3_key):
     """Write enriched record to DynamoDB hot store with TTL."""
+    config = get_config()
     record_id = enriched_data['recordId']
     timestamp = enriched_data['timestamp']
 
-
-    ttl_expiration = int(datetime.now(timezone.utc).timestamp()) + (TTL_DAYS * 86400)
+    ttl_expiration = int(datetime.now(timezone.utc).timestamp()) + (config['ttl_days'] * 86400)
 
     item = {
         'recordId': {'S': record_id},
@@ -250,7 +259,7 @@ def write_to_dynamodb(enriched_data, s3_key):
         'sentimentScore': {'N': str(enriched_data['sentimentScore'])},
         'entities': {'L': [{'S': e} for e in enriched_data['entities']]},
         'rawDataLocation': {'S': enriched_data['rawDataLocation']},
-        'processedDataLocation': {'S': f"s3://{DATA_LAKE_BUCKET}/{s3_key}"},
+        'processedDataLocation': {'S': f"s3://{config['bucket']}/{s3_key}"},
         'mergedAt': {'S': enriched_data['mergedAt']},
         'expiresAt': {'N': str(ttl_expiration)}
     }
@@ -260,11 +269,11 @@ def write_to_dynamodb(enriched_data, s3_key):
         item['textPreview'] = {'S': enriched_data['textPreview']}
 
     dynamodb_client.put_item(
-        TableName=DYNAMODB_TABLE,
+        TableName=config['table'],
         Item=item
     )
 
-    logger.info(f"🗄️ Wrote to DynamoDB: recordId={record_id}, TTL expires at {ttl_expiration} ({TTL_DAYS}d)")
+    logger.info(f"🗄️ Wrote to DynamoDB: recordId={record_id}, TTL expires at {ttl_expiration} ({config['ttl_days']}d)")
     return record_id
 
 
@@ -276,11 +285,12 @@ def update_curated_summary(enriched_data):
     - Processed: AI-enriched data
     - Curated: Business-ready aggregated summaries
     """
-    summary_key = f"{CURATED_PREFIX}latest_summary.json"
+    config = get_config()
+    summary_key = f"{config['curated_prefix']}latest_summary.json"
 
     # Try to read existing summary, or create new one
     try:
-        response = s3_client.get_object(Bucket=DATA_LAKE_BUCKET, Key=summary_key)
+        response = s3_client.get_object(Bucket=config['bucket'], Key=summary_key)
         summary = json.loads(response['Body'].read().decode('utf-8'))
     except s3_client.exceptions.NoSuchKey:
         # First record - initialize summary
@@ -322,7 +332,7 @@ def update_curated_summary(enriched_data):
 
     # Write updated summary
     s3_client.put_object(
-        Bucket=DATA_LAKE_BUCKET,
+        Bucket=config['bucket'],
         Key=summary_key,
         Body=json.dumps(summary, indent=2),
         ContentType='application/json'

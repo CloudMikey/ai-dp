@@ -23,16 +23,6 @@ variable "aws_region" {
 
 #-------------------- Kinesis Configuration --------------------#
 
-variable "kinesis_shard_count" {
-  description = "Number of shards for Kinesis stream. Each shard provides 1 MB/sec write capacity. Use 1 for dev, scale for prod based on throughput needs."
-  type        = number
-  default     = 1
-  validation {
-    condition     = var.kinesis_shard_count >= 1
-    error_message = "Shard count must be at least 1."
-  }
-}
-
 variable "kinesis_retention_hours" {
   description = "Data retention period in hours (24-8760). Default 24 hours balances cost and debugging time."
   type        = number

@@ -41,11 +41,6 @@ output "api_gateway_invoke_url" {
 
 #-------------------- Configuration Outputs --------------------#
 
-output "kinesis_shard_count" {
-  description = "Number of shards configured for the Kinesis stream"
-  value       = var.kinesis_shard_count
-}
-
 output "kinesis_retention_hours" {
   description = "Data retention period configured for the Kinesis stream (hours)"
   value       = var.kinesis_retention_hours

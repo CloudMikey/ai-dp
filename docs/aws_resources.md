@@ -42,7 +42,7 @@ This project uses **8 core AWS services** with **30+ individual resources**:
 | **S3** | Data lake storage (raw/processed/curated) | Pay per GB stored + requests |
 | **DynamoDB** | Hot store for real-time queries | Pay per request (on-demand) |
 | **API Gateway** | HTTP endpoint for streaming ingestion | Pay per million requests |
-| **Kinesis** | Real-time data stream buffering | Pay per shard-hour + data |
+| **Kinesis** | Real-time data stream buffering | Pay per throughput (on-demand) |
 | **EventBridge** | Event routing for batch ingestion | Pay per million events |
 | **Lambda** | Serverless compute (ETL, Merge) | Pay per invocation + duration |
 | **Step Functions** | Workflow orchestration | Pay per state transition |
@@ -315,24 +315,23 @@ Kinesis Data Streams is a real-time data streaming service that can capture giga
 
 #### How I Use It
 Kinesis sits between API Gateway and the ETL Lambda, providing:
-- **Buffering**: Absorbs traffic spikes
+- **Buffering**: Absorbs traffic spikes with on-demand scaling
 - **Durability**: 24-hour retention (replay capability)
-- **Ordering**: Records within a shard are ordered by arrival time
+- **Ordering**: Records with the same partition key are processed in order
 
 **Configuration:**
 ```hcl
 stream_name      = "ai-dp-dev-ingestion-stream"
-shard_count      = 1           # 1 MB/sec write, 2 MB/sec read
 retention_period = 24          # hours
-stream_mode      = "PROVISIONED"
+stream_mode      = "ON_DEMAND" # Pay-per-throughput, no shards to manage
 ```
 
 #### Key Concepts
 
-**Shards:**
-- Unit of capacity (1 shard = 1 MB/s write, 2 MB/s read)
-- Records are distributed across shards by partition key
-- More shards = more parallelism = higher cost
+**On-Demand Mode:**
+- No shards to manage; capacity scales automatically.
+- Billed based on data written/read and a per-stream hourly rate.
+- Ideal for unpredictable or spiky workloads.
 
 **Partition Keys:**
 - Determines which shard receives a record
@@ -353,9 +352,9 @@ stream_mode      = "PROVISIONED"
 - Native Lambda integration (event source mapping)
 
 **Tradeoffs:**
-- Cost per shard-hour even when idle (~$0.015/hour)
+- Higher per-GB cost compared to provisioned capacity.
 - 1 MB record size limit
-- Complex capacity planning (shard splitting/merging)
+- Less cost-effective for predictable, high-volume workloads.
 - 7-day max retention (extended retention costs extra)
 
 #### Kinesis vs. SQS
@@ -1190,7 +1189,7 @@ Every resource has **exactly the permissions it needs**—no more.
 | DynamoDB | ~$1 | On-demand, TTL auto-delete |
 | Lambda | ~$1 | 256MB memory, short timeouts |
 | Step Functions | ~$1 | Efficient state design |
-| Kinesis | ~$10 | 1 shard (minimum) |
+| Kinesis | ~$5 | On-demand billing |
 | Comprehend | ~$5 | Only process needed text |
 | Athena | ~$1 | Partition pruning, Curated S3 |
 | Glue | ~$1 | On-demand crawler |
@@ -1242,7 +1241,7 @@ Every resource has **exactly the permissions it needs**—no more.
 > "1) Update the Merge Lambda to include the new field. 2) Deploy to dev. 3) Run the Glue Crawler to update the table schema (UPDATE_IN_DATABASE policy adds new columns). 4) Update the dashboard to display the new field. No manual DDL needed—Glue handles schema evolution."
 
 **Q: How would you scale this to 10x traffic?**
-> "Kinesis: Add shards (currently 1, can scale to 100+). Lambda: Auto-scales, but increase memory if CPU-bound. DynamoDB: Already on-demand, auto-scales. Step Functions: Check state transition limits. Athena: No changes needed, but consider Parquet for faster queries. Main concern: Comprehend API limits—would need to request limit increases."
+> "Kinesis is in on-demand mode, so it scales automatically. Lambda also auto-scales. I would need to monitor DynamoDB to ensure the on-demand capacity is sufficient, but it should also scale automatically. The main concern would be the Comprehend API limits, so I would need to request a limit increase from AWS."
 
 ### Cost Questions
 

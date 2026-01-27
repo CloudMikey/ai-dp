@@ -13,14 +13,13 @@ locals {
 
 resource "aws_kinesis_stream" "ingestion" {
   name             = local.stream_name
-  shard_count      = var.kinesis_shard_count
   retention_period = var.kinesis_retention_hours
 
   encryption_type = var.kinesis_encryption_type
   kms_key_id      = var.kinesis_encryption_type == "KMS" ? var.kinesis_kms_key_id : null
 
   stream_mode_details {
-    stream_mode = "PROVISIONED"
+    stream_mode = "ON_DEMAND"
   }
 
   tags = merge(
@@ -195,7 +194,7 @@ resource "aws_lambda_function" "etl" {
   source_code_hash = data.archive_file.etl_lambda.output_base64sha256
 
   runtime     = "python3.11"
-  handler     = "app.lambda_handler"
+  handler     = "etl_handler.lambda_handler"
   timeout     = 60
   memory_size = 256
   role        = aws_iam_role.etl_lambda.arn
