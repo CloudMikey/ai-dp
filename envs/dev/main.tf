@@ -190,3 +190,40 @@ module "analytics" {
     Purpose   = "DataCatalogAndQueries"
   }
 }
+
+#-------------------- Observability Module --------------------#
+# CloudWatch operational dashboard for pipeline health monitoring
+
+module "observability" {
+  source = "../../modules/observability"
+
+  environment  = "dev"
+  project_name = var.project_name
+  aws_region   = var.aws_region
+
+  # Lambda functions
+  etl_lambda_function_name   = module.ingestion_stream.lambda_function_name
+  merge_lambda_function_name = module.orchestration.lambda_function_name
+
+  # Kinesis stream
+  kinesis_stream_name = module.ingestion_stream.kinesis_stream_name
+
+  # Step Functions
+  state_machine_name = module.step_functions.state_machine_name
+  state_machine_arn  = module.step_functions.state_machine_arn
+
+  # DynamoDB
+  dynamodb_table_name = module.hot_store.table_name
+
+  # Dead Letter Queues
+  etl_dlq_name   = module.ingestion_stream.dlq_name
+  merge_dlq_name = module.orchestration.dlq_name
+
+  # Alarm Configuration (Phase 9 Task 4)
+  alarm_notification_emails = [var.alarm_email]
+
+  tags = {
+    Component = "Observability"
+    Purpose   = "OperationalDashboard"
+  }
+}

@@ -12,3 +12,8 @@ variable "project_name" {
   type        = string
   default     = "ai-dp"
 }
+
+variable "alarm_email" {
+  description = "Email address for CloudWatch alarm notifications"
+  type        = string
+}

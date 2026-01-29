@@ -21,7 +21,8 @@ AI-DP/
 ├── envs/               # Environment-specific Terraform configs (dev, stg, prod)
 ├── modules/            # Reusable Terraform modules
 │   ├── data_lake/      ├── ingestion_stream/   ├── step_functions/
-│   ├── hot_store/      ├── orchestration/      └── analytics/
+│   ├── hot_store/      ├── orchestration/      ├── analytics/
+│   └── observability/  # CloudWatch dashboard + alarms + SNS
 ├── lambdas/            # Python Lambda functions (etl, merge, replay)
 ├── dashboard/          # Browser-based analytics dashboard
 └── docs/               # Project documentation
@@ -29,7 +30,7 @@ AI-DP/
 
 ## Current Status & Deployed Infrastructure
 
-**Progress: 90% Complete (Phases 0-8 done, Phases 9-10 remaining)**
+**Progress: ~92% Complete (Phases 0-8 done, Phase 9 at 44%)**
 
 | Component | Resource Name | Status |
 |-----------|---------------|--------|
@@ -41,8 +42,16 @@ AI-DP/
 | DynamoDB | `ai-dp-dev-enriched-data` | ✅ |
 | Glue Database | `ai-dp-dev-analytics` | ✅ |
 | Athena Workgroup | `ai-dp-dev-workgroup` | ✅ |
+| CloudWatch Dashboard | `ai-dp-dev-operations` | ✅ |
+| CloudWatch Alarms | 6 alarms + SNS topic | ✅ |
 
-**Next:** Phase 9 (Production Hardening) → Phase 10 (CI/CD)
+**Phase 9 Progress (4/9 tasks):**
+- ✅ Lambda unit tests (33 tests, 96% coverage)
+- ✅ Load testing (1000 events, 0% errors)
+- ✅ CloudWatch Dashboard (8 widgets)
+- ✅ CloudWatch Alarms + SNS notifications
+
+**Next:** Phase 9 Tasks 5-9 → Phase 10 (CI/CD)
 
 **For detailed phase history and achievements:** Read Serena memory `project-status-and-roadmap`
 

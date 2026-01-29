@@ -25,6 +25,11 @@ output "dlq_arn" {
   value       = aws_sqs_queue.merge_dlq.arn
 }
 
+output "dlq_name" {
+  description = "Name of Dead Letter Queue (for CloudWatch metrics)"
+  value       = aws_sqs_queue.merge_dlq.name
+}
+
 output "cloudwatch_log_group_name" {
   description = "CloudWatch Log Group name for Lambda logs"
   value       = aws_cloudwatch_log_group.merge_lambda.name

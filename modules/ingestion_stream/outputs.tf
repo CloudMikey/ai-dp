@@ -80,6 +80,11 @@ output "dlq_arn" {
   value       = aws_sqs_queue.etl_dlq.arn
 }
 
+output "dlq_name" {
+  description = "Name of the Dead Letter Queue (for CloudWatch metrics)"
+  value       = aws_sqs_queue.etl_dlq.name
+}
+
 #-------------------- EventBridge Outputs --------------------#
 
 output "eventbridge_rule_name" {

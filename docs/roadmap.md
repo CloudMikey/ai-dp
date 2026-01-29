@@ -523,25 +523,34 @@
 
 **Complete when:** ✅ System handles 1000 events without errors, latency acceptable (<5s P95)
 
-**3. CloudWatch Dashboards**
-- Create operational dashboard in `modules/observability/`:
-  - Lambda invocations, errors, duration
+**3. CloudWatch Dashboards** ✅
+- Created operational dashboard in `modules/observability/`:
+  - Lambda invocations, errors, duration (ETL + Merge)
   - Kinesis metrics (iterator age, incoming records)
-  - Step Functions execution status
-  - DLQ depth (should be 0)
-  - DynamoDB read/write capacity
+  - Step Functions execution status (started, succeeded, failed)
+  - Dead Letter Queue messages (ETL + Merge DLQs)
+  - DynamoDB consumed read/write capacity
+- Dashboard name: `ai-dp-dev-operations`
+- 8 widgets across 7 rows, all using 5-minute periods
 
-**Complete when:** Single dashboard shows system health, anomalies visible at a glance
+**Complete when:** ✅ Single dashboard shows system health, anomalies visible at a glance
 
-**4. CloudWatch Alarms**
-- Create alarms for critical metrics:
-  - Lambda error rate > 5%
-  - DLQ depth > 0 (immediate alert)
-  - Kinesis iterator age > 1 minute
+**4. CloudWatch Alarms** ✅ **COMPLETED**
+- ✅ Created SNS topic: `ai-dp-dev-cloudwatch-alarms` with email subscription
+- ✅ Created 6 CloudWatch alarms:
+  - Lambda error rate > 5% (ETL + Merge) - metric math: `(errors/invocations)*100`
+  - DLQ depth > 0 (ETL + Merge) - immediate alert on any message
+  - Kinesis iterator age > 60,000ms (1 minute)
   - Step Functions failures > 3 in 5 minutes
-- Configure SNS topic for email notifications
+- ✅ Email notifications tested and verified working
 
-**Complete when:** All alarms created, SNS notifications tested
+**Implementation Notes:**
+- Alarms in separate file: `modules/observability/alarms.tf`
+- Email address passed via variable (gitignored `terraform.tfvars`)
+- All alarms use `treat_missing_data = "notBreaching"` to avoid false positives
+- Severity tags: Critical (DLQ), High (Lambda errors, Step Functions), Medium (Kinesis)
+
+**Complete when:** ✅ All alarms created, SNS notifications tested
 
 **5. Security Review**
 - Audit IAM roles for least-privilege compliance
@@ -693,7 +702,7 @@ Phase 5 (DynamoDB):            ████████████████�
 Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
 Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
 Phase 8 (Analytics):           ████████████████████ 100% ✅
-Phase 9 (Production Hardening):██░░░░░░░░░░░░░░░░░░  11% (1/9 tasks)
+Phase 9 (Production Hardening):████████░░░░░░░░░░░░  44% (4/9 tasks)
 Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
@@ -738,4 +747,4 @@ Phase 10: CI/CD Pipeline (GitHub Actions)
 
 **Total Estimated Timeline:** 8-12 weeks
 
-**Last Updated:** 2026-01-26 (Phase 9 Task 1: Lambda unit tests completed - 33 tests, 96% coverage)
+**Last Updated:** 2026-01-29 (Phase 9 Task 4: CloudWatch alarms with SNS notifications - 6 alarms, email alerts verified)
