@@ -157,7 +157,8 @@ module "ingestion_stream" {
 
   # Kinesis configuration (on-demand mode - pay per use)
   kinesis_retention_hours = 24
-  kinesis_encryption_type = "NONE" # Use KMS in production
+  kinesis_encryption_type = "KMS"               # Enabled during Phase 9 security review
+  kinesis_kms_key_id      = "alias/aws/kinesis" # AWS-managed key (no additional cost)
 
   # API Gateway configuration
   enable_api_gateway_logging     = true
@@ -225,5 +226,24 @@ module "observability" {
   tags = {
     Component = "Observability"
     Purpose   = "OperationalDashboard"
+  }
+}
+
+#-------------------- Cost Management Module --------------------#
+# AWS Budgets for cost monitoring and alerting
+
+module "cost_management" {
+  source = "../../modules/cost_management"
+
+  environment  = "dev"
+  project_name = var.project_name
+
+  # Budget configuration
+  budget_amount       = "50.00"
+  time_period_start   = "2026-01-01_00:00"
+  notification_emails = [var.alarm_email] # Reuse alarm email for budget alerts
+
+  tags = {
+    Component = "CostManagement"
   }
 }

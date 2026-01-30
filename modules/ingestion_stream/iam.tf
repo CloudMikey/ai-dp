@@ -96,8 +96,9 @@ resource "aws_iam_role_policy" "lambda_s3_write" {
       {
         Effect = "Allow"
         Action = [
-          "s3:PutObject",
-          "s3:PutObjectAcl"
+          "s3:PutObject"
+          # Note: s3:PutObjectAcl removed during security review - not needed for Lambda writes
+          # Modern S3 best practice: Use bucket policies instead of object ACLs
         ]
         # Scoped to only raw/ prefix in data lake bucket
         Resource = "${var.data_lake_bucket_arn}/raw/*"

@@ -552,24 +552,51 @@
 
 **Complete when:** ✅ All alarms created, SNS notifications tested
 
-**5. Security Review**
-- Audit IAM roles for least-privilege compliance
-- Verify all S3 buckets block public access
-- Verify TLS enforcement on S3 buckets
-- Verify encryption at rest (S3, DynamoDB, Kinesis)
-- Run `tfsec` security scan
-- Document findings and fixes
+**5. Security Review** ✅ **COMPLETED**
+- ✅ Audited all 7 IAM roles for least-privilege compliance
+- ✅ Verified all S3 buckets block public access (all 4 settings enabled)
+- ✅ Verified TLS enforcement on S3 buckets (bucket policy denies non-HTTPS)
+- ✅ Verified encryption at rest (S3: SSE-S3, DynamoDB: AWS-managed, Kinesis: KMS)
+- ✅ Ran `tfsec` security scan (0 critical findings, accepted risks documented)
+- ✅ Created security audit report: `docs/security-audit-report.md`
 
-**Complete when:** Security scan passes, no critical findings, audit trail documented
+**Security Fixes Applied:**
+- Removed unnecessary `s3:PutObjectAcl` from ETL Lambda IAM policy
+- Added documentation for Step Functions CloudWatch wildcard (AWS requirement)
+- **Enabled Kinesis KMS encryption** (was NONE, now uses `alias/aws/kinesis`)
 
-**6. Cost Optimization Review**
-- Review lifecycle policies (data retention appropriate?)
-- Review DynamoDB capacity (on-demand vs provisioned)
-- Review Kinesis shard count (can reduce to 1 for dev?)
-- Review CloudWatch Logs retention (7 days for dev)
-- Set up AWS Budget alert ($50/month threshold)
+**tfsec Results:**
+- 0 critical findings
+- 17 high (all accepted - IAM wildcards for AWS APIs that don't support resource-level permissions)
+- Full report: `docs/tfsec-report.md`
 
-**Complete when:** Cost controls in place, budget alerts configured
+**Complete when:** ✅ Security scan passes, no critical findings, audit trail documented
+
+**6. Cost Optimization Review** ✅ **COMPLETED**
+- ✅ Reviewed S3 lifecycle policies (already optimal: 180-day raw, 365-day processed)
+- ✅ Reviewed DynamoDB capacity mode (on-demand appropriate for sporadic dev workload)
+- ✅ Audited CloudWatch Logs retention (all 7 days confirmed)
+- ✅ Created cost_management Terraform module with AWS Budget alerts
+- ✅ Deployed $50/month budget with 80%, 100% actual, and 100% forecasted thresholds
+- ✅ Documented findings in `docs/cost-optimization-report.md`
+
+**Implementation Notes:**
+- Current monthly costs: ~$12/month (76% under budget)
+- Kinesis identified as largest cost driver ($10.87/month, 91% of total)
+- All log groups verified with 7-day retention via Terraform
+- Budget alerts configured via IaC (not manual console setup)
+- Email notifications: mikhaelvillamor97@gmail.com
+
+**Cost Breakdown (Jan 2026):**
+- Kinesis: $10.87 (on-demand data stream)
+- Route 53: $0.50 (DNS hosted zone)
+- Glue: $0.21 (crawler runs)
+- Step Functions: $0.19 (state transitions)
+- Athena: $0.07 (query data scanned)
+- S3: $0.04 (storage + requests)
+- DynamoDB: $0.002 (on-demand reads/writes)
+
+**Complete when:** ✅ Cost controls in place, budget alerts configured
 
 **7. Architecture Documentation**
 - Create architecture diagram (visual, not ASCII art)
@@ -702,11 +729,11 @@ Phase 5 (DynamoDB):            ████████████████�
 Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
 Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
 Phase 8 (Analytics):           ████████████████████ 100% ✅
-Phase 9 (Production Hardening):████████░░░░░░░░░░░░  44% (4/9 tasks)
+Phase 9 (Production Hardening):████████████░░░░░░░░  67% (6/9 tasks)
 Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
-**Overall Progress:** ~90% (9 of 10 phases complete)
+**Overall Progress:** ~92% (9.2 of 10 phases complete)
 
 ---
 
@@ -747,4 +774,4 @@ Phase 10: CI/CD Pipeline (GitHub Actions)
 
 **Total Estimated Timeline:** 8-12 weeks
 
-**Last Updated:** 2026-01-29 (Phase 9 Task 4: CloudWatch alarms with SNS notifications - 6 alarms, email alerts verified)
+**Last Updated:** 2026-01-28 (Phase 9 Task 6: Cost Optimization Review - AWS Budget alerts, lifecycle audit, cost analysis, $12/month actual)

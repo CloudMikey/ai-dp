@@ -505,6 +505,51 @@ def write_to_s3(data: Dict[str, Any], timestamp: datetime, sequence_number: str)
 
 ---
 
-**Last Updated**: 2026-01-11
-**Total Errors Documented**: 4
+---
+
+## Error #5: IAM Policy Over-Permissive (s3:PutObjectAcl)
+
+**Date**: Phase 9 - Security Review
+**Context**: Security audit of ETL Lambda IAM permissions during Phase 9 Task 5
+
+### Issue Description
+ETL Lambda role included `s3:PutObjectAcl` permission, which was unnecessary for the Lambda's operation (simple PutObject to raw/ prefix).
+
+### Root Cause
+Permission was copied from example code or added "just in case" without verifying necessity. Modern S3 best practice is to use bucket policies instead of object ACLs.
+
+### Security Impact
+- LOW severity (over-permissive, but scoped to raw/* prefix)
+- Could allow Lambda to modify object ACLs if compromised
+- Violates least-privilege principle
+
+### Discovery Method
+Identified during systematic IAM audit of all 7 roles in the project.
+
+### Working Fix
+**Solution**: Remove s3:PutObjectAcl from IAM policy.
+
+```hcl
+# Before (modules/ingestion_stream/iam.tf)
+Action = [
+  "s3:PutObject",
+  "s3:PutObjectAcl"  # Unnecessary
+]
+
+# After
+Action = [
+  "s3:PutObject"  # Sufficient for ETL operation
+  # Note: s3:PutObjectAcl removed during security review - not needed for Lambda writes
+  # Modern S3 best practice: Use bucket policies instead of object ACLs
+]
+```
+
+**Testing**: Verified Lambda function still works after permission removal by sending test events through API Gateway.
+
+**Key Principle**: Only grant permissions that are actively used. If unsure, remove and test. Prefer bucket policies over object ACLs.
+
+---
+
+**Last Updated**: 2026-01-28
+**Total Errors Documented**: 5
 **Total Preventive Patterns Documented**: 4

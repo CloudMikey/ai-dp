@@ -56,7 +56,10 @@ resource "aws_iam_role_policy" "step_functions_logging" {
           "logs:DescribeResourcePolicies",
           "logs:DescribeLogGroups"
         ]
-        Resource = "*" # Required for Step Functions logging setup
+        # SECURITY NOTE: Wildcard required by AWS for Step Functions logging
+        # AWS does not support resource-level permissions for log delivery setup
+        # Ref: https://docs.aws.amazon.com/step-functions/latest/dg/cw-logs.html
+        Resource = "*"
       }
     ]
   })
