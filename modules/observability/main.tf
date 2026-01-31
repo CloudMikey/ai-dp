@@ -23,7 +23,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         properties = {
           title  = "Lambda Invocations"
           region = var.aws_region
-          period = 300
+          period = 300               # 5 min
           stat   = "Sum"
           metrics = [
             ["AWS/Lambda", "Invocations", "FunctionName", var.etl_lambda_function_name, { label = "ETL Lambda" }],
@@ -94,7 +94,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         width  = 12
         height = 6
         properties = {
-          title  = "Kinesis - Iterator Age (ms)"
+          title  = "Kinesis - Iterator Age (ms)"  # How long data is in Kinesis 
           region = var.aws_region
           period = 300
           stat   = "Maximum"

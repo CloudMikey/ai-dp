@@ -35,7 +35,7 @@
 
 ## Resource Overview
 
-This project uses **8 core AWS services** with **30+ individual resources**:
+This project uses **14 AWS services** with **40+ individual resources**:
 
 | Service | Purpose in Pipeline | Billing Model |
 |---------|---------------------|---------------|
@@ -49,8 +49,11 @@ This project uses **8 core AWS services** with **30+ individual resources**:
 | **Comprehend** | AI sentiment & entity extraction | Pay per unit analyzed |
 | **Glue** | Data catalog & schema discovery | Pay per DPU-hour (crawler) |
 | **Athena** | SQL queries on S3 data | Pay per TB scanned |
-| **CloudWatch** | Logging and monitoring | Pay per GB ingested |
+| **CloudWatch** | Logging, monitoring, alarms, dashboard | Pay per GB ingested + alarms |
 | **SQS** | Dead letter queues for failures | Pay per million requests |
+| **SNS** | Alarm notification broadcast | Pay per million publishes |
+| **AWS Budgets** | Monthly spend alerting ($50 cap) | Free |
+| **KMS** | Kinesis stream encryption | Pay per key use |
 | **IAM** | Access control & permissions | Free |
 
 ---
@@ -974,11 +977,20 @@ CloudWatch is AWS's monitoring and observability service. It collects logs, metr
 - Reduces storage costs
 - Production would use longer retention + S3 export
 
-**Planned Alarms (Phase 9):**
-- DLQ message count > 0
-- Lambda error rate > 1%
-- Step Functions failure rate > 1%
-- API Gateway 5xx errors > 1%
+**Deployed Alarms (Phase 9 — 6 active):**
+
+| Alarm | Metric | Threshold | Action |
+|-------|--------|-----------|--------|
+| ETL Lambda Error Rate | Errors / Invocations | > 1% (5 min) | SNS → Email |
+| Merge Lambda Error Rate | Errors / Invocations | > 1% (5 min) | SNS → Email |
+| ETL DLQ Depth | ApproximateNumberOfMessagesVisible | > 0 | SNS → Email |
+| Merge DLQ Depth | ApproximateNumberOfMessagesVisible | > 0 | SNS → Email |
+| Kinesis Iterator Age | GetRecords.IteratorAgeMilliseconds | > 300,000 ms | SNS → Email |
+| Step Functions Failure Rate | ExecutionsFailed / ExecutionsStarted | > 1% (5 min) | SNS → Email |
+
+**SNS Topic:** `ai-dp-dev-cloudwatch-alarms` — email notifications verified working.
+
+**CloudWatch Dashboard:** `ai-dp-dev-operations` — 8 widgets across 7 rows monitoring Lambda invocations/errors, Kinesis throughput + iterator age, Step Functions executions, DLQ depths, and DynamoDB read/write capacity.
 
 #### Interview Points - CloudWatch
 
@@ -1167,6 +1179,15 @@ Every resource has **exactly the permissions it needs**—no more.
 | aws_cloudwatch_log_group | /aws/lambda/ai-dp-dev-etl | ingestion_stream |
 | aws_cloudwatch_log_group | /aws/lambda/ai-dp-dev-merge | orchestration |
 | aws_cloudwatch_log_group | /aws/states/ai-dp-dev-orchestrator | step_functions |
+| aws_cloudwatch_dashboard | ai-dp-dev-operations (8 widgets) | observability |
+| aws_cloudwatch_metric_alarm | (6 alarms — see table above) | observability |
+| **SNS** | | |
+| aws_sns_topic | ai-dp-dev-cloudwatch-alarms | observability |
+| aws_sns_topic_subscription | alarm_email (for_each emails) | observability |
+| **AWS Budgets** | | |
+| aws_budgets_budget | ai-dp-dev-monthly-budget ($50/mo) | cost_management |
+| **KMS** | | |
+| aws_kms_key | Kinesis stream encryption key | ingestion_stream |
 | **IAM** | | |
 | aws_iam_role | ai-dp-dev-apigw-kinesis-role | ingestion_stream |
 | aws_iam_role | ai-dp-dev-etl-lambda-role | ingestion_stream |
@@ -1175,26 +1196,29 @@ Every resource has **exactly the permissions it needs**—no more.
 | aws_iam_role | ai-dp-dev-merge-lambda-role | orchestration |
 | aws_iam_role | ai-dp-glue-crawler-role | analytics |
 
-**Total: 30+ resources across 10 AWS services**
+**Total: 40+ resources across 14 AWS services**
 
 ---
 
 ## Cost Optimization Strategies
 
-### Cost Breakdown (Estimated Dev Environment)
+### Cost Breakdown (Jan 2026 Actuals — Dev Environment)
 
-| Service | Monthly Cost | Optimization Applied |
-|---------|--------------|---------------------|
-| S3 | ~$1 | Lifecycle policies, Intelligent-Tiering |
-| DynamoDB | ~$1 | On-demand, TTL auto-delete |
-| Lambda | ~$1 | 256MB memory, short timeouts |
-| Step Functions | ~$1 | Efficient state design |
-| Kinesis | ~$5 | On-demand billing |
-| Comprehend | ~$5 | Only process needed text |
-| Athena | ~$1 | Partition pruning, Curated S3 |
-| Glue | ~$1 | On-demand crawler |
-| CloudWatch | ~$1 | 7-day retention |
-| **Total** | **~$22/month** | |
+| Service | Monthly Cost | % of Total | Optimization Applied |
+|---------|--------------|------------|---------------------|
+| Kinesis (on-demand) | $10.87 | 91% | On-demand billing, single stream |
+| Route 53 (hosted zone) | $0.50 | 4% | Minimal zone configuration |
+| Glue (crawler) | $0.21 | 2% | On-demand crawler (not scheduled) |
+| Step Functions | $0.19 | 2% | Efficient state design, SDK integrations |
+| Athena | $0.07 | 1% | Partition pruning, Curated S3 offload |
+| S3 | $0.04 | <1% | Lifecycle policies, Intelligent-Tiering |
+| DynamoDB | $0.002 | <1% | On-demand, TTL auto-delete |
+| **Total** | **$11.90/month** | **100%** | **Budget: $50/month (76% under)** |
+
+**AWS Budget:** `ai-dp-dev-monthly-budget` configured with three alert thresholds:
+- 80% actual ($40) — early warning
+- 100% actual ($50) — hard limit
+- 100% forecasted ($50) — predictive alert
 
 ### Key Optimization Techniques
 
@@ -1246,7 +1270,7 @@ Every resource has **exactly the permissions it needs**—no more.
 ### Cost Questions
 
 **Q: What's the most expensive component?**
-> "Kinesis, because of shard-hour billing (~$0.015/hour even when idle). For low traffic, SQS might be cheaper. At high traffic, Comprehend costs can grow quickly—I'd batch texts to maximize the 5KB limit per request."
+> "Kinesis at $10.87/month — 91% of total spend. Even in on-demand mode it carries a per-stream hourly charge. For low traffic, SQS might be cheaper. At high traffic, Comprehend costs can grow quickly—I'd batch texts to maximize the 5KB limit per request. I identified this through the AWS Cost Explorer and configured Budget alerts to catch any surprises early."
 
 **Q: How would you reduce costs by 50%?**
 > "1) Convert to Parquet (reduce Athena scan costs). 2) Use SQS instead of Kinesis if ordering isn't needed. 3) Increase Lambda batch sizes (fewer invocations). 4) Move DynamoDB to provisioned capacity with reserved capacity. 5) Extend CloudWatch retention but export to S3 Glacier."

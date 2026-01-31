@@ -32,10 +32,13 @@ I designed and deployed an AI-powered serverless data pipeline on AWS that inges
 - **Observability:** CloudWatch, SQS Dead Letter Queues
 
 **Key Metrics:**
-- 9 of 10 phases complete (~90% project completion)
-- End-to-end data flow: Ingestion → AI Enrichment → Dual Storage → Analytics
+- Phases 0–8 complete; Phase 9 at 67% (6/9 tasks done) → ~92% overall
+- End-to-end latency: P95 = 2044ms (target < 5s) ✅
+- Load test: 1000 events, 0% error rate ✅
+- Unit tests: 33 tests (ETL + Merge), 96% coverage ✅
+- Cost: $11.90/month actual (budget $50/month, 76% under) ✅
+- Security: 0 critical tfsec findings, 7 IAM roles audited ✅
 - Both streaming and batch ingestion paths fully operational
-- Portfolio-ready with production-grade error handling and monitoring foundations
 
 ---
 
@@ -618,11 +621,32 @@ This query demonstrates flattening nested arrays in Athena - a valuable skill fo
 
 ---
 
-### Phase 9 & 10: Planned (Not Yet Implemented)
+### Phase 9: Production Hardening (67% Complete — 6/9 Tasks)
 
-**Phase 9 (Production Hardening):** CloudWatch alarms, load testing, security review, operational runbooks
+**Completed:**
 
-**Phase 10 (CI/CD):** GitHub Actions workflows with OIDC authentication, automated deployments to dev/stg/prod
+1. **Lambda Unit Tests** — 33 tests (17 ETL + 16 Merge) with pytest + moto. 96% coverage, exceeds 70% target.
+
+2. **Load Testing** — 1000 events sent through streaming path. 0% error rate. P95 latency: 2044ms (well under 5s threshold). No bottlenecks identified.
+
+3. **CloudWatch Dashboard** — `ai-dp-dev-operations` with 8 widgets across 7 rows: Lambda invocations/errors, Kinesis throughput + iterator age, Step Functions executions, DLQ depths, DynamoDB capacity.
+
+4. **CloudWatch Alarms + SNS** — 6 alarms configured (ETL/Merge error rates, DLQ depths, Kinesis iterator age, Step Functions failures). SNS topic `ai-dp-dev-cloudwatch-alarms` with email notifications verified.
+
+5. **Security Review** — Audited all 7 IAM roles for least-privilege. Enabled Kinesis KMS encryption (was NONE). Removed unnecessary `s3:PutObjectAcl` from ETL Lambda. tfsec scan: 0 critical findings. Full report: `docs/security-audit-report.md`.
+
+6. **Cost Optimization Review** — AWS Budget alerts configured ($50/month with 80%/100% thresholds). Actual spend: $11.90/month. Kinesis identified as 91% of cost. All log retention and lifecycle policies verified optimal. Report: `docs/cost-optimization-report.md`.
+
+**Remaining (Tasks 7–9):**
+- Architecture documentation (diagrams, sequence flows, API contracts)
+- Operational runbooks (DLQ replay, scaling, troubleshooting, DR)
+- Staging environment deployment
+
+---
+
+### Phase 10: CI/CD Pipeline (Not Yet Started)
+
+**Planned:** GitHub Actions workflows with OIDC authentication, automated deployments to dev/stg/prod with environment protection rules.
 
 ---
 
@@ -764,13 +788,12 @@ This flattened the nested structure and made subsequent states easier to write.
 
 ## Future Improvements
 
-### Short-Term (Next 2-3 Weeks)
+### Short-Term (Phase 9 Completion → Phase 10)
 
-1. **Phase 9 - Production Hardening:**
-   - CloudWatch alarms for Lambda errors, DLQ depth, Kinesis iterator age
-   - API Gateway throttling and rate limiting
-   - Load testing (1000 events through streaming path)
-   - Security audit (tfsec, IAM policy review)
+1. **Phase 9 — Remaining Tasks:**
+   - Architecture diagrams (data flow, batch/streaming sequences, API contracts)
+   - Operational runbooks (DLQ replay, Kinesis scaling, Lambda troubleshooting, DR)
+   - Staging environment deployment and smoke tests
 
 2. **Phase 10 - CI/CD Pipeline:**
    - GitHub Actions workflow for `terraform plan` on PRs
@@ -815,7 +838,7 @@ This flattened the nested structure and made subsequent states easier to write.
 
 1. **Automatic retries:** Kinesis event source mapping retries 3 times, Step Functions has exponential backoff
 2. **Dead Letter Queues:** Both ETL and Merge Lambdas send failed messages to SQS DLQs with 14-day retention
-3. **CloudWatch Alarms:** Planned alarms on DLQ depth > 0 trigger immediate investigation
+3. **CloudWatch Alarms:** 6 active alarms — DLQ depth > 0, Lambda/Step Functions error rates > 1%, Kinesis iterator age > 5 min — all broadcast via SNS email
 4. **Idempotency:** Records are identified by unique `recordId`, so replaying from DLQ doesn't create duplicates
 5. **Dual storage safety:** If DynamoDB write fails, the record is still preserved in S3"
 
@@ -879,10 +902,13 @@ This project demonstrates my ability to:
 ✅ **Design serverless architectures** with multiple AWS services
 ✅ **Implement Infrastructure as Code** with Terraform best practices
 ✅ **Integrate AI/ML services** (Comprehend) into production pipelines
-✅ **Build production-grade reliability** (DLQs, retries, monitoring)
-✅ **Optimize for cost** (lifecycle policies, TTL, partition pruning, intelligent caching)
-✅ **Create data visualizations** (HTML/JS dashboard with Chart.js)
-✅ **Document systematically** (errorlog, roadmap, architecture diagrams)
-✅ **Iterate sequentially** (10-phase roadmap, 90% complete)
+✅ **Build production-grade reliability** (DLQs, retries, 6 CloudWatch alarms, SNS)
+✅ **Optimize for cost** (lifecycle policies, TTL, partition pruning, $11.90/month actual)
+✅ **Create data visualizations** (HTML/JS dashboard with Chart.js, 3-tier data strategy)
+✅ **Write automated tests** (33 unit tests, 96% coverage, pytest + moto)
+✅ **Validate at scale** (1000-event load test, 0% errors, P95 < 5s)
+✅ **Audit security** (7 IAM roles, KMS encryption, tfsec: 0 critical)
+✅ **Document systematically** (errorlog, roadmap, security + cost reports)
+✅ **Iterate sequentially** (10-phase roadmap, ~92% complete)
 
 Most importantly, I can **explain every technical decision** and walk through the architecture confidently in an interview setting.

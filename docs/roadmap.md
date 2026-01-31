@@ -585,7 +585,6 @@
 - Kinesis identified as largest cost driver ($10.87/month, 91% of total)
 - All log groups verified with 7-day retention via Terraform
 - Budget alerts configured via IaC (not manual console setup)
-- Email notifications: mikhaelvillamor97@gmail.com
 
 **Cost Breakdown (Jan 2026):**
 - Kinesis: $10.87 (on-demand data stream)

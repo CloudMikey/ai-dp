@@ -31,7 +31,8 @@
       "Bash(aws glue get-databases:*)",
       "Bash(aws athena list-work-groups:*)",
       "Bash(aws glue get-crawlers:*)",
-      "mcp__serena__list_dir"
+      "mcp__serena__list_dir",
+      "mcp__serena__search_for_pattern"
     ],
     "deny": [],
     "ask": []

@@ -118,7 +118,7 @@ User Application
     │   "content": "This is a sample message"
     │ }
     ↓
-API Gateway (57cnx9jpje.execute-api.us-west-1.amazonaws.com)
+API Gateway (pvqb2gzg7i.execute-api.us-west-2.amazonaws.com)
     │
     │ Direct Integration (no Lambda)
     ↓
@@ -141,14 +141,14 @@ ETL Lambda (ai-dp-dev-etl)
     │   "recordId": "rec-123",
     │   "recordType": "text",
     │   "content": "This is a sample message",
-    │   "processed_at": "2025-12-13T10:30:00Z",
+    │   "processed_at": "2026-01-30T10:30:00Z",
     │   "lambda_version": "$LATEST",
     │   "lambda_name": "ai-dp-dev-etl"
     │ }
     ↓
-S3 raw/ (ai-dp-data-lake-dev-us-west-1)
+S3 raw/ (ai-dp-data-lake-dev-us-west-2)
     │
-    │ Path: raw/year=2025/month=12/day=13/49670192848271239842602659163669398716174920392225325058.json
+    │ Path: raw/year=2026/month=01/day=30/49670192848271239842602659163669398716174920392225325058.json
     │ Note: Filename = Kinesis sequence number (idempotent writes - retries overwrite same file)
     │ Triggers S3 Event Notification
     ↓
@@ -161,20 +161,20 @@ S3 raw/ (ai-dp-data-lake-dev-us-west-1)
 Data Engineer/Automated Process
     │
     │ AWS CLI / SDK / Console Upload
-    │ aws s3 cp data.json s3://ai-dp-data-lake-dev-us-west-1/raw/
+    │ aws s3 cp data.json s3://ai-dp-data-lake-dev-us-west-2/raw/
     ↓
-S3 raw/ (ai-dp-data-lake-dev-us-west-1)
+S3 raw/ (ai-dp-data-lake-dev-us-west-2)
     │
     │ S3 Event: ObjectCreated
-    │ Bucket: ai-dp-data-lake-dev-us-west-1
-    │ Key: raw/year=2025/month=12/day=13/data.json
+    │ Bucket: ai-dp-data-lake-dev-us-west-2
+    │ Key: raw/year=2026/month=01/day=30/data.json
     ↓
 EventBridge (S3 Event Notifications enabled)
     │
     │ Event Pattern Match:
     │ - source: aws.s3
     │ - detail-type: Object Created
-    │ - bucket: ai-dp-data-lake-dev-us-west-1
+    │ - bucket: ai-dp-data-lake-dev-us-west-2
     │ - key prefix: raw/
     ↓
 EventBridge Rule (ai-dp-dev-s3-batch-ingestion)
@@ -191,8 +191,8 @@ Step Functions State Machine (ai-dp-dev-orchestrator)
     │
     │ Input:
     │ {
-    │   "bucket": "ai-dp-data-lake-dev-us-west-1",
-    │   "key": "raw/year=2025/month=12/day=13/rec-123.json"
+    │   "bucket": "ai-dp-data-lake-dev-us-west-2",
+    │   "key": "raw/year=2026/month=01/day=30/rec-123.json"
     │ }
     ↓
 ReadS3Object State
@@ -245,7 +245,7 @@ DetectSentiment               DetectEntities              (Future: Rekognition)
                                   │   "sentiment": "POSITIVE",
                                   │   "sentimentScores": {...},
                                   │   "entities": [...],
-                                  │   "processed_at": "2025-12-13T10:30:00Z",
+                                  │   "processed_at": "2026-01-30T10:30:00Z",
                                   │   "expiresAt": 1705060200
                                   │ }
                                   ↓
@@ -256,7 +256,7 @@ DetectSentiment               DetectEntities              (Future: Rekognition)
                     │                            │
                     │                            │
                     ↓                            ↓
-    ai-dp-dev-enriched-data          processed/year=2025/month=12/day=13/
+    ai-dp-dev-enriched-data          processed/year=2026/month=01/day=30/
                                      rec-123-enriched.json
 ```
 
@@ -379,17 +379,17 @@ SCAN LIMIT 100 ORDER BY timestamp DESC
 ### Historical Queries (Athena on S3)
 
 ```sql
--- Count sentiment distribution for December 2025
+-- Count sentiment distribution for January 2026
 SELECT sentiment, COUNT(*) as count
 FROM processed_data
-WHERE year = '2025' AND month = '12'
+WHERE year = '2026' AND month = '01'
 GROUP BY sentiment;
 
--- Top entities mentioned in Q4 2025
+-- Top entities mentioned in Jan 2026
 SELECT entity_text, entity_type, COUNT(*) as mentions
 FROM processed_data
 CROSS JOIN UNNEST(entities) AS t(entity)
-WHERE year = '2025' AND month IN ('10', '11', '12')
+WHERE year = '2026' AND month = '01'
 GROUP BY entity_text, entity_type
 ORDER BY mentions DESC
 LIMIT 20;
@@ -397,7 +397,7 @@ LIMIT 20;
 -- Date-partitioned query (efficient)
 SELECT *
 FROM processed_data
-WHERE year = '2025' AND month = '12' AND day = '13';
+WHERE year = '2026' AND month = '01' AND day = '13';
 ```
 
 ---
@@ -432,7 +432,7 @@ GROUP BY sentiment;
 ```sql
 SELECT *
 FROM "ai-dp-dev-analytics"."processed"
-WHERE year = '2025' AND month = '12' AND day = '16';
+WHERE year = '2026' AND month = '01' AND day = '16';
 ```
 
 **Entity extraction analysis:**
@@ -474,10 +474,34 @@ LIMIT 10;
 
 ---
 
-## Next Phase: Production Hardening (Phase 9)
+## Observability Layer (Phase 9 — Deployed)
 
-**Upcoming additions:**
-- CloudWatch alarms for all critical components
-- API Gateway throttling and rate limiting
-- Auto-scaling configurations
-- Comprehensive error monitoring
+### CloudWatch Dashboard
+`ai-dp-dev-operations` — 8 widgets across 7 rows:
+- Lambda invocations + error counts (ETL & Merge)
+- Kinesis throughput (incoming/outgoing bytes) + iterator age
+- Step Functions executions (started / succeeded / failed)
+- DLQ depths (ETL & Merge)
+- DynamoDB read/write capacity
+
+### CloudWatch Alarms (6 active)
+| Alarm | Triggers When |
+|-------|---------------|
+| ETL Lambda Error Rate | Errors / Invocations > 1% over 5 min |
+| Merge Lambda Error Rate | Errors / Invocations > 1% over 5 min |
+| ETL DLQ Depth | Messages visible > 0 |
+| Merge DLQ Depth | Messages visible > 0 |
+| Kinesis Iterator Age | Max age > 300,000 ms (5 min) |
+| Step Functions Failure Rate | Failed / Started > 1% over 5 min |
+
+All alarms publish to SNS topic `ai-dp-dev-cloudwatch-alarms` → email notifications.
+
+### Cost Management
+- **AWS Budget:** `ai-dp-dev-monthly-budget` — $50/month cap with 80% and 100% alert thresholds
+- **Actual spend:** $11.90/month (Kinesis = 91% of cost)
+- Full report: `docs/cost-optimization-report.md`
+
+### Phase 9 Remaining
+- Architecture diagrams (tasks 7)
+- Operational runbooks (task 8)
+- Staging environment deployment (task 9)
