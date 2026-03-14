@@ -140,6 +140,9 @@ terraform -chdir=envs/dev fmt && terraform -chdir=envs/dev validate
 terraform -chdir=envs/dev plan
 terraform -chdir=envs/dev apply
 
+# Load test (sends 25 events to Kinesis via boto3)
+python scripts/load_test.py
+
 # Test streaming ingestion
 curl -X POST "https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest" `
   -H "Content-Type: application/json" -H "X-Partition-Key: test" `

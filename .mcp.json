@@ -18,7 +18,32 @@
         "claude-code",
         "--project",
         "Z:/CODE/Projects/Proj2/AI-DP"
-      ]
+      ],
+      "env": {
+        "PATH": "C:\\Program Files\\Git\\cmd;C:\\Windows\\system32;C:\\Windows"
+      }
+    },
+
+    "aws-terraform": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["awslabs.terraform-mcp-server@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "AWS_PROFILE": "vscode",
+        "AWS_REGION": "us-west-2"
+      }
+    },
+
+    "aws-cloudwatch": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["awslabs.cloudwatch-mcp-server@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "AWS_PROFILE": "vscode",
+        "AWS_REGION": "us-west-2"
+      }
     }
   }
 }

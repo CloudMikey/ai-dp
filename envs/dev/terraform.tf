@@ -13,8 +13,7 @@ terraform {
   }
 
   backend "s3" {
-    # Backend configuration should be provided via backend config file or CLI
-    # Example: terraform init -backend-config=backend-dev.hcl
+    # The rest of the config is in the .hcl file
     encrypt      = true
     use_lockfile = true # Native S3 locking (Terraform >= 1.11.0)
   }

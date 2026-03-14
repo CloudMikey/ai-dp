@@ -49,7 +49,7 @@ def valid_step_functions_event():
 
 @pytest.fixture
 def raw_s3_object_content():
-    """Content of raw S3 object for text preview extraction."""
+    """Content of raw S3 object used in integration tests."""
     return {
         'event_type': 'user_feedback',
         'event_timestamp': '2026-01-25T12:00:00Z',

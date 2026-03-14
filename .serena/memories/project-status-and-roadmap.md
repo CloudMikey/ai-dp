@@ -1,6 +1,6 @@
 # AI-DP Project Status & Roadmap
 
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-02-15
 **Overall Progress:** ~92% (9.2 of 10 phases complete)
 
 ## Current Status
@@ -15,11 +15,12 @@
    - Coverage: 96% (exceeds 70% target)
    - Framework: pytest + moto
 
-2. **Load Testing** (2026-01-26)
-   - 1000 events sent to streaming path
-   - 0% error rate
-   - P95 latency: 2044ms (well under 5s threshold)
-   - No bottlenecks identified
+2. **Load Testing** (2026-01-26, Updated 2026-02-15)
+   - Replaced 615-line PowerShell script with 68-line Python script (scripts/load_test.py)
+   - Direct Kinesis integration via boto3.put_record() - demonstrates AWS SDK proficiency
+   - Simple, explainable code (portfolio-appropriate, matches Lambda coding style)
+   - Tests: 1000 events sent to streaming path, 0% error rate, P95 latency 2044ms
+   - Rationale: Python is core skill (Lambdas), PowerShell/JS not main focus
 
 3. **CloudWatch Dashboard** (2026-01-26)
    - Dashboard: `ai-dp-dev-operations`
@@ -36,7 +37,7 @@
    - Kinesis KMS encryption enabled (was NONE)
    - Removed unnecessary `s3:PutObjectAcl` from ETL Lambda
    - tfsec scan: 0 critical findings
-   - Report: `docs/security-audit-report.md`
+   - Report: `docs/security-audit-report.md` (active)
 
 6. **Cost Optimization Review** (2026-01-28) ✅ LATEST
    - AWS Budget alerts: $50/month (80%, 100% actual, 100% forecasted)
@@ -45,7 +46,7 @@
    - S3 lifecycle: Optimal (180-day raw, 365-day processed)
    - DynamoDB: On-demand justified (500x cheaper for dev)
    - Cost module: `modules/cost_management/` created
-   - Report: `docs/cost-optimization-report.md`
+   - Report: Cost optimization review completed (files moved to external notes)
 
 ### Remaining Tasks (Phase 9)
 
@@ -244,10 +245,13 @@ AI-DP/
 - "Implemented load testing with PowerShell script"
 - "Tested both streaming (API Gateway → Kinesis) and batch (S3 → EventBridge) paths"
 
-## Links
+## Active Documentation Files
 
 - Roadmap: `docs/roadmap.md`
+- Status: `docs/status.md` (summary of all phases)
 - Security Audit: `docs/security-audit-report.md`
-- Cost Analysis: `docs/cost-optimization-report.md`
 - Error Log: `docs/errorlog.md`
 - tfsec Report: `docs/tfsec-report.md`
+- Architecture Overview: `docs/ai-dp overview notion.md`
+
+**Note:** Several documentation files (cost-optimization-report.md, load-test-guide.md, data_flow.md, etc.) were moved to external notes as of 2026-01-30 to reduce repository clutter. Key information retained in status.md and this memory.

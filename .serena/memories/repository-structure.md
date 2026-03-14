@@ -15,6 +15,8 @@ AI-DP/
 ├── envs/              # Environment-specific Terraform configurations
 ├── lambdas/           # Python Lambda function source code
 ├── modules/           # Reusable Terraform modules
+├── scripts/           # Development and testing scripts
+│   └── load_test.py   # Python load test (68 lines, boto3)
 ├── .github/           # GitHub Actions workflows (Phase 10)
 ├── .gitignore         # Git ignore patterns
 ├── .mcp.json          # MCP server configuration
@@ -47,6 +49,9 @@ Active modules with implementation:
 - **`hot_store/`**: DynamoDB table with GSI, TTL, PITR
 - **`orchestration/`**: Merge Lambda for combining AI outputs
 - **`analytics/`**: Glue Crawler, Athena workgroup, results bucket
+- **`ai_enrichment/`**: Comprehend sentiment analysis and entity extraction (integrated into Step Functions)
+- **`observability/`**: CloudWatch Dashboard (8 widgets), CloudWatch Alarms (6 alarms), SNS topic for notifications
+- **`cost_management/`**: AWS Budget alerts ($50/month with 80%, 100% actual, 100% forecasted thresholds)
 
 Standard module structure:
 ```
@@ -73,6 +78,14 @@ Python-based Lambda function code:
 - **`lambdas/replay/`**: DLQ replay utility (future)
   - `app.py` - Main handler
   - `requirements.txt` - Python dependencies
+
+## Scripts (`scripts/`)\n\nDevelopment and testing utilities:\n\n- **`scripts/load_test.py`**: Load testing script (68 lines, Python 3.11+)
+  - Sends test events directly to Kinesis via `boto3.client('kinesis').put_record()`
+  - Default: 25 events with 0.2s delay (configurable by editing `count` parameter)
+  - Tracks success/failure, calculates throughput (events/sec)
+  - Simple `print()` output (CLI script, not Lambda - no logging module overhead)
+  - Replaced 615-line PowerShell script (2026-02-15) for language consistency
+  - **Portfolio note**: Demonstrates AWS SDK proficiency, aligns with Python-first skillset
 
 ## Dashboard (`dashboard/`)
 
@@ -107,13 +120,16 @@ Static HTML/JS dashboard for analytics visualization:
 
 ## Documentation (`docs/`)
 
+**Active Documentation Files (as of 2026-02-11):**
 - `roadmap.md` - Detailed implementation roadmap (10 phases)
-- `status.md` - Project status tracking
+- `status.md` - Project status tracking (comprehensive summary of all phases)
 - `errorlog.md` - Historical error log (ALWAYS check before fixing errors)
-- `data_flow.md` - Data flow documentation
-- `explained.md` - Architecture explanations / Interview walkthrough
-- `aws_resources.md` - Comprehensive AWS services guide with interview Q&A
+- `security-audit-report.md` - Security audit results (IAM, encryption, tfsec)
+- `tfsec-report.md` - Infrastructure security scanning results
 - `ai-dp overview notion.md` - Comprehensive architecture overview
+- `templates/` - Documentation templates for operational guides
+
+**Note:** Several detailed guides (cost-optimization-report.md, load-test-guide.md, data_flow.md, explained.md, aws_resources.md, etc.) were moved to external notes as of 2026-01-30 to reduce repository clutter. Essential information is retained in status.md.
 
 ## Module Wiring Pattern
 

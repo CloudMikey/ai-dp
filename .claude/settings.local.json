@@ -32,7 +32,11 @@
       "Bash(aws athena list-work-groups:*)",
       "Bash(aws glue get-crawlers:*)",
       "mcp__serena__list_dir",
-      "mcp__serena__search_for_pattern"
+      "mcp__serena__search_for_pattern",
+      "mcp__serena__find_file",
+      "mcp__aws-terraform__SearchAwsccProviderDocs",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__find_symbol"
     ],
     "deny": [],
     "ask": []

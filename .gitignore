@@ -209,5 +209,5 @@ local/
 scratch/
 
 # Gemini CLI specific files
-GEMINI.md
+#GEMINI.md
 #.gemini-clipboard/
