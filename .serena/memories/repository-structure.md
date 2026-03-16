@@ -1,158 +1,60 @@
 # Repository Structure
 
-## Root Directory Layout
-
+## Root Layout
 ```
 AI-DP/
-├── .claude/           # Claude Code agent configurations
-│   └── agents/        # Specialized agent prompts (portfolio.md)
-├── bootstrap/         # Terraform config for S3 state bucket creation
-├── dashboard/         # Static HTML/JS dashboard
-│   ├── index.html     # Main dashboard page
-│   ├── styles.css     # Dashboard styling
-│   └── app.js         # Chart.js + AWS SDK integration
+├── .claude/           # Claude Code configs & agent prompts (portfolio.md)
+├── .github/           # GitHub Actions workflows (Phase 10 CI/CD)
+├── bootstrap/         # Terraform for S3 state bucket creation
+├── dashboard/         # Static analytics dashboard (index.html, styles.css, app.js, config.js)
 ├── docs/              # Project documentation
-├── envs/              # Environment-specific Terraform configurations
-├── lambdas/           # Python Lambda function source code
+│   ├── roadmap.md         # 10-phase implementation roadmap
+│   ├── status.md          # Comprehensive project status
+│   ├── errorlog.md        # ALWAYS CHECK before fixing errors
+│   ├── security-audit-report.md
+│   └── ai-dp overview notion.md
+├── envs/              # Environment-specific Terraform configs
+│   ├── dev/           # ACTIVE environment
+│   ├── stg/
+│   └── prod/
+├── lambdas/           # Python Lambda source
+│   ├── etl/           # Kinesis consumer → S3 raw/
+│   ├── merge/         # Combines AI outputs → S3 processed/ + DynamoDB
+│   └── replay/        # DLQ replay utility
 ├── modules/           # Reusable Terraform modules
-├── scripts/           # Development and testing scripts
-│   └── load_test.py   # Python load test (68 lines, boto3)
-├── .github/           # GitHub Actions workflows (Phase 10)
-├── .gitignore         # Git ignore patterns
-├── .mcp.json          # MCP server configuration
-├── .terraform-version # Terraform version constraint (1.13.0)
-├── CLAUDE.md          # Claude Code guidance file
-└── requirements.txt   # Root-level requirements
+│   ├── data_lake/         ├── ingestion_stream/  ├── step_functions/
+│   ├── hot_store/         ├── orchestration/     ├── analytics/
+│   ├── ai_enrichment/     ├── observability/     └── cost_management/
+├── scripts/
+│   └── load_test.py   # Boto3 load tester (25 events default)
+├── CLAUDE.md          # Primary guidance file
+├── .terraform-version # Pinned to 1.13.0
+├── .tflint.hcl        # TFLint config (snake_case, documented vars/outputs)
+└── .tfsec.yml         # Tfsec security scan config
 ```
 
-## Environments (`envs/`)
+## Environment Structure (envs/dev/)
+Each env contains: `backend.tf`, `providers.tf`, `main.tf`, `variables.tf`, `outputs.tf`
 
-Three environment directories for deployment isolation:
-- `envs/dev/` - Development environment (ACTIVE)
-- `envs/stg/` - Staging environment
-- `envs/prod/` - Production environment
-
-Each environment contains:
-- `backend.tf` - S3 backend configuration with native locking
-- `providers.tf` - AWS provider configuration with default_tags
-- `main.tf` - Root module that wires together modules
-- `variables.tf` - Environment-specific variable declarations
-- `outputs.tf` - Environment outputs
-
-## Terraform Modules (`modules/`)
-
-Active modules with implementation:
-
-- **`data_lake/`**: S3 bucket with prefixes (raw/, processed/, curated/), lifecycle policies, EventBridge notifications
-- **`ingestion_stream/`**: API Gateway HTTP API, Kinesis Data Streams, ETL Lambda, EventBridge rule for batch
-- **`step_functions/`**: State machine with Comprehend integration, CloudWatch Logs
-- **`hot_store/`**: DynamoDB table with GSI, TTL, PITR
-- **`orchestration/`**: Merge Lambda for combining AI outputs
-- **`analytics/`**: Glue Crawler, Athena workgroup, results bucket
-- **`ai_enrichment/`**: Comprehend sentiment analysis and entity extraction (integrated into Step Functions)
-- **`observability/`**: CloudWatch Dashboard (8 widgets), CloudWatch Alarms (6 alarms), SNS topic for notifications
-- **`cost_management/`**: AWS Budget alerts ($50/month with 80%, 100% actual, 100% forecasted thresholds)
-
-Standard module structure:
+## Module Standard Structure
 ```
 modules/<name>/
-├── main.tf        # Core infrastructure resources
-├── iam.tf         # IAM roles, policies, attachments
-├── variables.tf   # Input variables
-├── outputs.tf     # Output values
-└── README.md      # Module documentation
+├── main.tf       # Core resources
+├── iam.tf        # IAM roles, policies, attachments (SEPARATE from main.tf)
+├── variables.tf  # Input variables (all documented)
+├── outputs.tf    # Output values (all documented)
+└── README.md     # Module documentation
 ```
 
-## Lambda Functions (`lambdas/`)
-
-Python-based Lambda function code:
-
-- **`lambdas/etl/`**: Kinesis consumer - validates, normalizes, writes to S3 raw/
-  - `app.py` - Main handler (idempotent writes using Kinesis sequence numbers)
-  - `requirements.txt` - Python dependencies
-
-- **`lambdas/merge/`**: Merges AI outputs, writes to S3 processed/ and DynamoDB
-  - `app.py` - Main handler (~180 lines)
-  - `requirements.txt` - Python dependencies
-
-- **`lambdas/replay/`**: DLQ replay utility (future)
-  - `app.py` - Main handler
-  - `requirements.txt` - Python dependencies
-
-## Scripts (`scripts/`)\n\nDevelopment and testing utilities:\n\n- **`scripts/load_test.py`**: Load testing script (68 lines, Python 3.11+)
-  - Sends test events directly to Kinesis via `boto3.client('kinesis').put_record()`
-  - Default: 25 events with 0.2s delay (configurable by editing `count` parameter)
-  - Tracks success/failure, calculates throughput (events/sec)
-  - Simple `print()` output (CLI script, not Lambda - no logging module overhead)
-  - Replaced 615-line PowerShell script (2026-02-15) for language consistency
-  - **Portfolio note**: Demonstrates AWS SDK proficiency, aligns with Python-first skillset
-
-## Dashboard (`dashboard/`)
-
-Static HTML/JS dashboard for analytics visualization:
-- `index.html` - Main page structure (header, metrics cards, charts, events table)
-- `styles.css` - CSS styling (black/gray theme, responsive design)
-- `app.js` - JavaScript with Chart.js + AWS SDK v2 (DynamoDB, S3, Athena queries)
-- `config.js` - AWS credentials config (GITIGNORED - local demo only)
-- `README.md` - Setup instructions and documentation
-
-**Features:**
-- 5 metrics cards: Total records, Positive, Neutral, Negative, Mixed counts
-- Sentiment distribution pie chart (Curated S3 - pre-aggregated, instant ~100ms)
-- Entity type analysis doughnut chart (Athena with UNNEST - demonstrates SQL skills)
-- Recent events table with text preview (first 100 chars)
-- Auto-refresh every 60 seconds
-- Manual refresh button
-
-**Optimized Data Strategy (2026-01-24):**
-| Feature | Data Source | Latency | Why |
-|---------|-------------|---------|-----|
-| Sentiment Chart | Curated S3 | ~100ms | Pre-aggregated counts by Merge Lambda |
-| Total Processed | Curated S3 | ~100ms | Pre-calculated, instant access |
-| Entity Chart | Athena | ~3s | Demonstrates UNNEST SQL skill |
-| Metrics Cards | DynamoDB | ~50ms | Real-time, last 30 days with TTL |
-| Recent Events | DynamoDB | ~50ms | Real-time, last 30 days |
-
-**Why This Optimization:**
-- Performance: Sentiment chart loads instantly instead of ~3s
-- Cost: Fewer Athena queries = lower cost (Athena charges per data scanned)
-- Demonstrates understanding of when to use each AWS service (interview talking point)
-
-## Documentation (`docs/`)
-
-**Active Documentation Files (as of 2026-02-11):**
-- `roadmap.md` - Detailed implementation roadmap (10 phases)
-- `status.md` - Project status tracking (comprehensive summary of all phases)
-- `errorlog.md` - Historical error log (ALWAYS check before fixing errors)
-- `security-audit-report.md` - Security audit results (IAM, encryption, tfsec)
-- `tfsec-report.md` - Infrastructure security scanning results
-- `ai-dp overview notion.md` - Comprehensive architecture overview
-- `templates/` - Documentation templates for operational guides
-
-**Note:** Several detailed guides (cost-optimization-report.md, load-test-guide.md, data_flow.md, explained.md, aws_resources.md, etc.) were moved to external notes as of 2026-01-30 to reduce repository clutter. Essential information is retained in status.md.
-
-## Module Wiring Pattern
-
-Each environment's `main.tf` instantiates modules and passes outputs:
-
-```hcl
-module "data_lake" {
-  source = "../../modules/data_lake"
-  # ...
-}
-
-module "ingestion_stream" {
-  source                = "../../modules/ingestion_stream"
-  data_lake_bucket_name = module.data_lake.bucket_name
-  data_lake_bucket_arn  = module.data_lake.bucket_arn
-  state_machine_arn     = module.step_functions.state_machine_arn
-  # ...
-}
-
-module "analytics" {
-  source                = "../../modules/analytics"
-  data_lake_bucket_name = module.data_lake.bucket_name
-  data_lake_bucket_arn  = module.data_lake.bucket_arn
-  # ...
-}
+## Lambda Standard Structure
 ```
+lambdas/<name>/
+├── app.py            # Handler with try/except, logging module, env vars
+└── requirements.txt  # Python dependencies
+```
+
+## Key Config Files
+- `CLAUDE.md` - Claude Code instructions (authoritative)
+- `docs/errorlog.md` - Historical errors + solutions (MANDATORY to check before fixing)
+- `.tflint.hcl` - Linting rules: snake_case naming, documented vars/outputs, typed variables
+- `.tfsec.yml` - Security scanning config

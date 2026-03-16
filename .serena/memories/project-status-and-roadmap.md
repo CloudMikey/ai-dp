@@ -1,257 +1,48 @@
-# AI-DP Project Status & Roadmap
+# Project Status & Roadmap
 
-**Last Updated:** 2026-02-15
-**Overall Progress:** ~92% (9.2 of 10 phases complete)
+## Current Status (~92% Complete) — Updated 2026-03-15
 
-## Current Status
+### Completed Phases (0-8)
+- **Phase 0**: Bootstrap (S3 state bucket `tf-state-aidp`)
+- **Phase 1**: Data Lake (S3 three-tier: raw/processed/curated)
+- **Phase 2**: Streaming Ingestion (API Gateway → Kinesis → ETL Lambda → S3)
+- **Phase 3**: Batch Ingestion (S3 → EventBridge → Step Functions)
+- **Phase 4**: Step Functions Orchestration
+- **Phase 5**: DynamoDB Hot Store
+- **Phase 6**: AI Enrichment (Amazon Comprehend - sentiment + entity extraction)
+- **Phase 7**: Merge Lambda & Complete Pipeline
+- **Phase 8**: Analytics & Dashboard (Glue, Athena, Chart.js dashboard)
 
-**Phase 9: Production Hardening & Documentation - 67% Complete (6/9 tasks)**
+### Phase 9: Production Hardening (6/9 tasks — 67%)
+| Task | Status |
+|------|--------|
+| Lambda unit tests (33 tests, 96% coverage) | ✅ |
+| Load testing (1000 events, 0% errors, P95=2044ms) | ✅ |
+| CloudWatch Dashboard (8 widgets) | ✅ |
+| CloudWatch Alarms (6 alarms + SNS) | ✅ |
+| Security Review (IAM audit, KMS, tfsec) | ✅ |
+| Cost Optimization ($12/month actual, $50 budget) | ✅ |
+| Architecture Documentation (diagrams, data flow) | ⏳ |
+| Operational Runbooks (DLQ replay, troubleshooting) | ⏳ |
+| Staging Environment Deployment | ⏳ |
 
-### Completed Tasks ✅
+### Phase 10: CI/CD (Not Started)
+- GitHub Actions with OIDC authentication
+- Automated fmt/validate/plan on PRs
+- Auto-apply on merge to main
 
-1. **Lambda Unit Tests** (2026-01-25)
-   - ETL Lambda: 17 tests
-   - Merge Lambda: 16 tests
-   - Coverage: 96% (exceeds 70% target)
-   - Framework: pytest + moto
+## Cost Summary
+- **Budget**: $50/month
+- **Actual**: ~$12/month (76% under budget)
+- **Largest driver**: Kinesis ($10.87/month, 91% of total)
+- All CloudWatch Logs: 7-day retention
+- DynamoDB: on-demand billing (justified for sporadic dev workload)
+- Full details: `docs/cost-optimization-report.md`
 
-2. **Load Testing** (2026-01-26, Updated 2026-02-15)
-   - Replaced 615-line PowerShell script with 68-line Python script (scripts/load_test.py)
-   - Direct Kinesis integration via boto3.put_record() - demonstrates AWS SDK proficiency
-   - Simple, explainable code (portfolio-appropriate, matches Lambda coding style)
-   - Tests: 1000 events sent to streaming path, 0% error rate, P95 latency 2044ms
-   - Rationale: Python is core skill (Lambdas), PowerShell/JS not main focus
-
-3. **CloudWatch Dashboard** (2026-01-26)
-   - Dashboard: `ai-dp-dev-operations`
-   - 8 widgets across 7 rows
-   - Monitors: Lambda, Kinesis, Step Functions, DLQs, DynamoDB
-
-4. **CloudWatch Alarms** (2026-01-26)
-   - 6 alarms configured
-   - SNS topic: `ai-dp-dev-cloudwatch-alarms`
-   - Email notifications verified working
-
-5. **Security Review** (2026-01-28)
-   - 7 IAM roles audited for least-privilege
-   - Kinesis KMS encryption enabled (was NONE)
-   - Removed unnecessary `s3:PutObjectAcl` from ETL Lambda
-   - tfsec scan: 0 critical findings
-   - Report: `docs/security-audit-report.md` (active)
-
-6. **Cost Optimization Review** (2026-01-28) ✅ LATEST
-   - AWS Budget alerts: $50/month (80%, 100% actual, 100% forecasted)
-   - Current costs: ~$12/month (76% under budget)
-   - CloudWatch Logs: All 7-day retention verified
-   - S3 lifecycle: Optimal (180-day raw, 365-day processed)
-   - DynamoDB: On-demand justified (500x cheaper for dev)
-   - Cost module: `modules/cost_management/` created
-   - Report: Cost optimization review completed (files moved to external notes)
-
-### Remaining Tasks (Phase 9)
-
-7. **Architecture Documentation** - NOT STARTED
-   - Create architecture diagrams
-   - Document data flow (batch + streaming paths)
-   - Add sequence diagrams
-   - API contracts documentation
-
-8. **Operational Runbooks** - NOT STARTED
-   - DLQ replay procedure
-   - Manual Step Functions trigger
-   - Scaling Kinesis shards
-   - Troubleshooting Lambda errors
-   - Disaster recovery procedures
-
-9. **Staging Environment Deployment** - NOT STARTED
-   - Deploy to `envs/stg/`
-   - Run smoke tests
-   - Compare configs (dev vs staging)
-   - Document environment differences
-
-## Deployed Infrastructure (Dev)
-
-| Component | Resource Name | Status |
-|-----------|---------------|--------|
-| State Bucket | `tf-state-aidp` (us-west-1) | ✅ |
-| Data Lake | `ai-dp-data-lake-dev-us-west-2` | ✅ |
-| Kinesis | `ai-dp-dev-ingestion-stream` (KMS encrypted) | ✅ |
-| API Gateway | `https://pvqb2gzg7i.execute-api.us-west-2.amazonaws.com/ingest` | ✅ |
-| Step Functions | `ai-dp-dev-orchestrator` | ✅ |
-| DynamoDB | `ai-dp-dev-enriched-data` (on-demand, TTL enabled) | ✅ |
-| Glue Database | `ai-dp-dev-analytics` | ✅ |
-| Athena Workgroup | `ai-dp-dev-workgroup` | ✅ |
-| CloudWatch Dashboard | `ai-dp-dev-operations` (8 widgets) | ✅ |
-| CloudWatch Alarms | 6 alarms + SNS topic | ✅ |
-| AWS Budget | `ai-dp-dev-monthly-budget` ($50/month) | ✅ |
-
-## Phase Completion History
-
-### Phase 0: Bootstrap (100%) ✅
-- Terraform >= 1.11.0 setup
-- S3 backend with native locking (`use_lockfile = true`)
-- Remote state migration completed
-
-### Phase 1: Data Lake Foundation (100%) ✅
-- S3 bucket: `ai-dp-data-lake-dev-us-west-2`
-- Three layers: raw/, processed/, curated/
-- Lifecycle policies configured
-- EventBridge notifications enabled
-
-### Phase 2: Streaming Ingestion (100%) ✅
-- API Gateway → Kinesis → Lambda → S3 pipeline
-- ETL Lambda: 166 lines, simplified for portfolio
-- S3 partitioning: `raw/year=YYYY/month=MM/day=DD/`
-- DLQ error handling tested
-
-### Phase 3: Batch Ingestion (100%) ✅
-- EventBridge rule: `ai-dp-dev-s3-batch-ingestion`
-- Event pattern filters to `raw/` prefix only
-- CloudWatch Metrics verified
-
-### Phase 4: Step Functions Orchestration (100%) ✅
-- State machine: `ai-dp-dev-orchestrator`
-- EventBridge → Step Functions integration
-- CloudWatch Logs: ALL level
-- End-to-end batch path tested
-
-### Phase 5: DynamoDB Hot Store (100%) ✅
-- Table: `ai-dp-dev-enriched-data`
-- Partition key: recordId, Sort key: timestamp
-- GSI: timestamp-index (recordType + timestamp)
-- TTL: 30 days, PITR: 35 days
-
-### Phase 6: AI Enrichment (100%) ✅
-- Comprehend sentiment + entity extraction
-- Parallel execution (2 tasks simultaneously)
-- Step Functions AWS SDK integrations (no Lambda wrapper)
-- Least-privilege IAM (S3 scoped to `raw/*`)
-
-### Phase 7: Merge Lambda & Orchestration (100%) ✅
-- Merge Lambda: 180 lines
-- Writes to S3 `processed/` + DynamoDB
-- End-to-end pipeline: Both streaming and batch paths working
-- Date partitioning on processed/ layer
-
-### Phase 8: Analytics & Query Layer (100%) ✅
-- Glue crawler cataloging processed/ data
-- Athena queries with partition pruning
-- Browser-based dashboard (HTML/CSS/JS + Chart.js)
-- Three-tier data strategy: Curated S3 (pre-aggregated), DynamoDB (real-time), Athena (complex SQL)
-
-### Phase 9: Production Hardening (67%) 🚧 CURRENT
-- **Completed:** Unit tests, load testing, dashboard, alarms, security review, cost optimization
-- **Remaining:** Architecture docs, runbooks, staging deployment
-
-### Phase 10: CI/CD Pipeline (0%) ⏳ NEXT
-- AWS OIDC identity provider
-- GitHub Actions workflows (CI + Deploy)
-- Environment protection rules
-- Workflow testing and documentation
-
-## Key Metrics
-
-**Technical:**
-- End-to-end latency: P95 = 2044ms (target < 5s) ✅
-- Error rate: 0% (1000 events load test) ✅
-- Test coverage: 96% (target 70%) ✅
-- Cost: $12/month (budget $50/month) ✅
-- Security: 0 critical tfsec findings ✅
-
-**Portfolio Readiness:**
-- Working demo: ✅ (both streaming and batch paths)
-- Infrastructure as Code: ✅ (Terraform modules)
-- Observability: ✅ (dashboard + alarms)
-- Security: ✅ (IAM audit, encryption, tfsec)
-- Cost optimization: ✅ (budget alerts, lifecycle policies)
-- Documentation: 🚧 (phase history complete, architecture diagrams pending)
-
-## Next Steps
-
-**Immediate (Phase 9 completion):**
-1. Create architecture diagrams (data flow, batch/streaming sequences)
-2. Write operational runbooks (DLQ replay, troubleshooting)
-3. Deploy staging environment
-
-**Future (Phase 10):**
-1. GitHub OIDC setup for AWS authentication
-2. CI workflow for pull requests (fmt, validate, lint, plan)
-3. Deploy workflow with environment approvals (dev auto, staging/prod manual)
-
-## Repository Structure
-
-```
-AI-DP/
-├── envs/               # dev, stg, prod configurations
-├── modules/            # Terraform modules (10 modules)
-│   ├── data_lake/
-│   ├── ingestion_stream/
-│   ├── step_functions/
-│   ├── hot_store/
-│   ├── orchestration/
-│   ├── analytics/
-│   ├── observability/
-│   ├── ai_enrichment/
-│   └── cost_management/  # NEW: Budget alerts
-├── lambdas/            # Python Lambda functions
-│   ├── etl/            # 166 lines + 17 tests
-│   └── merge/          # 180 lines + 16 tests
-├── dashboard/          # Browser-based analytics
-└── docs/               # Project documentation
-    ├── roadmap.md
-    ├── errorlog.md
-    ├── security-audit-report.md
-    ├── cost-optimization-report.md  # NEW
-    └── tfsec-report.md
-```
-
-## Cost Breakdown (Jan 2026 Actuals)
-
-| Service | Monthly Cost | % of Total |
-|---------|--------------|------------|
-| Kinesis (on-demand) | $10.87 | 91% |
-| Route 53 (hosted zone) | $0.50 | 4% |
-| Glue (crawler) | $0.21 | 2% |
-| Step Functions | $0.19 | 2% |
-| Athena | $0.07 | 1% |
-| S3 | $0.04 | <1% |
-| DynamoDB | $0.002 | <1% |
-| **Total** | **$11.90** | **100%** |
-
-**Budget:** $50/month (76% under budget)
-**Alerts:** 80% ($40), 100% actual ($50), 100% forecasted
-
-## Interview Talking Points
-
-**Cost Optimization:**
-- "I configured AWS Budget alerts with 80% early warning and 100% hard limit thresholds"
-- "Analyzed cost breakdown and identified Kinesis as 91% of monthly spend"
-- "Justified DynamoDB on-demand for dev: 500x cheaper than provisioned for sporadic workload"
-- "Set environment-appropriate lifecycle policies: 180-day retention for dev, would use 2 years for production"
-
-**Security:**
-- "Audited all 7 IAM roles for least-privilege compliance"
-- "Enabled Kinesis KMS encryption during security review"
-- "Ran tfsec security scan: 0 critical findings"
-- "Scoped IAM permissions to specific prefixes (e.g., S3 `raw/*` only)"
-
-**Observability:**
-- "Built CloudWatch dashboard with 8 widgets monitoring Lambda, Kinesis, Step Functions, DLQs"
-- "Configured 6 alarms with SNS email notifications"
-- "Load tested with 1000 events: 0% errors, P95 latency 2044ms"
-
-**Testing:**
-- "Wrote 33 unit tests with pytest and moto, achieved 96% coverage"
-- "Implemented load testing with PowerShell script"
-- "Tested both streaming (API Gateway → Kinesis) and batch (S3 → EventBridge) paths"
-
-## Active Documentation Files
-
-- Roadmap: `docs/roadmap.md`
-- Status: `docs/status.md` (summary of all phases)
-- Security Audit: `docs/security-audit-report.md`
-- Error Log: `docs/errorlog.md`
-- tfsec Report: `docs/tfsec-report.md`
-- Architecture Overview: `docs/ai-dp overview notion.md`
-
-**Note:** Several documentation files (cost-optimization-report.md, load-test-guide.md, data_flow.md, etc.) were moved to external notes as of 2026-01-30 to reduce repository clutter. Key information retained in status.md and this memory.
+## Key Achievements
+- 33 Lambda unit tests, 96% coverage
+- 1000-event load test, 0% errors
+- KMS encryption on Kinesis stream
+- Least-privilege IAM with separate `iam.tf` files
+- SQS DLQs for all async Lambda invocations
+- S3 lifecycle policies (180-day raw, 365-day processed)
