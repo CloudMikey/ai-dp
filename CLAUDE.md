@@ -14,6 +14,8 @@ This is an **AI-Powered Serverless Data Pipeline** built on AWS infrastructure m
 - Storage: S3 (raw/processed/curated layers), DynamoDB, Glue + Athena
 - Observability: CloudWatch, X-Ray, SQS DLQs
 
+> **For full architecture context:** Load Serena memory `project-overview` before making technology or integration decisions.
+
 ## Repository Structure
 
 ```
@@ -27,6 +29,8 @@ AI-DP/
 ├── dashboard/          # Browser-based analytics dashboard
 └── docs/               # Project documentation
 ```
+
+> **For full module details and file locations:** Load Serena memory `repository-structure` before navigating or modifying modules.
 
 ## Current Status & Deployed Infrastructure
 
@@ -65,7 +69,7 @@ AI-DP/
 
 **Next:** Phase 9 Tasks 7-9 (Architecture Docs, Runbooks, Staging) → Phase 10 (CI/CD)
 
-**For detailed phase history and achievements:** Read Serena memory `project-status-and-roadmap`
+**For full phase history, achievements, and next steps:** Load Serena memory `project-status-and-roadmap`.
 
 ## Coding Standards & Principles
 
@@ -92,6 +96,8 @@ This is a **portfolio project for entry-level to intermediate cloud engineering 
 4. Use `replace_symbol_body` for precise symbol-level edits
 
 **Rule**: Only fall back to Read/Edit/Grep when Serena isn't applicable (non-code files, line-specific edits).
+
+> **For full coding rules, patterns, and anti-patterns:** Load Serena memory `coding-standards` before writing any code or Terraform.
 
 ### Code Quality
 - Prefer simple solutions over complex ones
@@ -132,6 +138,8 @@ backend "s3" {
 - Use dynamic blocks with conditional `for_each` to avoid empty rule errors
 - See `docs/errorlog.md` for details
 
+> **For full Terraform patterns and examples:** Load Serena memory `coding-standards` before implementing infrastructure.
+
 ## Development Commands
 
 ```powershell
@@ -151,6 +159,8 @@ curl -X POST "https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest" `
 # Test batch ingestion
 aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 ```
+
+> **For full command reference and workflow:** Load Serena memories `suggested_commands` and `terraform-workflow-commands` before running unfamiliar commands.
 
 ## Quick Reference
 
