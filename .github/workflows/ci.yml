@@ -1,0 +1,139 @@
+name: CI - Terraform Validation
+
+# Trigger: Any PR targeting main
+on:
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same PR when new commits are pushed
+# Prevents stale plan output from accumulating in PR comments
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.13.0"    # Matches .terraform-version
+  WORKING_DIR: "envs/dev"
+  AWS_REGION: "us-west-2" # Application region (backend state is in us-west-1)
+
+jobs:
+  terraform-ci:
+    name: Terraform CI
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write      # Required: request OIDC JWT from GitHub
+      contents: read       # Required: checkout the repo
+      pull-requests: write # Required: post plan output as PR comment
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Terraform ───────────────────────────────────────────────────
+      # terraform_wrapper: true (default) wraps the binary so plan stdout/stderr
+      # are captured as step outputs — required for the PR comment step
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── 3. Setup tflint ──────────────────────────────────────────────────────
+      - name: Setup tflint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      # ── 4. Configure AWS credentials via OIDC ────────────────────────────────
+      # GitHub exchanges an OIDC token for short-lived AWS credentials.
+      # No long-term access keys are stored in GitHub secrets.
+      # Role trust policy is scoped to repo:CloudMikey/AI-DP:*
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-ci-${{ github.run_id }}
+
+      # ── 5. Terraform Init ────────────────────────────────────────────────────
+      # Uses partial backend config (bucket/key/region in backend-dev.hcl,
+      # encrypt/use_lockfile in terraform.tf) — matches local workflow exactly
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init -backend-config=backend-dev.hcl
+
+      # ── 6. Terraform Format Check ────────────────────────────────────────────
+      # -recursive checks modules/ as well as envs/dev/
+      - name: Terraform Format Check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform fmt -check -recursive
+
+      # ── 7. Terraform Validate ────────────────────────────────────────────────
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      # ── 8. tflint Init ───────────────────────────────────────────────────────
+      # Downloads the aws plugin defined in .tflint.hcl (v0.32.0)
+      - name: tflint Init
+        run: tflint --init --config="$(pwd)/.tflint.hcl"
+
+      # ── 9. Run tflint ────────────────────────────────────────────────────────
+      # --chdir points tflint at the Terraform code; --config points at repo root
+      - name: Run tflint
+        run: tflint --chdir="${{ env.WORKING_DIR }}" --config="$(pwd)/.tflint.hcl"
+
+      # ── 10. Run tfsec ────────────────────────────────────────────────────────
+      # working_directory is relative to repo root
+      # config-file path is relative to working_directory (../../ = repo root)
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1
+        with:
+          working_directory: ${{ env.WORKING_DIR }}
+          additional_args: --config-file ../../.tfsec.yml
+
+      # ── 11. Terraform Plan ───────────────────────────────────────────────────
+      # continue-on-error: true so we can post the failure output to the PR
+      # comment before the job actually fails (see step 13)
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: true
+
+      # ── 12. Post Plan Output to PR ───────────────────────────────────────────
+      # Uses actions/github-script (first-party) to avoid external dependencies.
+      # Plan output passed via env var to prevent template injection.
+      - name: Post Plan to PR
+        uses: actions/github-script@v7
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
+        with:
+          script: |
+            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${process.env.PLAN}
+            \`\`\`
+
+            </details>
+
+            *Pushed by @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      # ── 13. Fail job if Plan failed ──────────────────────────────────────────
+      # Re-raises the plan failure after the comment has been posted
+      - name: Check Plan Result
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
