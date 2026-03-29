@@ -61,7 +61,13 @@ jobs:
       # encrypt/use_lockfile in terraform.tf) — matches local workflow exactly
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
-        run: terraform init -backend-config=backend-dev.hcl
+        run: |
+          terraform init \
+            -backend-config="bucket=tf-state-aidp" \
+            -backend-config="key=envs/dev/terraform.tfstate" \
+            -backend-config="region=us-west-1" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
 
       # ── 6. Terraform Format Check ────────────────────────────────────────────
       # -recursive checks modules/ as well as envs/dev/
