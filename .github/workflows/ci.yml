@@ -29,19 +29,19 @@ jobs:
     steps:
       # ── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       # ── 2. Setup Terraform ───────────────────────────────────────────────────
       # terraform_wrapper: true (default) wraps the binary so plan stdout/stderr
       # are captured as step outputs — required for the PR comment step
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v3.1.2
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
       # ── 3. Setup tflint ──────────────────────────────────────────────────────
       - name: Setup tflint
-        uses: terraform-linters/setup-tflint@v4
+        uses: terraform-linters/setup-tflint@v4.1.1
         with:
           tflint_version: latest
 
@@ -50,7 +50,7 @@ jobs:
       # No long-term access keys are stored in GitHub secrets.
       # Role trust policy is scoped to repo:CloudMikey/AI-DP:*
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v4.1.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -81,12 +81,18 @@ jobs:
         run: terraform validate
 
       # ── 8. tflint Init ───────────────────────────────────────────────────────
-      # Downloads the aws plugin defined in .tflint.hcl (v0.32.0)
-      # GITHUB_TOKEN authenticates plugin download to avoid anonymous rate limits
+      # Install the aws plugin binary directly to avoid GitHub API rate limits.
+      # Plugin dir matches where tflint looks: ~/.tflint/plugins/
       - name: tflint Init
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: tflint --init --config="$(pwd)/.tflint.hcl"
+        run: |
+          mkdir -p ~/.tflint/plugins
+          curl -sL --retry 3 \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://github.com/terraform-linters/tflint-ruleset-aws/releases/download/v0.32.0/tflint-ruleset-aws_linux_amd64.zip" \
+            -o /tmp/tflint-ruleset-aws.zip
+          unzip -o /tmp/tflint-ruleset-aws.zip -d ~/.tflint/plugins/
 
       # ── 9. Run tflint ────────────────────────────────────────────────────────
       # --chdir points tflint at the Terraform code; --config points at repo root
