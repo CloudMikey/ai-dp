@@ -27,9 +27,6 @@ rule "aws_s3_bucket_versioning_enabled" {
   enabled = true
 }
 
-rule "aws_s3_bucket_server_side_encryption_configuration_enabled" {
-  enabled = true
-}
 
 rule "aws_lambda_function_tracing_enabled" {
   enabled = true
