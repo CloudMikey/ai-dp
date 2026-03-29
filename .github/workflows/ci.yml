@@ -87,12 +87,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p ~/.tflint/plugins
+          PLUGIN_DIR="$HOME/.tflint/plugins/github.com/terraform-linters/tflint-ruleset-aws/0.32.0"
+          mkdir -p "$PLUGIN_DIR"
           curl -sL --retry 3 \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             "https://github.com/terraform-linters/tflint-ruleset-aws/releases/download/v0.32.0/tflint-ruleset-aws_linux_amd64.zip" \
             -o /tmp/tflint-ruleset-aws.zip
-          unzip -o /tmp/tflint-ruleset-aws.zip -d ~/.tflint/plugins/
+          unzip -o /tmp/tflint-ruleset-aws.zip -d "$PLUGIN_DIR"
 
       # ── 9. Run tflint ────────────────────────────────────────────────────────
       # --chdir points tflint at the Terraform code; --config points at repo root
