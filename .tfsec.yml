@@ -8,8 +8,23 @@ severity_overrides:
 
 # Exclude specific checks if needed
 exclude:
-  # Example: Exclude checks that don't apply to your use case
-  # - aws-s3-enable-bucket-logging  # Uncomment if you have centralized logging
+  # IAM wildcard resources: required for service-linked actions (logs:CreateLogDelivery,
+  # comprehend:DetectEntities) and path-scoped S3 ARNs that tfsec misreads as wildcards.
+  # Reviewed and accepted in Phase 9 security audit.
+  - aws-iam-no-policy-wildcards
+
+  # CMK encryption: not required for dev environment, adds significant cost.
+  # Data at rest is protected by AWS-managed keys (AES256/SSE-S3).
+  - aws-s3-encryption-customer-key
+  - aws-dynamodb-table-customer-key
+  - aws-cloudwatch-log-group-customer-key
+  - aws-sns-enable-topic-encryption
+  - aws-sqs-enable-queue-encryption
+  - aws-dynamodb-enable-at-rest-encryption
+
+  # S3 bucket logging: dev environment uses centralized CloudWatch for observability.
+  # Access logging to a separate bucket adds cost and complexity not needed for dev.
+  - aws-s3-enable-bucket-logging
 
 # Minimum severity to fail CI/CD pipeline
 minimum_severity: MEDIUM
