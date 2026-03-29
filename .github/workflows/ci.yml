@@ -82,7 +82,10 @@ jobs:
 
       # ── 8. tflint Init ───────────────────────────────────────────────────────
       # Downloads the aws plugin defined in .tflint.hcl (v0.32.0)
+      # GITHUB_TOKEN authenticates plugin download to avoid anonymous rate limits
       - name: tflint Init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: tflint --init --config="$(pwd)/.tflint.hcl"
 
       # ── 9. Run tflint ────────────────────────────────────────────────────────
