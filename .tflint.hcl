@@ -23,18 +23,6 @@ rule "aws_resource_missing_tags" {
   tags = ["Environment", "Project", "ManagedBy"]
 }
 
-rule "aws_s3_bucket_versioning_enabled" {
-  enabled = true
-}
-
-
-rule "aws_lambda_function_tracing_enabled" {
-  enabled = true
-}
-
-rule "aws_cloudwatch_log_group_retention_in_days" {
-  enabled = true
-}
 
 # Terraform best practices
 rule "terraform_required_version" {
