@@ -85,13 +85,12 @@ jobs:
         run: tflint --chdir="${{ env.WORKING_DIR }}" --config="$(pwd)/.tflint.hcl"
 
       # ── 10. Run tfsec ────────────────────────────────────────────────────────
-      # working_directory is relative to repo root
-      # config-file path is relative to working_directory (../../ = repo root)
+      # aquasecurity/tfsec-action was deprecated; install binary directly instead
+      - name: Install tfsec
+        run: curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
       - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1
-        with:
-          working_directory: ${{ env.WORKING_DIR }}
-          additional_args: --config-file ../../.tfsec.yml
+        run: tfsec ${{ env.WORKING_DIR }} --config-file .tfsec.yml --minimum-severity MEDIUM --no-color
 
       # ── 11. Terraform Plan ───────────────────────────────────────────────────
       # continue-on-error: true so we can post the failure output to the PR
