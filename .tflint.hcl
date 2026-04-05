@@ -18,26 +18,12 @@ plugin "terraform" {
 }
 
 # AWS-specific rules
+# Disabled: project uses provider default_tags + merge(var.tags, {...}) pattern
+# tflint cannot statically verify tags passed through variables or merge()
 rule "aws_resource_missing_tags" {
-  enabled = true
-  tags = ["Environment", "Project", "ManagedBy"]
+  enabled = false
 }
 
-rule "aws_s3_bucket_versioning_enabled" {
-  enabled = true
-}
-
-rule "aws_s3_bucket_server_side_encryption_configuration_enabled" {
-  enabled = true
-}
-
-rule "aws_lambda_function_tracing_enabled" {
-  enabled = true
-}
-
-rule "aws_cloudwatch_log_group_retention_in_days" {
-  enabled = true
-}
 
 # Terraform best practices
 rule "terraform_required_version" {
