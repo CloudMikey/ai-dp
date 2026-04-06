@@ -88,6 +88,7 @@ This pipeline processes both **batch** and **streaming** data, enriching it with
     └────────────────┘
 ```
 
+
 For detailed architecture documentation, see [`docs/ai-dp overview notion.md`](docs/ai-dp%20overview%20notion.md).
 
 ## Technology Stack
