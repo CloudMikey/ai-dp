@@ -36,7 +36,9 @@
       "mcp__serena__find_file",
       "mcp__aws-terraform__SearchAwsccProviderDocs",
       "mcp__serena__get_symbols_overview",
-      "mcp__serena__find_symbol"
+      "mcp__serena__find_symbol",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

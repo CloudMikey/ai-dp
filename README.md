@@ -240,8 +240,8 @@ pytest lambdas/merge/
 
 ## Project Status
 
-**Current Phase**: Phase 8 Complete - Analytics & Query Layer
-**Overall Progress**: 90% (9 of 10 phases complete)
+**Current Phase**: Phase 9 (67%) + Phase 10 Task 1 ✅ — CI/CD OIDC Role Setup Complete
+**Overall Progress**: ~93% (Phase 10 Task 1 complete — 2026-03-22)
 
 This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) for detailed implementation phases and completion criteria.
 
@@ -294,18 +294,22 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 - Responsive design: Real-time metrics, sentiment charts, entity analysis
 - Zero dependencies: Runs directly from file system or S3 static hosting
 
-### 🔄 Next Phase
+**Phase 9: Production Hardening** (67% — 6/9 tasks complete)
+- ✅ Lambda unit tests (33 tests, 96% coverage)
+- ✅ Load testing (1000 events, 0% errors)
+- ✅ CloudWatch Dashboard (8 widgets) + 6 Alarms + SNS
+- ✅ Security Review (IAM audit, KMS, tfsec — 0 critical findings)
+- ✅ Cost Optimization ($12/month actual, 76% under $50 budget)
+- ⏳ Architecture Docs, Operational Runbooks, Staging
 
-**Phase 9: Production Hardening** (Next)
-- CloudWatch alarms for all critical components
-- API Gateway throttling and rate limiting
-- Lambda unit tests (pytest + moto)
-- Load testing streaming path
-- Security review (IAM audit, tfsec scan)
+**Phase 10: CI/CD Pipeline** (17% — 1/6 tasks complete)
+- ✅ **Task 1:** GitHub Actions OIDC role (`ai-dp-dev-github-actions`) — least-privilege IAM, Terraform-managed
+- ⏳ Tasks 2-6: CI workflow, Deploy workflow, Environment protection, Testing, Docs
 
-### 📋 Planned
+### 📋 Remaining
 
-- Phase 10: CI/CD Pipeline (GitHub Actions with OIDC)
+- Phase 9 Tasks 7-9 (Architecture Docs, Runbooks, Staging)
+- Phase 10 Tasks 2-6 (CI/CD Workflows)
 
 ## Documentation
 

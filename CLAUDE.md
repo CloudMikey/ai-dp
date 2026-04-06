@@ -34,7 +34,7 @@ AI-DP/
 
 ## Current Status & Deployed Infrastructure
 
-**Progress: ~92% Complete (Phases 0-8 done, Phase 9 at 67%)**
+**Progress: ~94% Complete (Phases 0-8 done, Phase 9 at 67%, Phase 10 at 33%)**
 
 | Component | Resource Name | Status |
 |-----------|---------------|--------|
@@ -49,6 +49,7 @@ AI-DP/
 | CloudWatch Dashboard | `ai-dp-dev-operations` | ✅ |
 | CloudWatch Alarms | 6 alarms + SNS topic | ✅ |
 | AWS Budget | `ai-dp-dev-monthly-budget` ($50/month) | ✅ |
+| GitHub Actions OIDC Role | `ai-dp-dev-github-actions` | ✅ |
 
 **Phase 9 Progress (6/9 tasks):**
 - ✅ Lambda unit tests (33 tests, 96% coverage)
@@ -67,7 +68,11 @@ AI-DP/
 - Kinesis identified as largest cost driver ($10.87/month, 91% of total)
 - Full cost analysis: `docs/cost-optimization-report.md`
 
-**Next:** Phase 9 Tasks 7-9 (Architecture Docs, Runbooks, Staging) → Phase 10 (CI/CD)
+**Phase 10 Progress (2/6 tasks):**
+- ✅ **OIDC IAM Role Setup** — `ai-dp-dev-github-actions` role with least-privilege policy, imported into Terraform state
+- ✅ **CI Workflow** — `.github/workflows/ci.yml` runs fmt/validate/tflint/tfsec/plan on every PR, posts plan as PR comment
+
+**Next:** Phase 9 Tasks 7-9 (Architecture Docs, Runbooks, Staging) + Phase 10 Task 3 (Deploy Workflow)
 
 **For full phase history, achievements, and next steps:** Load Serena memory `project-status-and-roadmap`.
 

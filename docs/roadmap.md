@@ -631,25 +631,24 @@
 
 ### Tasks
 
-**1. AWS OIDC Identity Provider Setup**
-- Create OIDC Identity Provider in IAM for `token.actions.githubusercontent.com`
-- Create three IAM roles (dev, stg, prod) with trust policies scoped to your GitHub repository
-- Document role ARNs in README
+**1. AWS OIDC Identity Provider Setup** ✅ COMPLETED (2026-03-22)
+- Reused existing OIDC Identity Provider (`token.actions.githubusercontent.com`) from prior project
+- Created IAM role `ai-dp-dev-github-actions` with least-privilege inline policy (`ai-dp-dev-terraform-policy`)
+- Trust policy scoped to `repo:CloudMikey/AI-DP:*` — only this repo can assume the role
+- Policy covers all project services with ARN-scoped permissions (`ai-dp-*` prefix where supported)
+- Role imported into Terraform state via `terraform import` (`envs/dev/cicd.tf`)
+- Role ARN: `arn:aws:iam::061039801477:role/ai-dp-dev-github-actions`
 
 **Complete when:** GitHub Actions can assume each role, trust policies validated
 
-**2. CI Workflow - Pull Requests**
-- Create `.github/workflows/ci.yml`
-- Workflow triggers: Pull requests to `main`
-- Steps:
-  - Checkout code
-  - Setup Terraform
-  - `terraform fmt -check`
-  - `terraform validate`
-  - Run `tflint`
-  - Run `tfsec`
-  - `terraform plan` for dev environment
-  - Comment plan output on PR
+**2. CI Workflow - Pull Requests** ✅ COMPLETED (2026-04-05)
+- Created `.github/workflows/ci.yml` — triggers on PRs to `main`
+- Steps: checkout → setup Terraform v1.13.0 + tflint → OIDC auth → init → fmt -check → validate → tflint → tfsec → plan → post plan as PR comment
+- OIDC authentication via `vars.AWS_ROLE_ARN` — no long-term credentials
+- Plan output posted as collapsible PR comment via `actions/github-script`
+- Least-privilege IAM policy (`ai-dp-dev-terraform-policy`) fully tuned across 25 CI runs
+- Key IAM lesson: `aws_lambda_event_source_mapping` uses UUID ARNs requiring separate `Resource: "*"` statement for `lambda:ListTags`
+- PR #1 merged via squash merge on 2026-04-05
 
 **Complete when:** PR triggers CI workflow, all checks pass, plan output visible in PR comments
 
@@ -725,10 +724,10 @@ Phase 6 (AI Enrichment):       ████████████████�
 Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
 Phase 8 (Analytics):           ████████████████████ 100% ✅
 Phase 9 (Production Hardening):████████████░░░░░░░░  67% (6/9 tasks)
-Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 10 (CI/CD):              ███████░░░░░░░░░░░░░  33% (2/6 tasks)
 ```
 
-**Overall Progress:** ~92% (9.2 of 10 phases complete)
+**Overall Progress:** ~93% (9.3 of 10 phases complete)
 
 ---
 

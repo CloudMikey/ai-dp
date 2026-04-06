@@ -48,3 +48,15 @@ output "kinesis_stream_arn" {
   description = "ARN of the Kinesis ingestion stream"
   value       = module.ingestion_stream.kinesis_stream_arn
 }
+
+#-------------------- CI/CD Outputs --------------------#
+
+output "github_actions_dev_role_arn" {
+  description = "IAM role ARN for GitHub Actions dev deployments - add to .github/workflows/ files"
+  value       = aws_iam_role.github_actions_dev.arn
+}
+
+output "oidc_provider_arn" {
+  description = "ARN of the GitHub Actions OIDC Identity Provider"
+  value       = data.aws_iam_openid_connect_provider.github_actions.arn
+}

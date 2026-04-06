@@ -1,6 +1,6 @@
 # Project Status & Roadmap
 
-## Current Status (~92% Complete) — Updated 2026-03-15
+## Current Status (~93% Complete) — Updated 2026-03-22
 
 ### Completed Phases (0-8)
 - **Phase 0**: Bootstrap (S3 state bucket `tf-state-aidp`)
@@ -26,10 +26,23 @@
 | Operational Runbooks (DLQ replay, troubleshooting) | ⏳ |
 | Staging Environment Deployment | ⏳ |
 
-### Phase 10: CI/CD (Not Started)
-- GitHub Actions with OIDC authentication
-- Automated fmt/validate/plan on PRs
-- Auto-apply on merge to main
+### Phase 10: CI/CD (1/6 tasks — 17%)
+| Task | Status |
+|------|--------|
+| AWS OIDC IAM Role Setup | ✅ (2026-03-22) |
+| CI Workflow (`.github/workflows/ci.yml`) | ✅ (2026-04-05) — fmt/validate/tflint/tfsec/plan on PRs, plan posted as comment |
+| Deploy Workflow (`.github/workflows/deploy.yml`) | ⏳ |
+| Environment Protection Rules | ⏳ |
+| Workflow Testing | ⏳ |
+| CI/CD Documentation | ⏳ |
+
+**Phase 10 Task 1 Details:**
+- Reused existing OIDC provider (`token.actions.githubusercontent.com`) from prior project
+- Created IAM role `ai-dp-dev-github-actions` with least-privilege inline policy (`ai-dp-dev-terraform-policy`)
+- Trust policy scoped to `repo:CloudMikey/AI-DP:*` (dev only, no stg/prod roles)
+- Policy covers all project services with ARN-scoped permissions (`ai-dp-*` prefix where supported)
+- Role managed in `envs/dev/cicd.tf`, imported via `terraform import`
+- Role ARN: `arn:aws:iam::061039801477:role/ai-dp-dev-github-actions`
 
 ## Cost Summary
 - **Budget**: $50/month

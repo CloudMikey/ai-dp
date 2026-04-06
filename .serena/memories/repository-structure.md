@@ -36,6 +36,9 @@ AI-DP/
 ## Environment Structure (envs/dev/)
 Each env contains: `backend.tf`, `providers.tf`, `main.tf`, `variables.tf`, `outputs.tf`
 
+**Phase 10 addition:**
+- `envs/dev/cicd.tf` — GitHub Actions OIDC role (`aws_iam_role.github_actions_dev`) + data source for existing OIDC provider. Inline policy managed via AWS Console (not Terraform).
+
 ## Module Standard Structure
 ```
 modules/<name>/

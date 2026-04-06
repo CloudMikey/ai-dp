@@ -1,8 +1,8 @@
 # Project Status
 
-**Last Updated:** 2026-01-24
+**Last Updated:** 2026-04-05
 
-> **Quick Status:** Phases 0-8 complete (90% overall progress). Recent enhancement: Dashboard optimization - moved sentiment chart and total count from Athena to Curated S3 for instant loading (~100ms vs ~3s). Ready to begin Phase 9: Production Hardening.
+> **Quick Status:** Phases 0-8 complete, Phase 9 at 67% (6/9 tasks), Phase 10 at 33% (2/6 tasks). Latest: CI workflow live — PRs to main trigger fmt/validate/tflint/tfsec/plan with output posted as PR comment.
 
 ---
 
@@ -109,33 +109,50 @@
 - End-to-end testing: Glue Crawler → Athena queries → Browser dashboard visualization
 - Zero dependencies: Runs directly from browser (local file or S3 static hosting)
 
+### Phase 10: CI/CD Pipeline (33% — 2/6 tasks)
+- **Task 1 ✅ (2026-03-22):** AWS OIDC IAM Role Setup
+  - Reused existing OIDC provider (`token.actions.githubusercontent.com`)
+  - Created `ai-dp-dev-github-actions` role with least-privilege inline policy
+  - Trust scoped to `repo:CloudMikey/AI-DP:*`
+  - Imported into Terraform state (`envs/dev/cicd.tf`)
+  - Role ARN: `arn:aws:iam::061039801477:role/ai-dp-dev-github-actions`
+- **Task 2 ✅ (2026-04-05):** CI Workflow — Pull Request Validation
+  - Created `.github/workflows/ci.yml` — triggers on all PRs to `main`
+  - Pipeline: checkout → Terraform v1.13.0 setup → OIDC auth → init → fmt -check → validate → tflint → tfsec → plan → PR comment
+  - Plan output posted as collapsible PR comment via `actions/github-script`
+  - Least-privilege IAM policy fully tuned (`ai-dp-dev-terraform-policy`)
+  - Key lesson: `aws_lambda_event_source_mapping` needs separate `Resource: "*"` statement for `lambda:ListTags`
+  - PR #1 merged via squash merge (25 runs to finalize IAM permissions)
+
 ---
 
 ## Current Phase
 
-**Phase 9: Production Hardening**
-- **Status:** Not started (Next phase to begin)
-- **Goal:** Load testing, security review, monitoring, operational documentation
-- **What's needed:**
-  1. Lambda unit tests (ETL + Merge with pytest + moto)
-  2. Load testing streaming path (1000 events)
-  3. CloudWatch dashboards and alarms
-  4. Security review (IAM audit, tfsec scan)
-  5. Cost optimization review
-  6. Operational runbooks (DLQ replay, troubleshooting)
+**Phase 9: Production Hardening** (67% — 6/9 tasks) + **Phase 10: CI/CD** (33% — 2/6 tasks)
+
+**Phase 9 remaining:**
+- ⏳ Task 7: Architecture Documentation
+- ⏳ Task 8: Operational Runbooks
+- ⏳ Task 9: Staging Environment Deployment
+
+**Phase 10 remaining:**
+- ⏳ Task 3: Deploy Workflow (`.github/workflows/deploy.yml`) — auto-deploy to dev
+- ⏳ Task 4: Environment Protection Rules
+- ⏳ Task 5: Workflow Testing
+- ⏳ Task 6: CI/CD Documentation
 
 ---
 
 ## Next Phases (Sequential Order)
 
-1. **Phase 9: Production Hardening** ← **CURRENT**
-2. **Phase 10: CI/CD** - GitHub Actions automation
+1. **Phase 9 Tasks 7-9** ← **IN PROGRESS**
+2. **Phase 10 Tasks 2-6** ← **IN PROGRESS**
 
 **See `docs/roadmap.md` for detailed task breakdowns.**
 
 ---
 
-## Overall Progress: ~90%
+## Overall Progress: ~94%
 
 ```
 Phase 0 (Bootstrap):           ████████████████████ 100% ✅
@@ -147,8 +164,8 @@ Phase 5 (DynamoDB):            ████████████████�
 Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
 Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
 Phase 8 (Analytics):           ████████████████████ 100% ✅
-Phase 9 (Production Hardening):░░░░░░░░░░░░░░░░░░░░   0%
-Phase 10 (CI/CD):              ░░░░░░░░░░░░░░░░░░░░   0%
+Phase 9 (Production Hardening):████████████░░░░░░░░  67% (6/9 tasks)
+Phase 10 (CI/CD):              ███████░░░░░░░░░░░░░  33% (2/6 tasks)
 ```
 
 ---
