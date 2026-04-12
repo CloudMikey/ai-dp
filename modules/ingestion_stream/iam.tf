@@ -1,3 +1,6 @@
+#-------------------- IAM Role for API Gateway → Kinesis --------------------#
+# Allows API Gateway to write records directly to the Kinesis stream
+
 resource "aws_iam_role" "api_gateway_kinesis" {
   name = "${local.resource_prefix}-apigw-kinesis-role"
 

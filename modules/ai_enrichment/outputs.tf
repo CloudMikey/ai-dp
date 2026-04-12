@@ -1,6 +1,4 @@
-#============================================================#
-#  AI Enrichment Module Outputs
-#============================================================#
+#-------------------- AI Enrichment Module Outputs --------------------#
 
 output "comprehend_policy_arn" {
   description = "ARN of the IAM policy granting Comprehend permissions"

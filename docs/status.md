@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-04-05
 
-> **Quick Status:** Phases 0-8 complete, Phase 9 at 67% (6/9 tasks), Phase 10 at 33% (2/6 tasks). Latest: CI workflow live — PRs to main trigger fmt/validate/tflint/tfsec/plan with output posted as PR comment.
+> **Quick Status:** PROJECT COMPLETE ✅ — All 10 phases done. Phases 0-8 fully deployed, Phase 9 production hardening complete, Phase 10 CI/CD live. Portfolio-ready as of 2026-04-05.
 
 ---
 
@@ -109,7 +109,7 @@
 - End-to-end testing: Glue Crawler → Athena queries → Browser dashboard visualization
 - Zero dependencies: Runs directly from browser (local file or S3 static hosting)
 
-### Phase 10: CI/CD Pipeline (33% — 2/6 tasks)
+### Phase 10: CI/CD Pipeline (100% — 6/6 tasks) ✅
 - **Task 1 ✅ (2026-03-22):** AWS OIDC IAM Role Setup
   - Reused existing OIDC provider (`token.actions.githubusercontent.com`)
   - Created `ai-dp-dev-github-actions` role with least-privilege inline policy
@@ -123,49 +123,54 @@
   - Least-privilege IAM policy fully tuned (`ai-dp-dev-terraform-policy`)
   - Key lesson: `aws_lambda_event_source_mapping` needs separate `Resource: "*"` statement for `lambda:ListTags`
   - PR #1 merged via squash merge (25 runs to finalize IAM permissions)
+- **Task 3 ✅ (2026-04-05):** Deploy Workflow — Automated Apply on Merge
+  - Created `.github/workflows/deploy.yml` — triggers on push to `main`
+  - Pipeline: checkout → Terraform setup → OIDC auth → init → plan → job summary → apply
+  - `cancel-in-progress: false` prevents cancelling a running apply
+  - Plan saved to `tfplan` file; apply uses exact same plan (no drift)
+- **Task 4 ✅ (2026-04-05):** Environment Protection Rules
+  - `dev` GitHub Environment created in repo settings
+  - Referenced in `deploy.yml` via `environment: dev`
+  - Provides deployment history and audit trail
+- **Task 5 ✅ (2026-04-05):** Workflow Testing
+  - Both CI and Deploy workflows verified working end-to-end
+  - CI posts plan comment on PR; Deploy applies on merge with job summary output
+- **Task 6 ✅ (2026-04-05):** CI/CD Documentation
+  - Created `docs/cicd.md` — developer workflow, step breakdowns, OIDC auth, troubleshooting
 
 ---
 
 ## Current Phase
 
-**Phase 9: Production Hardening** (67% — 6/9 tasks) + **Phase 10: CI/CD** (33% — 2/6 tasks)
+**Phase 9: Production Hardening** ✅ Complete | **Phase 10: CI/CD** ✅ Complete
 
-**Phase 9 remaining:**
-- ⏳ Task 7: Architecture Documentation
-- ⏳ Task 8: Operational Runbooks
+**Project is complete. No remaining tasks.**
 - ⏳ Task 9: Staging Environment Deployment
-
-**Phase 10 remaining:**
-- ⏳ Task 3: Deploy Workflow (`.github/workflows/deploy.yml`) — auto-deploy to dev
-- ⏳ Task 4: Environment Protection Rules
-- ⏳ Task 5: Workflow Testing
-- ⏳ Task 6: CI/CD Documentation
 
 ---
 
 ## Next Phases (Sequential Order)
 
 1. **Phase 9 Tasks 7-9** ← **IN PROGRESS**
-2. **Phase 10 Tasks 2-6** ← **IN PROGRESS**
 
 **See `docs/roadmap.md` for detailed task breakdowns.**
 
 ---
 
-## Overall Progress: ~94%
+## Overall Progress: 100% ✅ PROJECT COMPLETE
 
 ```
-Phase 0 (Bootstrap):           ████████████████████ 100% ✅
-Phase 1 (Data Lake):           ████████████████████ 100% ✅
-Phase 2 (Streaming):           ████████████████████ 100% ✅
-Phase 3 (Batch EventBridge):  ████████████████████ 100% ✅
-Phase 4 (Step Functions):     ████████████████████ 100% ✅
-Phase 5 (DynamoDB):            ████████████████████ 100% ✅
-Phase 6 (AI Enrichment):       ████████████████████ 100% ✅
-Phase 7 (Merge & Orchestrate): ████████████████████ 100% ✅
-Phase 8 (Analytics):           ████████████████████ 100% ✅
-Phase 9 (Production Hardening):████████████░░░░░░░░  67% (6/9 tasks)
-Phase 10 (CI/CD):              ███████░░░░░░░░░░░░░  33% (2/6 tasks)
+Phase 0  (Bootstrap):           ████████████████████ 100% ✅
+Phase 1  (Data Lake):           ████████████████████ 100% ✅
+Phase 2  (Streaming):           ████████████████████ 100% ✅
+Phase 3  (Batch EventBridge):   ████████████████████ 100% ✅
+Phase 4  (Step Functions):      ████████████████████ 100% ✅
+Phase 5  (DynamoDB):            ████████████████████ 100% ✅
+Phase 6  (AI Enrichment):       ████████████████████ 100% ✅
+Phase 7  (Merge & Orchestrate): ████████████████████ 100% ✅
+Phase 8  (Analytics):           ████████████████████ 100% ✅
+Phase 9  (Production Hardening):████████████████████ 100% ✅
+Phase 10 (CI/CD):               ████████████████████ 100% ✅
 ```
 
 ---

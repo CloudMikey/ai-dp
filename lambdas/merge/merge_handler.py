@@ -1,13 +1,13 @@
+"""Merge Lambda: Combines AI enrichment results → S3 processed/ + DynamoDB hot store."""
+
 import json
 import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from decimal import Decimal
+from typing import Any, Dict, Optional
+
 import boto3
-
-LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
-
 
 class DecimalEncoder(json.JSONEncoder):
     """Custom JSON encoder that formats floats without scientific notation.
@@ -16,7 +16,6 @@ class DecimalEncoder(json.JSONEncoder):
     scientific notation (e.g., 3.683771e-06) in nested structs.
     """
     def encode(self, obj):
-        
         if isinstance(obj, dict):
             parts = []
 
@@ -52,7 +51,7 @@ class DecimalEncoder(json.JSONEncoder):
 
 
 logger = logging.getLogger()
-logger.setLevel(LOG_LEVEL)
+logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 
 s3_client = boto3.client('s3')
 dynamodb_client = boto3.client('dynamodb')
@@ -71,7 +70,7 @@ def get_config():
     }
 
 
-def lambda_handler(event, context):
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Merge AI enrichment results and write to S3 processed/ + DynamoDB."""
     logger.info(f"Received event: {json.dumps(event)}")
 
@@ -86,7 +85,6 @@ def lambda_handler(event, context):
 
     s3_key = write_to_s3_processed(enriched_data)
 
-
     try:
         record_id = write_to_dynamodb(enriched_data, s3_key)
 
@@ -94,10 +92,10 @@ def lambda_handler(event, context):
         try:
             curated_key = update_curated_summary(enriched_data)
         except Exception as curated_error:
-            logger.warning(f"⚠️ Curated summary update failed (non-critical): {str(curated_error)}")
+            logger.warning(f"Curated summary update failed (non-critical): {str(curated_error)}")
             curated_key = None
 
-        logger.info(f"✅ Full success: S3={s3_key}, DynamoDB={record_id}, Curated={curated_key}")
+        logger.info(f"Full success: S3={s3_key}, DynamoDB={record_id}, Curated={curated_key}")
         return {
             'statusCode': 200,
             'processed_s3_key': s3_key,
@@ -106,7 +104,7 @@ def lambda_handler(event, context):
             'message': 'Full merge complete'
         }
     except Exception as dynamodb_error:
-        logger.error(f"⚠️ DynamoDB write failed (data in S3): {str(dynamodb_error)}", exc_info=True)
+        logger.error(f"DynamoDB write failed (data in S3): {str(dynamodb_error)}", exc_info=True)
         raise
 
 
@@ -118,10 +116,10 @@ def validate_environment():
     if not config['table']:
         raise ValueError("DYNAMODB_TABLE environment variable not set")
 
-    logger.info(f"✅ Environment validated: bucket={config['bucket']}, table={config['table']}, ttl={config['ttl_days']}d")
+    logger.info(f"Environment validated: bucket={config['bucket']}, table={config['table']}, ttl={config['ttl_days']}d")
 
 
-def get_text_preview(bucket, key, max_length=500):
+def get_text_preview(bucket: str, key: str, max_length: int = 500) -> Optional[str]:
     """Fetch original text from S3 raw file for dashboard preview.
 
     Args:
@@ -159,7 +157,7 @@ def get_text_preview(bucket, key, max_length=500):
         return None
 
 
-def merge_ai_results(source_object, ai_enrichment, processing_metadata):
+def merge_ai_results(source_object: Dict[str, Any], ai_enrichment: Dict[str, Any], processing_metadata: Dict[str, Any]) -> Dict[str, Any]:
     """Combine Step Functions input into enriched data structure."""
     # Fetch text preview from raw S3 file for dashboard display
     text_preview = get_text_preview(
@@ -183,7 +181,6 @@ def merge_ai_results(source_object, ai_enrichment, processing_metadata):
         'Neutral': float(f"{raw_scores.get('Neutral', 0.0):.10f}"),
         'Mixed': float(f"{raw_scores.get('Mixed', 0.0):.10f}")
     }
-
 
     entity_texts = [entity['Text'] for entity in entities if 'Text' in entity]
 
@@ -218,11 +215,11 @@ def merge_ai_results(source_object, ai_enrichment, processing_metadata):
         'lambdaName': os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'unknown')
     }
 
-    logger.info(f"📊 Merged record: {record_id}, sentiment={top_sentiment}({top_sentiment_score:.2f}), entities={len(entity_texts)}")
+    logger.info(f"Merged record: {record_id}, sentiment={top_sentiment}({top_sentiment_score:.2f}), entities={len(entity_texts)}")
     return enriched
 
 
-def write_to_s3_processed(enriched_data):
+def write_to_s3_processed(enriched_data: Dict[str, Any]) -> str:
     """Write enriched data to S3 processed/ with date partitioning."""
     config = get_config()
     now = datetime.now(timezone.utc)
@@ -239,11 +236,11 @@ def write_to_s3_processed(enriched_data):
         ContentType='application/json'
     )
 
-    logger.info(f"💾 Wrote to S3: s3://{config['bucket']}/{object_key}")
+    logger.info(f"Wrote to S3: s3://{config['bucket']}/{object_key}")
     return object_key
 
 
-def write_to_dynamodb(enriched_data, s3_key):
+def write_to_dynamodb(enriched_data: Dict[str, Any], s3_key: str) -> str:
     """Write enriched record to DynamoDB hot store with TTL."""
     config = get_config()
     record_id = enriched_data['recordId']
@@ -273,11 +270,11 @@ def write_to_dynamodb(enriched_data, s3_key):
         Item=item
     )
 
-    logger.info(f"🗄️ Wrote to DynamoDB: recordId={record_id}, TTL expires at {ttl_expiration} ({config['ttl_days']}d)")
+    logger.info(f"Wrote to DynamoDB: recordId={record_id}, TTL expires at {ttl_expiration} ({config['ttl_days']}d)")
     return record_id
 
 
-def update_curated_summary(enriched_data):
+def update_curated_summary(enriched_data: Dict[str, Any]) -> str:
     """Update the curated layer with a running summary for fast dashboard access.
 
     This demonstrates the 3-tier data lake pattern:
@@ -338,5 +335,5 @@ def update_curated_summary(enriched_data):
         ContentType='application/json'
     )
 
-    logger.info(f"📈 Updated curated summary: total={summary['total_records']}, sentiment={sentiment}")
+    logger.info(f"Updated curated summary: total={summary['total_records']}, sentiment={sentiment}")
     return summary_key

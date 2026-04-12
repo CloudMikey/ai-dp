@@ -25,71 +25,41 @@ This pipeline processes both **batch** and **streaming** data, enriching it with
 
 ## Architecture
 
-```
-┌─────────────────┐      ┌─────────────────┐
-│   API Gateway   │      │   S3 Batch      │
-│   (Streaming)   │      │   Upload        │
-└────────┬────────┘      └────────┬────────┘
-         │                        │
-         v                        v
-    ┌────────────┐          ┌────────────────────┐
-    │  Kinesis   │          │  S3 Data Lake      │
-    │  Streams   │          │  (raw/ layer)      │
-    └─────┬──────┘          └──────┬─────────────┘
-          │                        │
-          v                        v
-    ┌──────────────┐          ┌──────────────┐
-    │  ETL Lambda  │          │ EventBridge  │
-    │  (Normalize) │          │    Rule      │
-    └──────┬───────┘          └──────┬───────┘
-           │                         │
-           v                         │
-    ┌────────────────────┐           │
-    │  S3 Data Lake      │           │
-    │  (raw/ layer)      │           │
-    └────────────────────┘           │
-                                     │
-           ┌─────────────────────────┘
-           │
-           v
-    ┌───────────────────────────┐
-    │   Step Functions          │
-    │   (Orchestration)         │
-    └───────┬───────────────────┘
-            │
-      ┌─────┼─────┬─────────────┐
-      │     │     │             │
-      v     v     v             v
-   ┌────┐ ┌────┐ ┌──────┐  ┌───────────┐
-   │Comp│ │Reko│ │Sage- │  │ (Future)  │
-   │hend│ │gni-│ │Maker │  │   ...     │
-   │    │ │tion│ │      │  │           │
-   └──┬─┘ └──┬─┘ └───┬──┘  └─────┬─────┘
-      │      │       │           │
-      └──────┴───────┴───────────┘
-                     │
-                     v
-              ┌──────────────┐
-              │Merge Lambda  │
-              └──────┬───────┘
-                     │
-            ┌────────┴────────┐
-            │                 │
-            v                 v
-    ┌──────────────┐   ┌────────────┐
-    │ S3 processed/│   │  DynamoDB  │
-    │   curated/   │   │ (Hot Store)│
-    └──────┬───────┘   └────────────┘
-           │
-           v
-    ┌────────────────┐
-    │ Glue Crawler + │
-    │     Athena     │
-    └────────────────┘
+```mermaid
+flowchart TD
+    subgraph Ingestion["Ingestion Layer"]
+        Client(["Client"]) -->|"POST /ingest"| APIGW["API Gateway"]
+        Client -->|"S3 Upload"| S3Raw["S3 raw/"]
+        APIGW --> Kinesis["Kinesis Streams"]
+        Kinesis --> ETL["ETL Lambda"]
+        ETL -->|"date-partitioned JSON"| S3Raw
+    end
+
+    subgraph Enrichment["Orchestration & AI Enrichment"]
+        S3Raw -->|"Object Created"| EB["EventBridge"]
+        EB --> SF["Step Functions"]
+        SF -->|"Parallel"| Sentiment["Comprehend\nDetectSentiment"]
+        SF -->|"Parallel"| Entities["Comprehend\nDetectEntities"]
+        Sentiment --> Merge["Merge Lambda"]
+        Entities --> Merge
+    end
+
+    subgraph Storage["Dual Storage"]
+        Merge --> S3P["S3 processed/"]
+        Merge --> DDB["DynamoDB\n30-day TTL"]
+        Merge --> S3C["S3 curated/\naggregate summary"]
+    end
+
+    subgraph Analytics["Analytics"]
+        S3P --> Glue["Glue Crawler"]
+        Glue --> Athena["Athena"]
+        DDB -->|"~50ms"| Dash(["Dashboard\nChart.js"])
+        S3C -->|"~100ms"| Dash
+        Athena -->|"~3s"| Dash
+    end
 ```
 
-
-For detailed architecture documentation, see [`docs/ai-dp overview notion.md`](docs/ai-dp%20overview%20notion.md).
+For full diagrams (sequence, state machine, storage tiers, API contract) see [docs/architecture.md](docs/architecture.md).
 
 ## Technology Stack
 
@@ -241,8 +211,7 @@ pytest lambdas/merge/
 
 ## Project Status
 
-**Current Phase**: Phase 9 (67%) + Phase 10 Task 1 ✅ — CI/CD OIDC Role Setup Complete
-**Overall Progress**: ~93% (Phase 10 Task 1 complete — 2026-03-22)
+**Status**: ✅ **PROJECT COMPLETE** — All 10 phases done (2026-04-05)
 
 This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) for detailed implementation phases and completion criteria.
 
@@ -295,22 +264,21 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 - Responsive design: Real-time metrics, sentiment charts, entity analysis
 - Zero dependencies: Runs directly from file system or S3 static hosting
 
-**Phase 9: Production Hardening** (67% — 6/9 tasks complete)
+**Phase 9: Production Hardening** ✅ (100% — 7/7 tasks complete)
 - ✅ Lambda unit tests (33 tests, 96% coverage)
 - ✅ Load testing (1000 events, 0% errors)
 - ✅ CloudWatch Dashboard (8 widgets) + 6 Alarms + SNS
 - ✅ Security Review (IAM audit, KMS, tfsec — 0 critical findings)
 - ✅ Cost Optimization ($12/month actual, 76% under $50 budget)
-- ⏳ Architecture Docs, Operational Runbooks, Staging
+- ✅ Architecture Documentation (`docs/architecture.md`) — Mermaid diagrams, sequence flows, API contract
 
-**Phase 10: CI/CD Pipeline** (17% — 1/6 tasks complete)
-- ✅ **Task 1:** GitHub Actions OIDC role (`ai-dp-dev-github-actions`) — least-privilege IAM, Terraform-managed
-- ⏳ Tasks 2-6: CI workflow, Deploy workflow, Environment protection, Testing, Docs
-
-### 📋 Remaining
-
-- Phase 9 Tasks 7-9 (Architecture Docs, Runbooks, Staging)
-- Phase 10 Tasks 2-6 (CI/CD Workflows)
+**Phase 10: CI/CD Pipeline** ✅ (100% — 6/6 tasks complete)
+- ✅ GitHub Actions OIDC role (`ai-dp-dev-github-actions`) — least-privilege IAM, Terraform-managed
+- ✅ CI workflow (`.github/workflows/ci.yml`) — fmt/validate/tflint/tfsec/plan on every PR
+- ✅ Deploy workflow (`.github/workflows/deploy.yml`) — `terraform apply` on merge to main
+- ✅ GitHub Environment (`dev`) with protection rules
+- ✅ Workflows tested end-to-end
+- ✅ CI/CD documentation (`docs/cicd.md`)
 
 ## Documentation
 
@@ -329,15 +297,14 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 4. **SECURITY-FIRST**: OIDC authentication, least-privilege IAM, no long-term credentials
 5. **ENVIRONMENT ISOLATION**: Strict separation between dev/staging/prod
 
-## CI/CD Pipeline (Phase 10)
+## CI/CD Pipeline
 
-> **Note:** CI/CD deferred to Phase 10 after all infrastructure is built and proven working.
+Two GitHub Actions workflows handle the full CI/CD lifecycle:
 
-**Planned implementation:**
-- **CI Workflow** (Pull Requests): Terraform fmt, validate, plan, security scanning
-- **Deploy Workflow** (Main Branch): Automated deployment with approval gates
-- **Environment Promotion**: dev → staging → production
-- **OIDC Authentication**: No long-term credentials
+- **CI** (`.github/workflows/ci.yml`): Runs on every PR — fmt, validate, tflint, tfsec, plan. Posts plan output as PR comment.
+- **Deploy** (`.github/workflows/deploy.yml`): Runs on merge to `main` — plan + `terraform apply`. Posts plan to job summary.
+
+**Authentication:** GitHub OIDC — no long-term AWS credentials stored anywhere. See [`docs/cicd.md`](docs/cicd.md) for full documentation.
 
 ## Cost Optimization
 

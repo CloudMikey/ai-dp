@@ -52,7 +52,6 @@ resource "aws_s3_bucket_public_access_block" "data_lake" {
 resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
 
-
   rule {
     id     = "raw-layer-lifecycle"
     status = "Enabled"
@@ -84,7 +83,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
 
-
     dynamic "noncurrent_version_transition" {
       for_each = var.enable_versioning && var.raw_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
       content {
@@ -100,7 +98,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
   }
-
 
   rule {
     id     = "processed-layer-lifecycle"
@@ -132,7 +129,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
         days = var.processed_layer_lifecycle.expiration_days
       }
     }
-
 
     dynamic "noncurrent_version_transition" {
       for_each = var.enable_versioning && var.processed_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
