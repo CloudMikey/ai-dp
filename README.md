@@ -212,26 +212,29 @@ source venv/bin/activate # Linux/Mac
 # Install dependencies
 pip install -r requirements.txt
 
-# Run tests (when implemented)
-pytest
+# Run tests
+pytest lambdas/ --cov --cov-report=term-missing
 ```
 
 ## Testing
 
 ```powershell
-# Unit tests (when implemented)
-pytest lambdas/etl/
-pytest lambdas/merge/
+# Unit tests (33 tests, 96% coverage)
+pytest lambdas/etl/ --cov=etl_handler --cov-report=term-missing
+pytest lambdas/merge/ --cov=merge_handler --cov-report=term-missing
+
+# Run all Lambda tests with combined coverage report
+pytest lambdas/ --cov --cov-report=term-missing
 
 # Integration tests
-# See scripts/ for test utilities
+# See scripts/ for test utilities (load_test.py sends 1000 events via Kinesis)
 ```
 
 ## Project Status
 
 **Status**: ✅ **PROJECT COMPLETE** — All 10 phases done (2026-04-05)
 
-This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) for detailed implementation phases and completion criteria.
+See [`docs/roadmap.md`](docs/roadmap.md) for full phase history and implementation details.
 
 ### ✅ Completed Phases
 

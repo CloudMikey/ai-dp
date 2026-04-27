@@ -31,7 +31,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
 
-      # ── 2. Setup Terraform ───────────────────────────────────────────────────
+      # ── 2. Run unit tests ────────────────────────────────────────────────────
+      # No AWS credentials needed — tests use moto to mock all AWS services.
+      # Runs before Terraform steps so a test failure blocks the pipeline early.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install pytest pytest-cov boto3 moto
+
+      - name: Run unit tests
+        run: pytest lambdas/ --cov --cov-report=term-missing
+
+      # ── 3. Setup Terraform ───────────────────────────────────────────────────
       # terraform_wrapper: true (default) wraps the binary so plan stdout/stderr
       # are captured as step outputs — required for the PR comment step
       - name: Setup Terraform
@@ -39,13 +53,13 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # ── 3. Setup tflint ──────────────────────────────────────────────────────
+      # ── 4. Setup tflint ──────────────────────────────────────────────────────
       - name: Setup tflint
         uses: terraform-linters/setup-tflint@v4.1.1
         with:
           tflint_version: v0.55.0
 
-      # ── 4. Configure AWS credentials via OIDC ────────────────────────────────
+      # ── 5. Configure AWS credentials via OIDC ────────────────────────────────
       # GitHub exchanges an OIDC token for short-lived AWS credentials.
       # No long-term access keys are stored in GitHub secrets.
       # Role trust policy is scoped to repo:CloudMikey/AI-DP:*
@@ -56,7 +70,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-actions-ci-${{ github.run_id }}
 
-      # ── 5. Terraform Init ────────────────────────────────────────────────────
+      # ── 6. Terraform Init ────────────────────────────────────────────────────
       # Uses partial backend config (bucket/key/region in backend-dev.hcl,
       # encrypt/use_lockfile in terraform.tf) — matches local workflow exactly
       - name: Terraform Init
@@ -69,30 +83,30 @@ jobs:
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
 
-      # ── 6. Terraform Format Check ────────────────────────────────────────────
+      # ── 7. Terraform Format Check ────────────────────────────────────────────
       # -recursive checks modules/ as well as envs/dev/
       - name: Terraform Format Check
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform fmt -check -recursive
 
-      # ── 7. Terraform Validate ────────────────────────────────────────────────
+      # ── 8. Terraform Validate ────────────────────────────────────────────────
       - name: Terraform Validate
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform validate
 
-      # ── 8. tflint Init ───────────────────────────────────────────────────────
+      # ── 9. tflint Init ───────────────────────────────────────────────────────
       # GITHUB_TOKEN authenticates plugin download to avoid anonymous rate limits
       - name: tflint Init
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: tflint --init --config="$(pwd)/.tflint.hcl"
 
-      # ── 9. Run tflint ────────────────────────────────────────────────────────
+      # ── 10. Run tflint ───────────────────────────────────────────────────────
       # --chdir points tflint at the Terraform code; --config points at repo root
       - name: Run tflint
         run: tflint --chdir="${{ env.WORKING_DIR }}" --config="$(pwd)/.tflint.hcl"
 
-      # ── 10. Run tfsec ────────────────────────────────────────────────────────
+      # ── 11. Run tfsec ────────────────────────────────────────────────────────
       # aquasecurity/tfsec-action was deprecated; install binary directly instead
       - name: Install tfsec
         run: curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
@@ -100,7 +114,7 @@ jobs:
       - name: Run tfsec
         run: tfsec ${{ env.WORKING_DIR }} --config-file .tfsec.yml --minimum-severity MEDIUM --no-color
 
-      # ── 11. Terraform Plan ───────────────────────────────────────────────────
+      # ── 12. Terraform Plan ───────────────────────────────────────────────────
       # continue-on-error: true so we can post the failure output to the PR
       # comment before the job actually fails (see step 13)
       - name: Terraform Plan
@@ -111,7 +125,7 @@ jobs:
         run: terraform plan -no-color -out=tfplan
         continue-on-error: true
 
-      # ── 12. Post Plan Output to PR ───────────────────────────────────────────
+      # ── 13. Post Plan Output to PR ───────────────────────────────────────────
       # Uses actions/github-script (first-party) to avoid external dependencies.
       # Plan output passed via env var to prevent template injection.
       - name: Post Plan to PR
@@ -139,7 +153,7 @@ jobs:
               body: output
             })
 
-      # ── 13. Fail job if Plan failed ──────────────────────────────────────────
+      # ── 14. Fail job if Plan failed ──────────────────────────────────────────
       # Re-raises the plan failure after the comment has been posted
       - name: Check Plan Result
         if: steps.plan.outcome == 'failure'
