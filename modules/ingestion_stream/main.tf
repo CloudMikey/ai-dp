@@ -240,7 +240,7 @@ resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
       destination_arn = aws_sqs_queue.etl_dlq.arn
     }
   }
-  # option: Bisect on Funtion Error
+  # bisect_batch_on_function_error not set — poison-pill protection handled by maximum_retry_attempts = 3 + DLQ
   depends_on = [
     aws_iam_role_policy_attachment.lambda_kinesis_execution,
     aws_lambda_function.etl

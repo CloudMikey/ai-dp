@@ -303,12 +303,13 @@ See [`docs/roadmap.md`](docs/roadmap.md) for full phase history and implementati
 
 ## Documentation
 
-- **[Project Overview](docs/ai-dp%20overview%20notion.md)**: Comprehensive architecture guide
 - **[Interview Walkthrough](docs/explained.md)**: How to explain this project in interviews
-- **[Data Flow](docs/data_flow.md)**: End-to-end data flow documentation
+- **[Error Log](docs/errorlog.md)**: Errors encountered, root causes, and fixes
+- **[Architecture](docs/architecture.md)**: Full diagrams, sequence flows, key decisions, API contract
+- **[Data Flow](docs/data_flow.md)**: End-to-end data flow with payloads and retention details
+- **[CI/CD](docs/cicd.md)**: CI/CD pipeline design and workflow documentation
 - **[Roadmap](docs/roadmap.md)**: Implementation phases and tasks
-- **[CLAUDE.md](CLAUDE.md)**: Development standards and patterns
-- **[Error Log](docs/errorlog.md)**: Common issues and solutions
+- **[Project Overview](docs/ai-dp%20overview%20notion.md)**: Comprehensive architecture guide
 
 ## Design Principles
 
