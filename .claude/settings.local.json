@@ -40,7 +40,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "mcp__serena__write_memory",
-      "mcp__serena__initial_instructions"
+      "mcp__serena__initial_instructions",
+      "Bash(git -C /z/CODE/Projects/Proj2/AI-DP log --oneline)",
+      "Bash(git -C /z/CODE/Projects/Proj2/AI-DP log --stat)"
     ],
     "deny": [],
     "ask": []

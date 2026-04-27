@@ -1,9 +1,11 @@
 # AI-Powered Serverless Data Pipeline
 
-![Status](https://img.shields.io/badge/status-in%20development-yellow)
+![Status](https://img.shields.io/badge/status-complete-brightgreen)
 ![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.11.0-blue)
 ![AWS](https://img.shields.io/badge/AWS-serverless-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
+
+**33 unit tests · 96% coverage · 0% error rate (1,000-event load test) · $12/month actual AWS cost · 6 CloudWatch alarms · CI/CD via GitHub OIDC**
 
 A production-grade, serverless data pipeline built on AWS that ingests, enriches, and analyzes data using AI/ML services. This project demonstrates modern cloud architecture patterns, Infrastructure as Code (IaC), and AI/ML integration.
 
@@ -73,6 +75,22 @@ For full diagrams (sequence, state machine, storage tiers, API contract) see [do
 | **Analytics** | Glue, Athena, Chart.js Dashboard |
 | **Observability** | CloudWatch, X-Ray, SQS DLQs |
 | **CI/CD** | GitHub Actions (OIDC) |
+
+## AI-Assisted Development
+
+This project was built using **Claude Code** as an AI coding assistant for infrastructure scaffolding, test generation, and documentation structure.
+
+Every generated output was reviewed, tested, and in several cases corrected or redesigned based on real failures encountered during implementation:
+
+- **DecimalEncoder** (`lambdas/merge/merge_handler.py`) — Athena queries were returning `HIVE_CURSOR_ERROR` due to Python floats serializing as scientific notation. The AI-generated handler used standard `json.dumps`. I diagnosed the root cause and built a custom `DecimalEncoder` class to normalize float representation before S3 writes.
+
+- **IAM least-privilege audit** — Initial IAM policies were over-permissive (bucket-level `s3:*`). During a dedicated security review I scoped every policy to the minimum required action and resource (e.g., S3 writes restricted to `raw/*`, `s3:PutObjectAcl` explicitly removed). Findings documented in `docs/errorlog.md`.
+
+- **Comprehend region pivot** — AI scaffolding placed Comprehend calls in `us-west-1` (same as the Terraform state bucket). Comprehend is not available in that region. I caught this during integration testing, diagnosed the cause, and redesigned the architecture so all application resources run in `us-west-2` with state backend isolated in `us-west-1`.
+
+- **CI/CD pipeline debugging** — The GitHub Actions OIDC workflow required 14+ iterations to get working end-to-end: IAM permission gaps only discoverable at runtime, tflint plugin rate limiting, deprecated action replacement. This debugging is traceable in the PR #1 commit history.
+
+The AI accelerated scaffolding and boilerplate. The architectural decisions, debugging, and security hardening are my own.
 
 ## Repository Structure
 

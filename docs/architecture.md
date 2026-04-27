@@ -15,6 +15,7 @@ Last Updated: 2026-04-05
 6. [Analytics Layer](#analytics-layer)
 7. [API Contract](#api-contract)
 8. [Infrastructure Summary](#infrastructure-summary)
+9. [Key Architectural Decisions](#key-architectural-decisions)
 
 ---
 
@@ -388,3 +389,61 @@ All resources deployed in `us-west-2` (except state bucket in `us-west-1`).
 | CI Workflow | `.github/workflows/ci.yml` | fmt + validate + tflint + tfsec + plan on every PR |
 | Deploy Workflow | `.github/workflows/deploy.yml` | `terraform apply` on merge to main |
 | GitHub Environment | `dev` | Protection rules, deployment history |
+
+---
+
+## Key Architectural Decisions
+
+### Kinesis over SQS for streaming ingestion
+
+Kinesis was chosen because this pipeline has three requirements SQS cannot satisfy:
+
+**Replay.** Kinesis retains records for up to 7 days. If the ETL Lambda has a bug that corrupts data, you can fix the Lambda and replay the stream from any checkpoint. SQS deletes messages on successful consumption — no replay without external storage.
+
+**Ordering.** Kinesis guarantees ordered delivery within a shard. For event streams where processing sequence matters (audit logs, clickstreams), out-of-order delivery can produce incorrect aggregates. SQS standard queues offer no ordering guarantee.
+
+**Idempotent retry model.** Kinesis re-delivers the same record with the same sequence number on retry. This property is what makes the ETL Lambda's idempotent S3 write pattern possible — the sequence number doubles as a stable, deterministic filename. SQS message IDs are not guaranteed stable across retries.
+
+The tradeoff: Kinesis costs more than SQS at low throughput and requires shard management. For this workload that's acceptable. At higher scale, Kinesis Enhanced Fan-Out would be the next step.
+
+---
+
+### API Gateway direct integration over Lambda proxy
+
+The `/ingest` route calls `kinesis:PutRecord` directly via an API Gateway AWS service integration — no Lambda in the hot path. This was a deliberate choice:
+
+- **Latency:** Eliminates a Lambda cold-start from the ingest path. API Gateway returns the Kinesis `SequenceNumber` directly to the caller in ~50ms.
+- **Cost:** No Lambda invocation charge per request. At high ingest volume this is meaningful.
+- **Failure surface:** Fewer components in the critical path means fewer places to fail or misconfigure.
+
+The tradeoff: request validation is minimal at the gateway layer (only header and content-type checks). Field validation happens in the ETL Lambda after the record is already in Kinesis. Invalid payloads are caught and routed to the DLQ rather than rejected at the API boundary.
+
+---
+
+### DynamoDB over RDS for the hot store
+
+DynamoDB on-demand billing was chosen over RDS for three reasons specific to this workload:
+
+- **Traffic pattern.** Dev ingest traffic is bursty and unpredictable. On-demand DynamoDB scales to zero and charges per request — no idle RDS instance cost during quiet periods.
+- **Schema flexibility.** Enriched records vary by event type and entity composition. DynamoDB's schemaless model accommodates this without migrations.
+- **TTL.** DynamoDB's native TTL automatically removes records after 30 days, keeping the hot store bounded without scheduled cleanup jobs.
+
+The tradeoff: no joins, no ad-hoc SQL. Complex analytical queries (e.g., `UNNEST` on entity arrays) run against Athena instead. This is by design — the dual-storage strategy separates hot operational queries (DynamoDB) from analytical queries (Athena).
+
+---
+
+### `use_lockfile = true` over DynamoDB state locking
+
+Terraform >= 1.11.0 supports native S3 state locking via a `.tflock` file in the state bucket, enabled with `use_lockfile = true`. This replaces the previous pattern of provisioning a separate DynamoDB table solely for lock management.
+
+```hcl
+backend "s3" {
+  bucket       = "tf-state-aidp"
+  key          = "envs/dev/terraform.tfstate"
+  region       = "us-west-1"
+  encrypt      = true
+  use_lockfile = true  # Native S3 locking — no DynamoDB table needed
+}
+```
+
+**Why this matters:** The DynamoDB locking pattern requires bootstrapping a table before the first `terraform init`, adds a second AWS service dependency to every Terraform operation, and costs money at scale. Native S3 locking eliminates all three issues. For any project on Terraform >= 1.11.0, this is the correct default.
