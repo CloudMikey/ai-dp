@@ -42,7 +42,7 @@ jobs:
         run: pip install pytest pytest-cov boto3 moto
 
       - name: Run unit tests
-        run: pytest lambdas/ --cov --cov-report=term-missing
+        run: pytest lambdas/ --cov --cov-report=term-missing --cov-fail-under=90
 
       # ── 3. Setup Terraform ───────────────────────────────────────────────────
       - name: Setup Terraform

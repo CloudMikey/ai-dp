@@ -11,14 +11,14 @@ A production-grade, serverless data pipeline built on AWS that ingests, enriches
 
 ## Overview
 
-This pipeline processes both **batch** and **streaming** data, enriching it with AWS AI services (Comprehend, SageMaker, Rekognition), and provides analytics through a dual storage strategy:
+This pipeline processes both **batch** and **streaming** data, enriching it with AWS AI services (Amazon Comprehend), and provides analytics through a dual storage strategy:
 - **Hot Storage**: DynamoDB for low-latency recent data queries
 - **Historical Storage**: S3 Data Lake for long-term analytics with Athena
 
 ### Key Features
 
 - **Multi-Modal Ingestion**: REST API (streaming) + S3 batch uploads
-- **AI/ML Enrichment**: Sentiment analysis, entity extraction, anomaly detection, image labeling
+- **AI/ML Enrichment**: Sentiment analysis and entity extraction via Amazon Comprehend
 - **Serverless Architecture**: Zero server management, auto-scaling, pay-per-use
 - **Dual Storage Strategy**: Real-time queries (DynamoDB) + Historical analytics (S3 + Athena)
 - **Infrastructure as Code**: 100% Terraform-managed, multi-environment support
