@@ -42,7 +42,10 @@
       "mcp__serena__write_memory",
       "mcp__serena__initial_instructions",
       "Bash(git -C /z/CODE/Projects/Proj2/AI-DP log --oneline)",
-      "Bash(git -C /z/CODE/Projects/Proj2/AI-DP log --stat)"
+      "Bash(git -C /z/CODE/Projects/Proj2/AI-DP log --stat)",
+      "mcp__serena__check_onboarding_performed",
+      "Bash(Get-ChildItem \"Z:\\\\CODE\\\\Notes\\\\AI-DP Docs\" -Filter \"*.md\")",
+      "Bash(Select-Object Name)"
     ],
     "deny": [],
     "ask": []

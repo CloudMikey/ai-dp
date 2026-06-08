@@ -39,8 +39,7 @@ Authentication uses **GitHub OIDC** — no long-term AWS credentials are stored 
 
 **Concurrency:** One run per PR — new commits cancel the previous in-progress run (prevents stale plan output)
 
-### Steps
-
+### Step
 | Step | Tool | What it does |
 |------|------|-------------|
 | Checkout | `actions/checkout` | Pulls PR branch code |

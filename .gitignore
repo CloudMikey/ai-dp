@@ -208,6 +208,6 @@ mock-data/
 local/
 scratch/
 
-# Gemini CLI specific files
-#GEMINI.md
-#.gemini-clipboard/
+# Gemini CLI specific files (removed from project)
+GEMINI.md
+.gemini-clipboard/
