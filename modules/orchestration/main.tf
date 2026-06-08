@@ -1,12 +1,13 @@
-#-------------------- Merge Lambda Module --------------------#
-# Combines AI enrichment → S3 processed/ + DynamoDB
+﻿# Merge Lambda: combines Comprehend outputs (sentiment + entities) into enriched records
+# Writes to S3 processed/ (historical) + DynamoDB (real-time queries)
 
 locals {
   resource_prefix = "${var.project_name}-${var.environment}"
   lambda_name     = "${local.resource_prefix}-merge"
 }
 
-#-------------------- Lambda Code Packaging --------------------#
+# Package Lambda function code into deployment zip
+# Excludes: compiled Python, cache files, previous zip (prevents recursion)
 
 data "archive_file" "merge_lambda" {
   type        = "zip"
@@ -21,12 +22,13 @@ data "archive_file" "merge_lambda" {
   ]
 }
 
-#-------------------- Dead Letter Queue --------------------#
+# DLQ for failed Lambda invocations (14-day retention for debugging)
+# Failures captured here: Comprehend timeout, S3 write errors, DynamoDB throttling
 
 resource "aws_sqs_queue" "merge_dlq" {
   name = "${local.resource_prefix}-merge-dlq"
 
-  message_retention_seconds = 1209600
+  message_retention_seconds = 1209600 # 14 days
 
   tags = merge(
     var.tags,
@@ -38,7 +40,7 @@ resource "aws_sqs_queue" "merge_dlq" {
   )
 }
 
-#-------------------- CloudWatch Log Group --------------------#
+# CloudWatch Logs for debugging Comprehend API failures and DynamoDB write issues
 
 resource "aws_cloudwatch_log_group" "merge_lambda" {
   name              = "/aws/lambda/${local.lambda_name}"
@@ -53,8 +55,6 @@ resource "aws_cloudwatch_log_group" "merge_lambda" {
   )
 }
 
-#-------------------- Lambda Function --------------------#
-
 resource "aws_lambda_function" "merge" {
   function_name = local.lambda_name
   description   = "Merge AI enrichment results and write to S3 processed layer + DynamoDB hot store"
@@ -64,8 +64,8 @@ resource "aws_lambda_function" "merge" {
 
   runtime     = "python3.11"
   handler     = "merge_handler.lambda_handler"
-  timeout     = 60  # Covers S3 GetObject + 3x DynamoDB/S3 writes + Step Functions response; load test P95=2044ms well within limit
-  memory_size = 256 # 256MB sufficient for JSON enrichment merge + DecimalEncoder serialization; no large in-memory datasets
+  timeout     = 60  # Load test P95=2044ms; S3 + DynamoDB writes
+  memory_size = 256 # JSON merge + DecimalEncoder serialization
 
   role = aws_iam_role.merge_lambda.arn
 

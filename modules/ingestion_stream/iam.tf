@@ -1,5 +1,5 @@
-#-------------------- IAM Role for API Gateway → Kinesis --------------------#
-# Allows API Gateway to write records directly to the Kinesis stream
+﻿# API Gateway integration for HTTP API → Kinesis direct writes
+# Direct PutRecord is more efficient than Lambda proxy integration (lower latency, cost)
 
 resource "aws_iam_role" "api_gateway_kinesis" {
   name = "${local.resource_prefix}-apigw-kinesis-role"
@@ -46,14 +46,12 @@ resource "aws_iam_role_policy" "api_gateway_kinesis" {
   })
 }
 
-#-------------------- Lambda IAM Role --------------------#
-# Execution role for ETL Lambda function
-# Permissions: Kinesis read, S3 write, CloudWatch logs, SQS (DLQ)
+# Execution role for ETL Lambda (Kinesis consumer)
+# Reads records from stream, writes normalized JSON to S3 raw/, publishes failures to DLQ
 
 resource "aws_iam_role" "etl_lambda" {
   name = "${local.resource_prefix}-etl-lambda-role"
 
-  # Trust policy: Allow Lambda service to assume this role
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -76,19 +74,21 @@ resource "aws_iam_role" "etl_lambda" {
   )
 }
 
-# Attach AWS managed policy for basic Lambda execution (CloudWatch Logs)
+# AWS managed policies handle standard permissions (logs, Kinesis stream reads)
+# Inline policies below handle custom scopes (S3 raw/ only, DLQ only)
+
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role       = aws_iam_role.etl_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Attach AWS managed policy for Kinesis stream consumer
 resource "aws_iam_role_policy_attachment" "lambda_kinesis_execution" {
   role       = aws_iam_role.etl_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole"
 }
 
-# Inline policy for S3 write access (least privilege - only to data lake bucket)
+# S3 writes scoped to raw/ prefix only (no bucket policy, no object ACLs)
+# ACLs removed: deprecated in favor of bucket-level policies; Lambda doesn't need ACL write
 resource "aws_iam_role_policy" "lambda_s3_write" {
   name = "s3-data-lake-write"
   role = aws_iam_role.etl_lambda.id
@@ -97,13 +97,8 @@ resource "aws_iam_role_policy" "lambda_s3_write" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject"
-          # Note: s3:PutObjectAcl removed during security review - not needed for Lambda writes
-          # Modern S3 best practice: Use bucket policies instead of object ACLs
-        ]
-        # Scoped to only raw/ prefix in data lake bucket
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
         Resource = "${var.data_lake_bucket_arn}/raw/*"
       }
     ]
@@ -129,16 +124,13 @@ resource "aws_iam_role_policy" "lambda_sqs_dlq" {
   })
 }
 
-#-------------------- IAM Role for EventBridge → Step Functions --------------------#
-# Allows EventBridge to start Step Functions executions
-# Only created when create_eventbridge_target = true (Phase 4, Task 3)
-# Trust policy: EventBridge service can assume this role
+# EventBridge → Step Functions integration for batch processing
+# Triggered when S3 raw/ receives new files; orchestrates AI enrichment workflow
 
 resource "aws_iam_role" "eventbridge_step_functions" {
   count = var.create_eventbridge_target ? 1 : 0
   name  = "${local.resource_prefix}-eventbridge-sfn-role"
 
-  # Trust policy: Allow EventBridge service to assume this role
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -161,10 +153,7 @@ resource "aws_iam_role" "eventbridge_step_functions" {
   )
 }
 
-#-------------------- IAM Policy for Step Functions Invocation --------------------#
-# Permission for EventBridge to start executions on the specific state machine
-# Least privilege: scoped to only the state machine ARN provided
-
+# Scoped to specific state machine ARN only (least privilege)
 resource "aws_iam_role_policy" "eventbridge_step_functions" {
   count = var.create_eventbridge_target ? 1 : 0
   name  = "start-execution"

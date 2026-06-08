@@ -1,6 +1,4 @@
-#-------------------- SNS Topic for Alarm Notifications --------------------#
-
-resource "aws_sns_topic" "cloudwatch_alarms" {    # Broadcaster
+﻿resource "aws_sns_topic" "cloudwatch_alarms" {    # Broadcaster
   name = "${local.resource_prefix}-cloudwatch-alarms"
 
   tags = {
@@ -17,7 +15,6 @@ resource "aws_sns_topic_subscription" "alarm_email" {     # Reciever
   endpoint  = each.value
 }
 
-#-------------------- Lambda Error Rate Alarms --------------------#
 # Uses metric math to calculate error percentage: (errors / invocations) * 100
 
 resource "aws_cloudwatch_metric_alarm" "etl_lambda_error_rate" {
@@ -110,7 +107,6 @@ resource "aws_cloudwatch_metric_alarm" "merge_lambda_error_rate" {
   }
 }
 
-#-------------------- DLQ Depth Alarms --------------------#
 # Immediate alert when any message appears in Dead Letter Queue
 
 resource "aws_cloudwatch_metric_alarm" "etl_dlq_depth" {
@@ -161,7 +157,6 @@ resource "aws_cloudwatch_metric_alarm" "merge_dlq_depth" {
   }
 }
 
-#-------------------- Kinesis Iterator Age Alarm --------------------#
 # High iterator age means Lambda is falling behind on stream processing
 
 resource "aws_cloudwatch_metric_alarm" "kinesis_iterator_age" {
@@ -188,7 +183,6 @@ resource "aws_cloudwatch_metric_alarm" "kinesis_iterator_age" {
   }
 }
 
-#-------------------- Step Functions Failure Alarm --------------------#
 # Triggers when execution failures exceed threshold within evaluation period
 
 resource "aws_cloudwatch_metric_alarm" "step_functions_failures" {

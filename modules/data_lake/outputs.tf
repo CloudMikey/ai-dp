@@ -1,5 +1,4 @@
-#-------------------- Data Lake Module Outputs --------------------#
-# Exports bucket information for use by other modules (ingestion, processing, analytics)
+﻿# Exports bucket information for use by other modules (ingestion, processing, analytics)
 
 output "bucket_name" {
   description = "Name of the data lake S3 bucket"
@@ -26,7 +25,6 @@ output "bucket_regional_domain_name" {
   value       = aws_s3_bucket.data_lake.bucket_regional_domain_name
 }
 
-#-------------------- Layer Prefix Outputs --------------------#
 # Provides the prefix paths for each data layer
 
 output "raw_prefix" {
@@ -44,7 +42,6 @@ output "curated_prefix" {
   value       = "curated/"
 }
 
-#-------------------- Full Path Outputs --------------------#
 # Convenience outputs for full S3 paths
 
 output "raw_bucket_path" {
@@ -61,8 +58,6 @@ output "curated_bucket_path" {
   description = "Full S3 path to curated data layer"
   value       = "s3://${aws_s3_bucket.data_lake.id}/curated/"
 }
-
-#-------------------- Configuration Outputs --------------------#
 
 output "versioning_enabled" {
   description = "Whether bucket versioning is enabled"

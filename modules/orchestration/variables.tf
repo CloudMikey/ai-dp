@@ -1,6 +1,4 @@
-#-------------------- Orchestration Module Variables --------------------#
-
-variable "environment" {
+﻿variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
 
@@ -15,8 +13,6 @@ variable "project_name" {
   type        = string
   default     = "ai-dp"
 }
-
-#-------------------- Data Lake Configuration --------------------#
 
 variable "data_lake_bucket_name" {
   description = "S3 bucket name for data lake (from data_lake module)"
@@ -33,8 +29,6 @@ variable "processed_prefix" {
   type        = string
   default     = "processed/"
 }
-
-#-------------------- DynamoDB Configuration --------------------#
 
 variable "dynamodb_table_name" {
   description = "DynamoDB table name for hot store (from hot_store module)"
@@ -57,8 +51,6 @@ variable "ttl_days" {
   }
 }
 
-#-------------------- Lambda Configuration --------------------#
-
 variable "log_level" {
   description = "Lambda logging level (INFO, DEBUG, ERROR)"
   type        = string
@@ -80,8 +72,6 @@ variable "log_retention_days" {
     error_message = "Invalid log retention days (must be valid CloudWatch retention value)"
   }
 }
-
-#-------------------- Tags --------------------#
 
 variable "tags" {
   description = "Resource-specific tags (merged with provider default_tags)"

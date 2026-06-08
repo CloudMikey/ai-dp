@@ -6,9 +6,6 @@
 // - S3 Curated: Top Entities bar chart (pre-aggregated, instant ~100ms)
 // ========================================
 
-// ========================================
-// STEP 1: Configure AWS SDK
-// ========================================
 AWS.config.update({
     region: CONFIG.AWS_REGION,
     accessKeyId: CONFIG.AWS_ACCESS_KEY_ID,
@@ -18,16 +15,10 @@ AWS.config.update({
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
 const s3       = new AWS.S3();
 
-// ========================================
-// STEP 2: Global Variables
-// ========================================
 let entitiesChart = null;
 let cachedDynamoDBItems  = [];
 let cachedCuratedSummary = null;
 
-// ========================================
-// STEP 3: Main Load Function
-// ========================================
 async function loadData() {
     console.log('Reloading dashboard data...');
     updateTimestamp();
@@ -40,9 +31,6 @@ async function loadData() {
     console.log('Dashboard data loaded.');
 }
 
-// ========================================
-// STEP 4: DynamoDB - Real-time Recent Events
-// ========================================
 async function loadDynamoDBData() {
     setTableLoading(true);
 
@@ -69,9 +57,6 @@ async function loadDynamoDBData() {
     }
 }
 
-// ========================================
-// STEP 5: S3 Curated Layer - Top Entities Chart
-// ========================================
 // Pre-aggregated by Merge Lambda on every write — instant response (~100ms)
 async function loadCuratedSummary() {
     setChartLoading(true, 'entities-chart');
@@ -95,9 +80,6 @@ async function loadCuratedSummary() {
     }
 }
 
-// ========================================
-// STEP 6: Send Test Event (Live Demo Button)
-// ========================================
 async function sendTestEvent() {
     const btn = document.getElementById('test-event-btn');
     const statusEl = document.getElementById('test-event-status');
@@ -137,9 +119,6 @@ async function sendTestEvent() {
     }
 }
 
-// ========================================
-// STEP 7: Update Metrics Cards
-// ========================================
 function updateMetrics(data) {
     let positive = 0, neutral = 0, negative = 0, mixed = 0;
 
@@ -160,9 +139,6 @@ function updateMetrics(data) {
     if (mixedEl) mixedEl.textContent = mixed;
 }
 
-// ========================================
-// STEP 8: Top Entities Bar Chart (S3 Curated)
-// ========================================
 function updateEntitiesChart(topEntities) {
     if (entitiesChart) entitiesChart.destroy();
 
@@ -223,9 +199,6 @@ function updateEntitiesChart(topEntities) {
     });
 }
 
-// ========================================
-// STEP 9: Recent Events Table
-// ========================================
 function updateTable(data) {
     const tbody = document.getElementById('events-tbody');
     tbody.innerHTML = '';

@@ -1,5 +1,4 @@
-#-------------------- Environment Variables --------------------#
-# Variables for the dev environment configuration
+﻿# Variables for the dev environment configuration
 
 variable "aws_region" {
   description = "AWS region for resource deployment"
@@ -17,3 +16,6 @@ variable "alarm_email" {
   description = "Email address for CloudWatch alarm notifications"
   type        = string
 }
+
+
+

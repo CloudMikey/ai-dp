@@ -1,7 +1,4 @@
-#-------------------- Module Variables --------------------#
-# Input variables for the hot store module
-
-variable "environment" {
+﻿variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
   validation {
@@ -19,8 +16,6 @@ variable "aws_region" {
   description = "AWS region for DynamoDB table"
   type        = string
 }
-
-#-------------------- Table Configuration --------------------#
 
 variable "enable_point_in_time_recovery" {
   description = "Enable point-in-time recovery (35-day retention for backups)"
@@ -43,8 +38,6 @@ variable "ttl_days" {
     error_message = "TTL days must be between 1 and 365."
   }
 }
-
-#-------------------- Tagging Variables --------------------#
 
 variable "tags" {
   description = "Additional tags to apply to resources"

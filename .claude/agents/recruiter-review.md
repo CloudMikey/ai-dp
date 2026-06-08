@@ -169,6 +169,64 @@ Focus modules (in order of interview likelihood):
 3. `modules/data_lake/` — S3 lifecycle rules, cost story
 4. `lambdas/etl/etl_handler.py` — Python code quality check
 
+## Phase 5.5: Comment Quality Audit (CRITICAL FOR 2026 RECRUITERS)
+
+**Why this matters:** Comment quality is a direct signal of whether code is interview-ready and whether the engineer thinks about explainability.
+
+### What to Check
+
+**RED FLAGS — Comments Recruiters Hate:**
+- ❌ Comments restate code (`# Enable versioning` above `resource "aws_s3_bucket_versioning"`)
+- ❌ Decorator headers (`#----- Section -----#` signals code isn't self-documenting)
+- ❌ Internal jargon (`# Phase 6 Task 3`, `# TODO in Phase 8`)
+- ❌ Dead/commented code without explanation
+- ❌ Vague explanations (`# Allows X`, `# Required for Y`) without WHY
+- ❌ Excessive line-by-line narration of obvious code
+- ❌ Inconsistent comment styles
+- ❌ Stale comments (claims that become outdated)
+
+**GREEN FLAGS — What Recruiters Want:**
+- ✅ Comments explain WHY, not WHAT (`# Reduces cost` not `# Enables TTL`)
+- ✅ Security tradeoffs justified (`# Wildcard required by AWS` + reference)
+- ✅ Real metrics, not guesses (`# Load test P95=2044ms` proves validation)
+- ✅ Architectural context (`# Reads raw/, writes to DynamoDB + S3 curated/`)
+- ✅ Bug/tradeoff references (`# Fixes Athena JSON serialization error`)
+- ✅ Cost/reliability thinking (`# Auto-cleanup prevents cost growth`)
+- ✅ Concise (1-2 lines per comment, scannable)
+
+### Files to Audit
+1. All `*/iam.tf` files — check IAM permission comments
+2. All `*/main.tf` files — check Lambda timeout/memory, resource justifications
+3. `lambdas/*/handler.py` files — check for real bug explanations
+4. Dynamic block comments — verify they explain the conditional logic
+
+### Specific Checks
+
+**For IAM Files:**
+- [ ] Role descriptions explain purpose + scope
+- [ ] Security exceptions justified with AWS references
+- [ ] Least-privilege boundaries documented
+- [ ] Managed vs inline policy choice explained
+
+**For Infrastructure (Terraform):**
+- [ ] Timeout/memory values have metrics (load test, actual numbers)
+- [ ] S3 lifecycle rules document retention reasoning
+- [ ] Dynamic blocks explain the conditional logic
+- [ ] No decorator headers present
+
+**For Lambda Code:**
+- [ ] Complex operations have "why" comments
+- [ ] Bug fixes reference the actual error message
+- [ ] DecimalEncoder, custom logic has explanation
+
+### Scoring Impact
+
+- **0-2 comments per 100 lines:** Comment density too low (missing WHY)
+- **3-7 comments per 100 lines (5-10% for IaC):** OPTIMAL sweet spot
+- **15+ comments per 100 lines:** Too verbose, signals lack of clarity
+- **Comments that restate code:** -1 point per instance
+- **Security/tradeoff justifications with references:** +2 points each
+
 ## Phase 6: AI Transparency Audit
 Search for any mention of AI tools in the repo:
 ```
@@ -251,10 +309,12 @@ List the 5 most likely interview questions based on what's in the codebase, and 
 - 9–10: Specific examples of AI output reviewed/fixed, framed as judgment demonstration
 
 ## Code Explainability (X/10)
-- 0–4: No comments, magic numbers, no "why" in code
-- 5–6: Some comments but non-obvious decisions unexplained
-- 7–8: Key decisions commented, timeout/memory values justified
-- 9–10: Every non-obvious pattern has a "why" comment, readable as a teaching document
+Includes both code clarity AND comment quality (Phase 5 + Phase 5.5)
+
+- 0–4: No comments, magic numbers, no "why" in code; OR excessive decorator headers/redundant comments
+- 5–6: Some comments but non-obvious decisions unexplained; comment density <3% or >15%
+- 7–8: Key decisions commented, timeout/memory values justified; 5-10% comment density, no redundancy
+- 9–10: Every non-obvious pattern has a "why" comment with metrics/references; readable as teaching document; comments explain security tradeoffs + architectural context; 5-10% density
 
 ## Production Signals (X/10)
 - 0–4: No CI/CD, no tests, no monitoring

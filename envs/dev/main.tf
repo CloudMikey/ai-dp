@@ -1,6 +1,4 @@
-#-------------------- Provider Configuration --------------------#
-
-provider "aws" {
+﻿provider "aws" {
   region = var.aws_region
 
   default_tags {
@@ -14,7 +12,6 @@ provider "aws" {
   }
 }
 
-#-------------------- Data Lake Module --------------------#
 # Creates S3 bucket with raw, processed, and curated data layers
 
 module "data_lake" {
@@ -50,7 +47,6 @@ module "data_lake" {
   }
 }
 
-#-------------------- Step Functions Orchestration Module --------------------#
 # State machine for batch data pipeline orchestration
 # Phase 6: Comprehend AI enrichment integration
 
@@ -77,7 +73,6 @@ module "step_functions" {
   }
 }
 
-#-------------------- AI Enrichment Module --------------------#
 # AWS Comprehend integration for sentiment analysis and entity detection
 
 module "ai_enrichment" {
@@ -87,7 +82,6 @@ module "ai_enrichment" {
   project_name = var.project_name
 }
 
-#-------------------- DynamoDB Hot Store Module --------------------#
 # Fast query store for AI-enriched data (recent records only)
 
 module "hot_store" {
@@ -108,7 +102,6 @@ module "hot_store" {
   }
 }
 
-#-------------------- Orchestration Module --------------------#
 # Merge Lambda: Combines AI enrichment results and writes to S3 processed/ + DynamoDB
 
 module "orchestration" {
@@ -137,7 +130,6 @@ module "orchestration" {
   }
 }
 
-#-------------------- Streaming Ingestion Module --------------------#
 # API Gateway HTTP API + Kinesis Data Stream for real-time ingestion
 
 module "ingestion_stream" {
@@ -151,7 +143,7 @@ module "ingestion_stream" {
   data_lake_bucket_name = module.data_lake.bucket_name
   data_lake_bucket_arn  = module.data_lake.bucket_arn
 
-  # Step Functions integration (Phase 4: EventBridge → Step Functions)
+  # Step Functions integration (Phase 4: EventBridge â†’ Step Functions)
   state_machine_arn         = module.step_functions.state_machine_arn
   create_eventbridge_target = true
 
@@ -172,7 +164,6 @@ module "ingestion_stream" {
   }
 }
 
-#-------------------- Analytics Module --------------------#
 # AWS Glue Data Catalog + Athena for SQL queries on enriched data
 
 module "analytics" {
@@ -192,7 +183,6 @@ module "analytics" {
   }
 }
 
-#-------------------- Observability Module --------------------#
 # CloudWatch operational dashboard for pipeline health monitoring
 
 module "observability" {
@@ -229,7 +219,6 @@ module "observability" {
   }
 }
 
-#-------------------- Cost Management Module --------------------#
 # AWS Budgets for cost monitoring and alerting
 
 module "cost_management" {
@@ -247,3 +236,5 @@ module "cost_management" {
     Component = "CostManagement"
   }
 }
+
+

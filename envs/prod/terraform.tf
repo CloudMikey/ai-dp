@@ -1,4 +1,4 @@
-terraform {
+﻿terraform {
   required_version = ">= 1.11.0"
 
   required_providers {
@@ -15,3 +15,6 @@ terraform {
     use_lockfile = true # Native S3 locking (Terraform >= 1.11.0)
   }
 }
+
+
+

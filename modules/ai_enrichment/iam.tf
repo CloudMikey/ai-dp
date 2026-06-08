@@ -1,6 +1,4 @@
-#-------------------- IAM Policies for Step Functions → Comprehend --------------------#
-# Allows Step Functions to call Comprehend sentiment and entity detection
-
+﻿# Allows Step Functions to call Comprehend sentiment and entity detection
 resource "aws_iam_policy" "comprehend" {
   name        = "${var.environment}-${var.project_name}-comprehend-policy"
   description = "Allows Step Functions to call AWS Comprehend for AI enrichment"

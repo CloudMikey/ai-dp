@@ -1,6 +1,4 @@
-#-------------------- Required Variables --------------------#
-
-variable "project_name" {
+﻿variable "project_name" {
   description = "Project name used in resource naming"
   type        = string
 }
@@ -29,8 +27,6 @@ variable "data_lake_bucket_arn" {
   description = "ARN of the S3 data lake bucket (for IAM policies)"
   type        = string
 }
-
-#-------------------- Optional Variables --------------------#
 
 variable "tags" {
   description = "Additional tags to apply to all resources in this module"

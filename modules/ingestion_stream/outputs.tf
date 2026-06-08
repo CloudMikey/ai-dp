@@ -1,5 +1,4 @@
-#-------------------- Kinesis Stream Outputs --------------------#
-# Exports Kinesis stream information for Lambda event source mapping
+﻿# Exports Kinesis stream information for Lambda event source mapping
 
 output "kinesis_stream_name" {
   description = "Name of the Kinesis data stream"
@@ -16,7 +15,6 @@ output "kinesis_stream_id" {
   value       = aws_kinesis_stream.ingestion.id
 }
 
-#-------------------- API Gateway Outputs --------------------#
 # Exports API Gateway endpoint information for testing and integration
 
 output "api_gateway_id" {
@@ -39,14 +37,10 @@ output "api_gateway_invoke_url" {
   value       = "${aws_apigatewayv2_stage.default.invoke_url}/ingest"
 }
 
-#-------------------- Configuration Outputs --------------------#
-
 output "kinesis_retention_hours" {
   description = "Data retention period configured for the Kinesis stream (hours)"
   value       = var.kinesis_retention_hours
 }
-
-#-------------------- Lambda Function Outputs --------------------#
 
 output "lambda_function_name" {
   description = "Name of the ETL Lambda function"
@@ -68,8 +62,6 @@ output "lambda_role_arn" {
   value       = aws_iam_role.etl_lambda.arn
 }
 
-#-------------------- DLQ Outputs --------------------#
-
 output "dlq_url" {
   description = "URL of the Dead Letter Queue for failed Lambda invocations"
   value       = aws_sqs_queue.etl_dlq.url
@@ -85,8 +77,6 @@ output "dlq_name" {
   value       = aws_sqs_queue.etl_dlq.name
 }
 
-#-------------------- EventBridge Outputs --------------------#
-
 output "eventbridge_rule_name" {
   description = "Name of the EventBridge rule for batch ingestion detection"
   value       = aws_cloudwatch_event_rule.s3_batch_ingestion.name
@@ -96,8 +86,6 @@ output "eventbridge_rule_arn" {
   description = "ARN of the EventBridge rule (used for target configuration in Phase 4)"
   value       = aws_cloudwatch_event_rule.s3_batch_ingestion.arn
 }
-
-#-------------------- EventBridge Target Outputs (Phase 4) --------------------#
 
 output "eventbridge_target_created" {
   description = "Whether EventBridge target to Step Functions was created"

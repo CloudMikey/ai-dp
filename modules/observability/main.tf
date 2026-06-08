@@ -1,11 +1,6 @@
-#-------------------- Observability Module --------------------#
-# CloudWatch operational dashboard for pipeline health monitoring
-
-locals {
+﻿locals {
   resource_prefix = "${var.project_name}-${var.environment}"
 }
-
-#-------------------- CloudWatch Dashboard --------------------#
 
 resource "aws_cloudwatch_dashboard" "operations" {
   dashboard_name = "${local.resource_prefix}-operations"

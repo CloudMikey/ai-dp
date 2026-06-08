@@ -1,12 +1,4 @@
-#-------------------- IAM Resources for Step Functions Module --------------------#
-# This file contains all IAM roles and policies for:
-# - Step Functions state machine execution
-# - CloudWatch Logs permissions
-
-#-------------------- IAM Role for Step Functions --------------------#
-# Execution role for state machine
-# Trust policy: Allow Step Functions service to assume role
-# Permissions: CloudWatch Logs only (Pass state doesn't invoke external services)
+﻿# Execution role for Step Functions orchestrator (reads S3, invokes Comprehend + Merge Lambda)
 
 resource "aws_iam_role" "step_functions" {
   name = "${local.resource_prefix}-step-functions-role"
@@ -33,9 +25,7 @@ resource "aws_iam_role" "step_functions" {
   )
 }
 
-#-------------------- IAM Policy for CloudWatch Logs --------------------#
-# Permissions for Step Functions to write execution logs to CloudWatch
-# Required actions for log delivery setup and management
+# CloudWatch Logs delivery setup (wildcard required by AWS for log group setup)
 
 resource "aws_iam_role_policy" "step_functions_logging" {
   name = "cloudwatch-logs"
@@ -65,9 +55,7 @@ resource "aws_iam_role_policy" "step_functions_logging" {
   })
 }
 
-#-------------------- IAM Policy for S3 Read Access --------------------#
-# Allows Step Functions to read objects from data lake (for AI enrichment)
-# Scoped to raw/ prefix where batch ingestion uploads files
+# S3 read from raw/ prefix (batch ingestion entry point for AI enrichment)
 
 resource "aws_iam_role_policy" "step_functions_s3_read" {
   name = "s3-read-access"
@@ -88,16 +76,14 @@ resource "aws_iam_role_policy" "step_functions_s3_read" {
   })
 }
 
-#-------------------- Attach Comprehend Policy --------------------#
-# Attaches AI enrichment policy for sentiment/entity detection
+# Comprehend permissions for DetectSentiment + DetectEntities (managed policy from module variable)
 
 resource "aws_iam_role_policy_attachment" "comprehend" {
   role       = aws_iam_role.step_functions.name
   policy_arn = var.comprehend_policy_arn
 }
 
-#-------------------- IAM Policy for Lambda Invocation --------------------#
-# Allows Step Functions to invoke the Merge Lambda function
+# Invoke Merge Lambda after Comprehend analysis (to write enriched data)
 
 resource "aws_iam_role_policy" "step_functions_lambda_invoke" {
   name = "lambda-invoke"

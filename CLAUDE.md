@@ -107,9 +107,9 @@ This is a **portfolio project for entry-level to intermediate cloud engineering 
 - Avoid over-engineering and unnecessary abstractions
 
 ### Terraform Style
-- Use decorative comment headers: `#-------------------- Resource Name --------------------#`
 - Separate IAM into dedicated `iam.tf` files
 - Standard module structure: `main.tf`, `iam.tf`, `variables.tf`, `outputs.tf`, `README.md`
+- Comments explain **why** decisions were made, not **what** the code does
 
 ### Error Handling (CRITICAL)
 **MANDATORY PROCESS:**

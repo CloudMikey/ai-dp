@@ -1,5 +1,4 @@
-#-------------------- GitHub Actions OIDC Role --------------------#
-# Phase 10, Task 1: IAM role for GitHub Actions CI/CD
+﻿# Phase 10, Task 1: IAM role for GitHub Actions CI/CD
 #
 # The OIDC Identity Provider already exists in this account (created for a
 # previous project). We reference it via data source rather than recreating it.
@@ -46,3 +45,6 @@ resource "aws_iam_role" "github_actions_dev" {
 
 # Note: The inline policy (ai-dp-dev-terraform-policy) is managed via the AWS Console.
 # The role itself is in Terraform state; the policy is discovered at deploy time.
+
+
+

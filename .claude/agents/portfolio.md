@@ -118,15 +118,13 @@ dynamic "rule" {
 
 ## ✅ Clear Comments
 ```hcl
-#-------------------- S3 Bucket - Raw Data Layer --------------------#
 # Stores ingested data before AI processing.
-# Lifecycle: Transitions to Glacier after 90 days to save costs.
-
+# Lifecycle: Transitions to Glacier after 90 days to save costs (cost optimization).
 resource "aws_s3_bucket" "raw" {
   bucket = local.bucket_name
 }
 ```
-**Why**: Shows architectural thinking.
+**Why**: Shows architectural thinking. Explain the **why** (cost optimization), not just **what** (stores data).
 
 # Module Structure
 

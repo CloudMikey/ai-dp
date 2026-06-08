@@ -1,17 +1,12 @@
-#-------------------- Data Lake S3 Bucket --------------------#
-# Three-layer data lake: raw/ (ingested), processed/ (AI-enriched), curated/ (business-ready)
+﻿# Three-layer data lake: raw/ (ingested), processed/ (AI-enriched), curated/ (business-ready)
 
 locals {
   bucket_name = "${var.project_name}-data-lake-${var.environment}-${var.aws_region}"
 }
 
-#-------------------- S3 Bucket --------------------#
-
 resource "aws_s3_bucket" "data_lake" {
   bucket = local.bucket_name
 }
-
-#-------------------- Versioning --------------------#
 
 resource "aws_s3_bucket_versioning" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
@@ -20,8 +15,6 @@ resource "aws_s3_bucket_versioning" "data_lake" {
     status = var.enable_versioning ? "Enabled" : "Disabled"
   }
 }
-
-#-------------------- Encryption --------------------#
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
@@ -35,8 +28,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "data_lake" {
   }
 }
 
-#-------------------- Block Public Access --------------------#
-
 resource "aws_s3_bucket_public_access_block" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
 
@@ -46,7 +37,6 @@ resource "aws_s3_bucket_public_access_block" "data_lake" {
   restrict_public_buckets = true
 }
 
-#-------------------- Lifecycle Policies --------------------#
 # Cost optimization: Transition older data to cheaper storage tiers
 
 resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
@@ -184,8 +174,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
   }
 }
 
-#-------------------- Bucket Policy - TLS Enforcement --------------------#
-
 resource "aws_s3_bucket_policy" "enforce_tls" {
   bucket = aws_s3_bucket.data_lake.id
 
@@ -210,8 +198,6 @@ resource "aws_s3_bucket_policy" "enforce_tls" {
     ]
   })
 }
-
-#-------------------- EventBridge Notification --------------------#
 
 resource "aws_s3_bucket_notification" "eventbridge" {
   bucket      = aws_s3_bucket.data_lake.id
