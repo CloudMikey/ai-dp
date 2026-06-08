@@ -44,5 +44,5 @@ resource "aws_iam_role" "github_actions_dev" {
   }
 }
 
-# Note: The inline policy (ai-dp-dev-terraform-policy) is managed via the AWS Console,
-# not Terraform. This keeps the policy lifecycle independent of Terraform state.
+# Note: The inline policy (ai-dp-dev-terraform-policy) is managed via the AWS Console.
+# The role itself is in Terraform state; the policy is discovered at deploy time.

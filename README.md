@@ -98,9 +98,7 @@ The AI accelerated scaffolding and boilerplate. The architectural decisions, deb
 AI-DP/
 ├── bootstrap/            # Terraform config for S3 state bucket
 ├── envs/                 # Environment-specific Terraform configs
-│   ├── dev/             # Development environment
-│   ├── stg/             # Staging environment
-│   └── prod/            # Production environment
+│   └── dev/             # Development environment
 ├── modules/             # Reusable Terraform modules
 │   ├── data_lake/           # S3 buckets (raw/processed/curated) ✅
 │   ├── ingestion_stream/    # API Gateway, Kinesis, EventBridge ✅
@@ -111,8 +109,7 @@ AI-DP/
 │   └── observability/       # CloudWatch dashboards, alarms (Phase 9)
 ├── lambdas/             # Python Lambda function code
 │   ├── etl/            # Kinesis consumer (normalize & write to S3)
-│   ├── merge/          # Merge AI outputs, write to storage
-│   └── replay/         # DLQ replay utility (Phase 9)
+│   └── merge/          # Merge AI outputs, write to storage
 ├── dashboard/          # Browser-based analytics dashboard ✅
 │   ├── index.html     # Main HTML file
 │   ├── styles.css     # Dark theme styling
@@ -165,17 +162,6 @@ terraform -chdir=envs/dev plan
 terraform -chdir=envs/dev apply
 ```
 
-### 5. Deploy to Staging/Production
-
-```powershell
-# Staging
-terraform -chdir=envs/stg init
-terraform -chdir=envs/stg apply
-
-# Production
-terraform -chdir=envs/prod init
-terraform -chdir=envs/prod apply
-```
 
 ## Development Workflow
 
@@ -240,7 +226,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for full phase history and implementati
 
 **Phase 0: Bootstrap Infrastructure**
 - S3 state bucket with native locking (Terraform >= 1.11.0)
-- All environments initialized (dev, stg, prod)
+- Dev environment initialized
 
 **Phase 1: Data Lake Foundation**
 - S3 bucket: `ai-dp-data-lake-dev-us-west-2`
@@ -317,7 +303,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for full phase history and implementati
 2. **ROOT CAUSE, NOT BANDAID**: Fix underlying structural issues
 3. **DATA INTEGRITY**: Use consistent, authoritative data sources
 4. **SECURITY-FIRST**: OIDC authentication, least-privilege IAM, no long-term credentials
-5. **ENVIRONMENT ISOLATION**: Strict separation between dev/staging/prod
+5. **ENVIRONMENT ISOLATION**: Infrastructure designed for multi-environment deployment (dev active)
 
 ## CI/CD Pipeline
 

@@ -374,9 +374,6 @@ ai-dp/
 │  │  ├─ app.py
 │  │  ├─ requirements.txt
 │  │  └─ tests.py                      # 96% coverage
-│  └─ replay/                          # SQS DLQ replay utility (optional)
-│     ├─ app.py
-│     └─ requirements.txt
 │
 ├─ dashboard/                          # ✅ Vanilla JS analytics dashboard
 │  ├─ index.html                       # HTML structure
@@ -742,7 +739,7 @@ tags = {
 | Security Findings | 0 critical | 0 critical | ✅ |
 | Phases Complete | 10/10 | 10/10 | ✅ |
 | CloudWatch Alarms | 6+ | 6 | ✅ |
-| Lambda Functions | 2+ | 3 (etl, merge, replay) | ✅ |
+| Lambda Functions | 2+ | 2 (etl, merge) | ✅ |
 
 ---
 

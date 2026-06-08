@@ -56,7 +56,7 @@ The Lambda polls the stream and receives up to 100 records per invocation. For e
 
 The Kinesis sequence number is used as the filename. This ensures idempotent writes — if the Lambda retries a failed record, it overwrites the same S3 object instead of creating a duplicate. See `docs/errorlog.md` Pattern #4 for details.
 
-**Failed records** are sent to the SQS DLQ (`ai-dp-dev-etl-dlq`) after 3 retry attempts. A replay Lambda can reprocess DLQ messages.
+**Failed records** are sent to the SQS DLQ (`ai-dp-dev-etl-dlq`) after 3 retry attempts. DLQ messages can be manually replayed by re-sending to Kinesis or re-uploading to S3.
 
 ---
 

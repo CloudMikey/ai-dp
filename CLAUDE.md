@@ -20,12 +20,12 @@ This is an **AI-Powered Serverless Data Pipeline** built on AWS infrastructure m
 
 ```
 AI-DP/
-├── envs/               # Environment-specific Terraform configs (dev, stg, prod)
+├── envs/               # Environment-specific Terraform configs (dev active)
 ├── modules/            # Reusable Terraform modules
 │   ├── data_lake/      ├── ingestion_stream/   ├── step_functions/
 │   ├── hot_store/      ├── orchestration/      ├── analytics/
 │   └── observability/  # CloudWatch dashboard + alarms + SNS
-├── lambdas/            # Python Lambda functions (etl, merge, replay)
+├── lambdas/            # Python Lambda functions (etl, merge)
 ├── dashboard/          # Browser-based analytics dashboard
 └── docs/               # Project documentation
 ```
