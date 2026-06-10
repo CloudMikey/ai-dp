@@ -10,8 +10,6 @@ import boto3
 import etl_handler
 
 
-#-------------------- Test lambda_handler --------------------#
-
 class TestLambdaHandler:
     """Tests for the main lambda_handler function."""
 
@@ -73,8 +71,6 @@ class TestLambdaHandler:
             etl_handler.lambda_handler(event, None)
 
 
-#-------------------- Test process_record --------------------#
-
 class TestProcessRecord:
     """Tests for the process_record function."""
 
@@ -107,8 +103,6 @@ class TestProcessRecord:
 
         assert seq_num in result['s3_key']
 
-
-#-------------------- Test validate_json --------------------#
 
 class TestValidateJson:
     """Tests for input validation."""
@@ -144,8 +138,6 @@ class TestValidateJson:
             etl_handler.validate_json(data)
 
 
-#-------------------- Test normalize_data --------------------#
-
 class TestNormalizeData:
     """Tests for data normalization."""
 
@@ -177,8 +169,6 @@ class TestNormalizeData:
         etl_handler.normalize_data(data)
         assert set(data.keys()) == original_keys
 
-
-#-------------------- Test write_to_s3 --------------------#
 
 class TestWriteToS3:
     """Tests for S3 write operations."""

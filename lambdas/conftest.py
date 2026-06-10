@@ -19,8 +19,6 @@ import boto3
 from moto import mock_aws
 
 
-#-------------------- Environment Setup --------------------#
-
 @pytest.fixture(autouse=True)
 def aws_credentials():
     """Mock AWS credentials for moto (prevents accidental real AWS calls)."""
@@ -55,8 +53,6 @@ def set_env_vars(env_vars, monkeypatch):
     return env_vars
 
 
-#-------------------- S3 Fixtures --------------------#
-
 @pytest.fixture
 def s3_client():
     """Create mocked S3 client."""
@@ -75,8 +71,6 @@ def s3_bucket(s3_client, env_vars):
     )
     return bucket_name
 
-
-#-------------------- DynamoDB Fixtures --------------------#
 
 @pytest.fixture
 def dynamodb_client():

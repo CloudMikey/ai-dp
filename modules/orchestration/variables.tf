@@ -73,6 +73,12 @@ variable "log_retention_days" {
   }
 }
 
+variable "enable_xray_tracing" {
+  description = "Enable X-Ray active tracing on the Lambda (per-invocation latency + downstream call timeline)"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Resource-specific tags (merged with provider default_tags)"
   type        = map(string)

@@ -1,4 +1,4 @@
-﻿resource "aws_sns_topic" "cloudwatch_alarms" {    # Broadcaster
+resource "aws_sns_topic" "cloudwatch_alarms" { # Broadcaster
   name = "${local.resource_prefix}-cloudwatch-alarms"
 
   tags = {
@@ -7,7 +7,7 @@
   }
 }
 
-resource "aws_sns_topic_subscription" "alarm_email" {     # Reciever
+resource "aws_sns_topic_subscription" "alarm_email" { # Reciever
   for_each = toset(var.alarm_notification_emails)
 
   topic_arn = aws_sns_topic.cloudwatch_alarms.arn
@@ -34,7 +34,7 @@ resource "aws_cloudwatch_metric_alarm" "etl_lambda_error_rate" {
     return_data = true
   }
 
-  metric_query {        # pulls error count within 5
+  metric_query { # pulls error count within 5
     id = "errors"
     metric {
       metric_name = "Errors"
@@ -45,7 +45,7 @@ resource "aws_cloudwatch_metric_alarm" "etl_lambda_error_rate" {
     }
   }
 
-  metric_query {         # pulls invocation count within 5 min
+  metric_query { # pulls invocation count within 5 min
     id = "invocations"
     metric {
       metric_name = "Invocations"
@@ -121,7 +121,7 @@ resource "aws_cloudwatch_metric_alarm" "etl_dlq_depth" {
   threshold           = var.dlq_depth_threshold
   treat_missing_data  = "notBreaching"
 
-  dimensions = {                 # Filters this specific SQS queue
+  dimensions = { # Filters this specific SQS queue
     QueueName = var.etl_dlq_name
   }
 

@@ -154,7 +154,6 @@ These findings are intentional for a portfolio project:
 | IAM wildcards for Glue catalog | AWS API limitation for glue:GetDatabase, etc. |
 | S3 access logging disabled | Cost optimization for dev environment |
 | CloudWatch logs not KMS encrypted | AWS-managed encryption sufficient for portfolio |
-| Lambda X-Ray tracing disabled | Will be added in Phase 10 (CI/CD) |
 | CORS wildcard | Dev environment only - would restrict in production |
 
 ### 4.3 Interview Talking Points
@@ -200,7 +199,7 @@ A: "For a dev/portfolio environment, the cost and complexity of managing log buc
 | API CORS | Wildcard `*` | Specific domain whitelist |
 | Kinesis Encryption | AWS-managed KMS | Customer-managed KMS |
 | CloudWatch Logs | AWS-managed | KMS encryption for sensitive logs |
-| Lambda Tracing | Disabled | Enable X-Ray active tracing |
+| Lambda Tracing | X-Ray active tracing enabled | Extend tracing to Step Functions + API Gateway |
 
 ---
 

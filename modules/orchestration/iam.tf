@@ -105,6 +105,26 @@ resource "aws_iam_role_policy_attachment" "cloudwatch_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# X-Ray write access for active tracing. PutTraceSegments/PutTelemetryRecords do not support
+# resource-level permissions, so the wildcard is required by AWS.
+# Ref: https://docs.aws.amazon.com/xray/latest/devguide/security_iam_id-based-policy-examples.html
+resource "aws_iam_role_policy" "xray_write" {
+  count = var.enable_xray_tracing ? 1 : 0
+  name  = "${local.resource_prefix}-merge-xray-write"
+  role  = aws_iam_role.merge_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # DLQ error handling: failed Step Functions invocations are retained for replay/debugging
 resource "aws_iam_role_policy" "dlq_write" {
   name = "${local.resource_prefix}-merge-dlq-write"

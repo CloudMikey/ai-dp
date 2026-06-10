@@ -1,4 +1,4 @@
-﻿output "data_lake_bucket_name" {
+output "data_lake_bucket_name" {
   description = "Name of the data lake S3 bucket"
   value       = module.data_lake.bucket_name
 }

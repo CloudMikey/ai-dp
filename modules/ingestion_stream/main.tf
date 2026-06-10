@@ -1,4 +1,4 @@
-﻿# Direct API Gateway â†’ Kinesis integration (no Lambda proxy for lower latency)
+# Direct API Gateway â†’ Kinesis integration (no Lambda proxy for lower latency)
 
 locals {
   resource_prefix       = "${var.project_name}-${var.environment}"
@@ -133,7 +133,10 @@ data "archive_file" "etl_lambda" {
     "lambda_etl.zip",
     "__pycache__",
     "*.pyc",
-    ".pytest_cache"
+    ".pytest_cache",
+    "test_*.py",   # unit tests not needed at runtime
+    "conftest.py", # pytest fixtures
+    ".coverage"    # coverage DB (binary, changes every test run)
   ]
 }
 
@@ -167,7 +170,7 @@ resource "aws_cloudwatch_log_group" "etl_lambda" {
 
 resource "aws_lambda_function" "etl" {
   function_name = local.lambda_name
-  description   = "ETL function: Kinesis â†’ S3 raw layer with validation and normalization"
+  description   = "ETL function: Kinesis to S3 raw layer with validation and normalization"
 
   filename         = data.archive_file.etl_lambda.output_path
   source_code_hash = data.archive_file.etl_lambda.output_base64sha256
@@ -189,6 +192,14 @@ resource "aws_lambda_function" "etl" {
     target_arn = aws_sqs_queue.etl_dlq.arn
   }
 
+  # X-Ray active tracing: per-invocation latency timeline + downstream AWS SDK call segments
+  dynamic "tracing_config" {
+    for_each = var.enable_xray_tracing ? [1] : []
+    content {
+      mode = "Active"
+    }
+  }
+
   depends_on = [
     aws_cloudwatch_log_group.etl_lambda,
     aws_iam_role_policy_attachment.lambda_basic_execution
@@ -205,8 +216,8 @@ resource "aws_lambda_function" "etl" {
 }
 
 resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
-  event_source_arn  = aws_kinesis_stream.ingestion.arn
-  function_name     = aws_lambda_function.etl.arn
+  event_source_arn                   = aws_kinesis_stream.ingestion.arn
+  function_name                      = aws_lambda_function.etl.arn
   starting_position                  = "LATEST"
   batch_size                         = 100
   maximum_batching_window_in_seconds = 5

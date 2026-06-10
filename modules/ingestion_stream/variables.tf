@@ -1,4 +1,4 @@
-﻿variable "environment" {
+variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
   validation {
@@ -65,6 +65,12 @@ variable "enable_cors" {
   default     = true
 }
 
+variable "enable_xray_tracing" {
+  description = "Enable X-Ray active tracing on the Lambda (per-invocation latency + downstream call timeline)"
+  type        = bool
+  default     = true
+}
+
 variable "cors_allow_origins" {
   description = "List of allowed CORS origins. Use ['*'] for dev, specific domains for prod."
   type        = list(string)
@@ -100,7 +106,7 @@ variable "state_machine_arn" {
 }
 
 variable "create_eventbridge_target" {
-  description = "Create EventBridge target to invoke Step Functions. Set to true after Step Functions module is deployed (Phase 4, Task 3)."
+  description = "Create EventBridge target to invoke Step Functions. Set to true once the Step Functions module is deployed."
   type        = bool
   default     = false
 }

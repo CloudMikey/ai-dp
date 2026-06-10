@@ -1,4 +1,4 @@
-﻿# Phase 10, Task 1: IAM role for GitHub Actions CI/CD
+# IAM role assumed by GitHub Actions via OIDC for Terraform CI/CD (no long-term credentials)
 #
 # The OIDC Identity Provider already exists in this account (created for a
 # previous project). We reference it via data source rather than recreating it.

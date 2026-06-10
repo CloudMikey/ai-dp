@@ -1,4 +1,4 @@
-﻿# API Gateway integration for HTTP API → Kinesis direct writes
+# API Gateway integration for HTTP API → Kinesis direct writes
 # Direct PutRecord is more efficient than Lambda proxy integration (lower latency, cost)
 
 resource "aws_iam_role" "api_gateway_kinesis" {
@@ -100,6 +100,26 @@ resource "aws_iam_role_policy" "lambda_s3_write" {
         Effect   = "Allow"
         Action   = ["s3:PutObject"]
         Resource = "${var.data_lake_bucket_arn}/raw/*"
+      }
+    ]
+  })
+}
+
+# X-Ray write access for active tracing. PutTraceSegments/PutTelemetryRecords do not support
+# resource-level permissions, so the wildcard is required by AWS.
+# Ref: https://docs.aws.amazon.com/xray/latest/devguide/security_iam_id-based-policy-examples.html
+resource "aws_iam_role_policy" "lambda_xray_write" {
+  count = var.enable_xray_tracing ? 1 : 0
+  name  = "xray-trace-write"
+  role  = aws_iam_role.etl_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+        Resource = "*"
       }
     ]
   })

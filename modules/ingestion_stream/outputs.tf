@@ -1,4 +1,4 @@
-﻿# Exports Kinesis stream information for Lambda event source mapping
+# Exports Kinesis stream information for Lambda event source mapping
 
 output "kinesis_stream_name" {
   description = "Name of the Kinesis data stream"
@@ -83,7 +83,7 @@ output "eventbridge_rule_name" {
 }
 
 output "eventbridge_rule_arn" {
-  description = "ARN of the EventBridge rule (used for target configuration in Phase 4)"
+  description = "ARN of the EventBridge rule that triggers Step Functions on S3 batch uploads"
   value       = aws_cloudwatch_event_rule.s3_batch_ingestion.arn
 }
 

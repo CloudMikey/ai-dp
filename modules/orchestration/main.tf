@@ -18,7 +18,10 @@ data "archive_file" "merge_lambda" {
     "lambda_merge.zip",
     "__pycache__",
     "*.pyc",
-    ".pytest_cache"
+    ".pytest_cache",
+    "test_*.py",   # unit tests not needed at runtime
+    "conftest.py", # pytest fixtures
+    ".coverage"    # coverage DB (binary, changes every test run)
   ]
 }
 
@@ -81,6 +84,14 @@ resource "aws_lambda_function" "merge" {
 
   dead_letter_config {
     target_arn = aws_sqs_queue.merge_dlq.arn
+  }
+
+  # X-Ray active tracing: per-invocation latency timeline + downstream AWS SDK call segments
+  dynamic "tracing_config" {
+    for_each = var.enable_xray_tracing ? [1] : []
+    content {
+      mode = "Active"
+    }
   }
 
   depends_on = [

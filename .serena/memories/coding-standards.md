@@ -16,17 +16,11 @@
 - Never overwrite `.env` files without confirmation
 
 ## Terraform Style
-### Section Headers
-```hcl
-#-------------------- DynamoDB Table --------------------#
-#-------------------- Lambda Resources --------------------#
-```
-
-### Resource Comments
-```hcl
-# This DynamoDB table stores enriched event data with 30-day TTL.
-resource "aws_dynamodb_table" "enriched_data" { ... }
-```
+### Comment Rules
+- **No decorator headers** (`#---- Section ----#`) — resource names are self-documenting
+- Comments explain **why** decisions were made, not what the code does
+- Good comment example: "30-day TTL auto-cleanup prevents cost growth"
+- Density sweet spot: 5-10% for IaC
 
 ### Rules
 - IAM resources go in dedicated `iam.tf` files (separate from `main.tf`)

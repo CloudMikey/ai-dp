@@ -22,7 +22,7 @@ This pipeline processes both **batch** and **streaming** data, enriching it with
 - **Serverless Architecture**: Zero server management, auto-scaling, pay-per-use
 - **Dual Storage Strategy**: Real-time queries (DynamoDB) + Historical analytics (S3 + Athena)
 - **Infrastructure as Code**: 100% Terraform-managed, multi-environment support
-- **Production-Ready**: Error handling, monitoring, DLQ replay, security best practices
+- **Production-Ready**: Error handling, monitoring, SQS DLQs (14-day retention), security best practices
 - **CI/CD**: GitHub Actions with OIDC (no long-term credentials)
 
 ## Architecture

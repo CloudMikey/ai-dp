@@ -1,4 +1,4 @@
-﻿# Variables for the dev environment configuration
+# Variables for the dev environment configuration
 
 variable "aws_region" {
   description = "AWS region for resource deployment"

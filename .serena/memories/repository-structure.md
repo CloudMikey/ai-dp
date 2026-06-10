@@ -19,8 +19,7 @@ AI-DP/
 │   └── prod/
 ├── lambdas/           # Python Lambda source
 │   ├── etl/           # Kinesis consumer → S3 raw/
-│   ├── merge/         # Combines AI outputs → S3 processed/ + DynamoDB
-│   └── replay/        # DLQ replay utility
+│   └── merge/         # Combines AI outputs → S3 processed/ + DynamoDB
 ├── modules/           # Reusable Terraform modules
 │   ├── data_lake/         ├── ingestion_stream/  ├── step_functions/
 │   ├── hot_store/         ├── orchestration/     ├── analytics/
