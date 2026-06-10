@@ -30,7 +30,7 @@ module "data_lake" {
 
   environment  = "dev"
   project_name = "aidp"
-  aws_region   = "us-west-1"
+  aws_region   = "us-west-2"
 
   tags = {
     Owner = "DataTeam"
@@ -47,7 +47,7 @@ module "data_lake" {
 
   environment  = "prod"
   project_name = "aidp"
-  aws_region   = "us-west-1"
+  aws_region   = "us-west-2"
   kms_key_arn  = aws_kms_key.data_lake.arn
 
   tags = {
@@ -65,7 +65,7 @@ module "data_lake" {
 
   environment  = "dev"
   project_name = "aidp"
-  aws_region   = "us-west-1"
+  aws_region   = "us-west-2"
 
   raw_layer_lifecycle = {
     transition_to_ia_days      = 15
@@ -117,7 +117,7 @@ module "data_lake" {
 
 Buckets are named using the pattern: `{project_name}-data-lake-{environment}-{region}`
 
-Example: `aidp-data-lake-dev-us-west-1`
+Example: `aidp-data-lake-dev-us-west-2`
 
 ## Security Features
 
@@ -188,13 +188,13 @@ Returns just the object keys (file paths) without metadata - useful for scriptin
 
 ```bash
 # View all raw data
-aws s3 ls s3://aidp-data-lake-dev-us-west-1/raw/ --recursive --human-readable
+aws s3 ls s3://aidp-data-lake-dev-us-west-2/raw/ --recursive --human-readable
 
 # Check processed data with summary
-aws s3 ls s3://aidp-data-lake-dev-us-west-1/processed/ --recursive --summarize
+aws s3 ls s3://aidp-data-lake-dev-us-west-2/processed/ --recursive --summarize
 
 # List only curated file paths
-aws s3api list-objects --bucket aidp-data-lake-dev-us-west-1 --query "Contents[].Key" --output text --prefix curated/
+aws s3api list-objects --bucket aidp-data-lake-dev-us-west-2 --query "Contents[].Key" --output text --prefix curated/
 ```
 
 ## Maintenance

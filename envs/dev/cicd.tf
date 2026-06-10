@@ -30,7 +30,7 @@ resource "aws_iam_role" "github_actions_dev" {
         }
         StringLike = {
           # Trusts any workflow triggered from the AI-DP repo
-          # Branch/environment restrictions enforced via GitHub branch protection rules (Task 4)
+          # Branch restrictions enforced via GitHub branch protection (repo Settings -> Branches)
           "token.actions.githubusercontent.com:sub" = "repo:CloudMikey/ai-dp:*"
         }
       }

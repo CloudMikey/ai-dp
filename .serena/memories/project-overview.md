@@ -20,7 +20,7 @@ Ingests batch and streaming data, enriches it with AWS AI services (Comprehend),
 - **Storage**: S3 (raw/processed/curated), DynamoDB (on-demand)
 - **AI/ML**: Amazon Comprehend (sentiment + entity extraction)
 - **Analytics**: Glue Crawler, Athena, static dashboard (Vanilla JS + Chart.js v4.4.0 + AWS SDK v2)
-- **Observability**: CloudWatch Dashboard (8 widgets), 6 alarms, SNS, SQS DLQs, X-Ray
+- **Observability**: CloudWatch Dashboard (8 widgets), 6 alarms, SNS, SQS DLQs, X-Ray active tracing (both Lambdas, mode=Active)
 
 ## Current Status (100% Complete ✅ — 2026-04-05)
 - **Phases 0-8**: Complete (bootstrap through analytics/dashboard)

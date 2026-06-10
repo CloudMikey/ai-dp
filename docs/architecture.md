@@ -377,6 +377,7 @@ All resources deployed in `us-west-2` (except state bucket in `us-west-1`).
 | CloudWatch Dashboard | `ai-dp-dev-operations` | 8 widgets: Lambda, Kinesis, Step Functions, DLQ, DynamoDB |
 | CloudWatch Alarms | 6 alarms | Lambda errors, DLQ depth, Kinesis lag, Step Functions failures |
 | SNS Topic | `ai-dp-dev-cloudwatch-alarms` | Email subscription for alarm notifications |
+| X-Ray Tracing | Active mode (both Lambdas) | Per-invocation latency timelines + downstream call segments (S3, DynamoDB, Comprehend) |
 | SQS DLQ (ETL) | `ai-dp-dev-etl-dlq` | 14-day retention |
 | SQS DLQ (Merge) | `ai-dp-dev-merge-dlq` | 14-day retention |
 | AWS Budget | `ai-dp-dev-monthly-budget` | $50/month, alerts at 80% / 100% actual / 100% forecast |

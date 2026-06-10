@@ -274,7 +274,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for full phase history and implementati
 **Phase 9: Production Hardening** ✅ (100% — 7/7 tasks complete)
 - ✅ Lambda unit tests (33 tests, 96% coverage)
 - ✅ Load testing (1000 events, 0% errors)
-- ✅ CloudWatch Dashboard (8 widgets) + 6 Alarms + SNS
+- ✅ CloudWatch Dashboard (8 widgets) + 6 Alarms + SNS + X-Ray active tracing (both Lambdas)
 - ✅ Security Review (IAM audit, KMS, tfsec — 0 critical findings)
 - ✅ Cost Optimization ($12/month actual, 76% under $50 budget)
 - ✅ Architecture Documentation (`docs/architecture.md`) — Mermaid diagrams, sequence flows, API contract

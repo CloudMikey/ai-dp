@@ -50,7 +50,7 @@
       - Lambda error rates, DLQ depths, Kinesis iterator age, Step Functions failures.
     - **SQS Dead Letter Queues** (14-day retention) for failed events with replay capability.
     - **CloudWatch Logs** (7-day retention dev, 90-day recommended for prod).
-    - **X-Ray Integration** for distributed tracing across services.
+    - **X-Ray active tracing** on both Lambdas — per-invocation latency timelines and downstream call segments (S3, DynamoDB, Comprehend).
 
 ---
 

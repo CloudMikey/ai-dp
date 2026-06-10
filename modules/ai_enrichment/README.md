@@ -129,7 +129,7 @@ Test Comprehend integration from Step Functions:
 
 ```bash
 # Upload text file to S3 raw/
-aws s3 cp sample.txt s3://ai-dp-data-lake-dev-us-west-1/raw/sample.txt
+aws s3 cp sample.txt s3://ai-dp-data-lake-dev-us-west-2/raw/sample.txt
 
 # EventBridge triggers Step Functions
 # Step Functions calls Comprehend DetectSentiment & DetectEntities

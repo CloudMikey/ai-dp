@@ -180,7 +180,7 @@ module "orchestration" {
 The Lambda writes enriched data with date partitioning for efficient Athena queries:
 
 ```
-s3://ai-dp-data-lake-dev-us-west-1/processed/
+s3://ai-dp-data-lake-dev-us-west-2/processed/
   year=2025/
     month=12/
       day=07/
@@ -252,17 +252,17 @@ Lambda automatically retries on transient failures:
 **Check DLQ depth**:
 ```powershell
 aws sqs get-queue-attributes `
-  --queue-url https://sqs.us-west-1.amazonaws.com/123456789012/ai-dp-dev-merge-dlq `
+  --queue-url https://sqs.us-west-2.amazonaws.com/123456789012/ai-dp-dev-merge-dlq `
   --attribute-names ApproximateNumberOfMessages `
-  --region us-west-1
+  --region us-west-2
 ```
 
 **Read DLQ messages**:
 ```powershell
 aws sqs receive-message `
-  --queue-url https://sqs.us-west-1.amazonaws.com/123456789012/ai-dp-dev-merge-dlq `
+  --queue-url https://sqs.us-west-2.amazonaws.com/123456789012/ai-dp-dev-merge-dlq `
   --max-number-of-messages 10 `
-  --region us-west-1
+  --region us-west-2
 ```
 
 **View Lambda errors in CloudWatch**:
@@ -270,7 +270,7 @@ aws sqs receive-message `
 aws logs filter-log-events `
   --log-group-name /aws/lambda/ai-dp-dev-merge `
   --filter-pattern "ERROR" `
-  --region us-west-1
+  --region us-west-2
 ```
 
 ## Integration with Step Functions
@@ -322,22 +322,22 @@ The Step Functions state machine invokes this Lambda after AI enrichment complet
 
 ```powershell
 # 1. Send event via API Gateway
-curl -X POST https://57cnx9jpje.execute-api.us-west-1.amazonaws.com/ingest `
+curl -X POST https://57cnx9jpje.execute-api.us-west-2.amazonaws.com/ingest `
   -H "Content-Type: application/json" `
   -d '{"userId": "user123", "text": "I love this product!"}'
 
 # 2. Check Step Functions execution
 aws stepfunctions list-executions `
-  --state-machine-arn arn:aws:states:us-west-1:123456789012:stateMachine:ai-dp-dev-orchestrator `
-  --region us-west-1
+  --state-machine-arn arn:aws:states:us-west-2:123456789012:stateMachine:ai-dp-dev-orchestrator `
+  --region us-west-2
 
 # 3. Verify S3 processed/ write
-aws s3 ls s3://ai-dp-data-lake-dev-us-west-1/processed/ --recursive --human-readable
+aws s3 ls s3://ai-dp-data-lake-dev-us-west-2/processed/ --recursive --human-readable
 
 # 4. Verify DynamoDB write
 aws dynamodb scan `
   --table-name ai-dp-dev-enriched-data `
-  --region us-west-1 `
+  --region us-west-2 `
   --limit 5
 ```
 
@@ -346,15 +346,15 @@ aws dynamodb scan `
 ```powershell
 # 1. Upload file to S3 raw/
 echo '{"userId": "user456", "text": "This is terrible!"}' | `
-  aws s3 cp - s3://ai-dp-data-lake-dev-us-west-1/raw/test-batch.json
+  aws s3 cp - s3://ai-dp-data-lake-dev-us-west-2/raw/test-batch.json
 
 # 2. Check EventBridge triggered Step Functions
 aws stepfunctions list-executions `
-  --state-machine-arn arn:aws:states:us-west-1:123456789012:stateMachine:ai-dp-dev-orchestrator `
-  --region us-west-1
+  --state-machine-arn arn:aws:states:us-west-2:123456789012:stateMachine:ai-dp-dev-orchestrator `
+  --region us-west-2
 
 # 3. Verify processed/ write
-aws s3 ls s3://ai-dp-data-lake-dev-us-west-1/processed/ --recursive
+aws s3 ls s3://ai-dp-data-lake-dev-us-west-2/processed/ --recursive
 
 # 4. Verify DynamoDB write
 aws dynamodb query `
@@ -362,7 +362,7 @@ aws dynamodb query `
   --index-name timestamp-index `
   --key-condition-expression "recordType = :type" `
   --expression-attribute-values '{":type": {"S": "text"}}' `
-  --region us-west-1
+  --region us-west-2
 ```
 
 ### Lambda Direct Invocation Test
@@ -391,7 +391,7 @@ $testPayload = @{
 aws lambda invoke `
   --function-name ai-dp-dev-merge `
   --payload $testPayload `
-  --region us-west-1 `
+  --region us-west-2 `
   response.json
 
 # Check result
@@ -515,13 +515,12 @@ module "step_functions" {
 }
 ```
 
-## Next Phase
+## Downstream: Analytics & Query Layer
 
-**Phase 8: Analytics & Query Layer**
-- Create Glue crawler to catalog S3 `processed/` data
-- Configure Athena workgroup for SQL queries
-- Build visualization dashboard (QuickSight/React)
-- Connect dashboard to DynamoDB (real-time) + Athena (historical)
+The enriched data this Lambda writes feeds the analytics layer:
+- Glue crawler catalogs the S3 `processed/` data
+- Athena workgroup runs SQL queries over it
+- A Chart.js dashboard reads DynamoDB (real-time) + curated S3 + Athena (historical)
 
 ## References
 

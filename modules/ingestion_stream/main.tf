@@ -1,4 +1,4 @@
-# Direct API Gateway â†’ Kinesis integration (no Lambda proxy for lower latency)
+# Direct API Gateway to Kinesis integration (no Lambda proxy for lower latency)
 
 locals {
   resource_prefix       = "${var.project_name}-${var.environment}"

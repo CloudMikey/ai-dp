@@ -60,3 +60,4 @@
 - S3 lifecycle policies (180-day raw, 365-day processed)
 - Full CI/CD pipeline: OIDC auth, CI validation, automated deploy on merge
 - Full architecture documentation with Mermaid diagrams
+- X-Ray active tracing on both Lambdas (per-invocation latency + downstream call segments); `enable_xray_tracing` toggle, least-privilege IAM; cleared both tfsec aws-lambda-enable-tracing findings
