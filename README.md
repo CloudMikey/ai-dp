@@ -1,94 +1,67 @@
 # AI-Powered Serverless Data Pipeline
 
-![Status](https://img.shields.io/badge/status-in%20development-yellow)
+![Status](https://img.shields.io/badge/status-complete-brightgreen)
 ![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.11.0-blue)
 ![AWS](https://img.shields.io/badge/AWS-serverless-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
+
+**33 unit tests · 96% coverage · 0% error rate (1,000-event load test) · $12/month actual AWS cost · 6 CloudWatch alarms · CI/CD via GitHub OIDC**
 
 A production-grade, serverless data pipeline built on AWS that ingests, enriches, and analyzes data using AI/ML services. This project demonstrates modern cloud architecture patterns, Infrastructure as Code (IaC), and AI/ML integration.
 
 ## Overview
 
-This pipeline processes both **batch** and **streaming** data, enriching it with AWS AI services (Comprehend, SageMaker, Rekognition), and provides analytics through a dual storage strategy:
+This pipeline processes both **batch** and **streaming** data, enriching it with AWS AI services (Amazon Comprehend), and provides analytics through a dual storage strategy:
 - **Hot Storage**: DynamoDB for low-latency recent data queries
 - **Historical Storage**: S3 Data Lake for long-term analytics with Athena
 
 ### Key Features
 
 - **Multi-Modal Ingestion**: REST API (streaming) + S3 batch uploads
-- **AI/ML Enrichment**: Sentiment analysis, entity extraction, anomaly detection, image labeling
+- **AI/ML Enrichment**: Sentiment analysis and entity extraction via Amazon Comprehend
 - **Serverless Architecture**: Zero server management, auto-scaling, pay-per-use
 - **Dual Storage Strategy**: Real-time queries (DynamoDB) + Historical analytics (S3 + Athena)
 - **Infrastructure as Code**: 100% Terraform-managed, multi-environment support
-- **Production-Ready**: Error handling, monitoring, DLQ replay, security best practices
+- **Production-Ready**: Error handling, monitoring, SQS DLQs (14-day retention), security best practices
 - **CI/CD**: GitHub Actions with OIDC (no long-term credentials)
 
 ## Architecture
 
-```
-┌─────────────────┐      ┌─────────────────┐
-│   API Gateway   │      │   S3 Batch      │
-│   (Streaming)   │      │   Upload        │
-└────────┬────────┘      └────────┬────────┘
-         │                        │
-         v                        v
-    ┌────────────┐          ┌────────────────────┐
-    │  Kinesis   │          │  S3 Data Lake      │
-    │  Streams   │          │  (raw/ layer)      │
-    └─────┬──────┘          └──────┬─────────────┘
-          │                        │
-          v                        v
-    ┌──────────────┐          ┌──────────────┐
-    │  ETL Lambda  │          │ EventBridge  │
-    │  (Normalize) │          │    Rule      │
-    └──────┬───────┘          └──────┬───────┘
-           │                         │
-           v                         │
-    ┌────────────────────┐           │
-    │  S3 Data Lake      │           │
-    │  (raw/ layer)      │           │
-    └────────────────────┘           │
-                                     │
-           ┌─────────────────────────┘
-           │
-           v
-    ┌───────────────────────────┐
-    │   Step Functions          │
-    │   (Orchestration)         │
-    └───────┬───────────────────┘
-            │
-      ┌─────┼─────┬─────────────┐
-      │     │     │             │
-      v     v     v             v
-   ┌────┐ ┌────┐ ┌──────┐  ┌───────────┐
-   │Comp│ │Reko│ │Sage- │  │ (Future)  │
-   │hend│ │gni-│ │Maker │  │   ...     │
-   │    │ │tion│ │      │  │           │
-   └──┬─┘ └──┬─┘ └───┬──┘  └─────┬─────┘
-      │      │       │           │
-      └──────┴───────┴───────────┘
-                     │
-                     v
-              ┌──────────────┐
-              │Merge Lambda  │
-              └──────┬───────┘
-                     │
-            ┌────────┴────────┐
-            │                 │
-            v                 v
-    ┌──────────────┐   ┌────────────┐
-    │ S3 processed/│   │  DynamoDB  │
-    │   curated/   │   │ (Hot Store)│
-    └──────┬───────┘   └────────────┘
-           │
-           v
-    ┌────────────────┐
-    │ Glue Crawler + │
-    │     Athena     │
-    └────────────────┘
+```mermaid
+flowchart TD
+    subgraph Ingestion["Ingestion Layer"]
+        Client(["Client"]) -->|"POST /ingest"| APIGW["API Gateway"]
+        Client -->|"S3 Upload"| S3Raw["S3 raw/"]
+        APIGW --> Kinesis["Kinesis Streams"]
+        Kinesis --> ETL["ETL Lambda"]
+        ETL -->|"date-partitioned JSON"| S3Raw
+    end
+
+    subgraph Enrichment["Orchestration & AI Enrichment"]
+        S3Raw -->|"Object Created"| EB["EventBridge"]
+        EB --> SF["Step Functions"]
+        SF -->|"Parallel"| Sentiment["Comprehend\nDetectSentiment"]
+        SF -->|"Parallel"| Entities["Comprehend\nDetectEntities"]
+        Sentiment --> Merge["Merge Lambda"]
+        Entities --> Merge
+    end
+
+    subgraph Storage["Dual Storage"]
+        Merge --> S3P["S3 processed/"]
+        Merge --> DDB["DynamoDB\n30-day TTL"]
+        Merge --> S3C["S3 curated/\naggregate summary"]
+    end
+
+    subgraph Analytics["Analytics"]
+        S3P --> Glue["Glue Crawler"]
+        Glue --> Athena["Athena"]
+        DDB -->|"~50ms"| Dash(["Dashboard\nChart.js"])
+        S3C -->|"~100ms"| Dash
+        Athena -->|"~3s"| Dash
+    end
 ```
 
-For detailed architecture documentation, see [`docs/ai-dp overview notion.md`](docs/ai-dp%20overview%20notion.md).
+For full diagrams (sequence, state machine, storage tiers, API contract) see [docs/architecture.md](docs/architecture.md).
 
 ## Technology Stack
 
@@ -103,15 +76,29 @@ For detailed architecture documentation, see [`docs/ai-dp overview notion.md`](d
 | **Observability** | CloudWatch, X-Ray, SQS DLQs |
 | **CI/CD** | GitHub Actions (OIDC) |
 
+## AI-Assisted Development
+
+This project was built using **Claude Code** as an AI coding assistant for infrastructure scaffolding, test generation, and documentation structure.
+
+Every generated output was reviewed, tested, and in several cases corrected or redesigned based on real failures encountered during implementation:
+
+- **DecimalEncoder** (`lambdas/merge/merge_handler.py`) — Athena queries were returning `HIVE_CURSOR_ERROR` due to Python floats serializing as scientific notation. The AI-generated handler used standard `json.dumps`. I diagnosed the root cause and built a custom `DecimalEncoder` class to normalize float representation before S3 writes.
+
+- **IAM least-privilege audit** — Initial IAM policies were over-permissive (bucket-level `s3:*`). During a dedicated security review I scoped every policy to the minimum required action and resource (e.g., S3 writes restricted to `raw/*`, `s3:PutObjectAcl` explicitly removed). Findings documented in `docs/errorlog.md`.
+
+- **Comprehend region pivot** — AI scaffolding placed Comprehend calls in `us-west-1` (same as the Terraform state bucket). Comprehend is not available in that region. I caught this during integration testing, diagnosed the cause, and redesigned the architecture so all application resources run in `us-west-2` with state backend isolated in `us-west-1`.
+
+- **CI/CD pipeline debugging** — The GitHub Actions OIDC workflow required 14+ iterations to get working end-to-end: IAM permission gaps only discoverable at runtime, tflint plugin rate limiting, deprecated action replacement. This debugging is traceable in the PR #1 commit history.
+
+The AI accelerated scaffolding and boilerplate. The architectural decisions, debugging, and security hardening are my own.
+
 ## Repository Structure
 
 ```
 AI-DP/
 ├── bootstrap/            # Terraform config for S3 state bucket
 ├── envs/                 # Environment-specific Terraform configs
-│   ├── dev/             # Development environment
-│   ├── stg/             # Staging environment
-│   └── prod/            # Production environment
+│   └── dev/             # Development environment
 ├── modules/             # Reusable Terraform modules
 │   ├── data_lake/           # S3 buckets (raw/processed/curated) ✅
 │   ├── ingestion_stream/    # API Gateway, Kinesis, EventBridge ✅
@@ -122,8 +109,7 @@ AI-DP/
 │   └── observability/       # CloudWatch dashboards, alarms (Phase 9)
 ├── lambdas/             # Python Lambda function code
 │   ├── etl/            # Kinesis consumer (normalize & write to S3)
-│   ├── merge/          # Merge AI outputs, write to storage
-│   └── replay/         # DLQ replay utility (Phase 9)
+│   └── merge/          # Merge AI outputs, write to storage
 ├── dashboard/          # Browser-based analytics dashboard ✅
 │   ├── index.html     # Main HTML file
 │   ├── styles.css     # Dark theme styling
@@ -176,17 +162,6 @@ terraform -chdir=envs/dev plan
 terraform -chdir=envs/dev apply
 ```
 
-### 5. Deploy to Staging/Production
-
-```powershell
-# Staging
-terraform -chdir=envs/stg init
-terraform -chdir=envs/stg apply
-
-# Production
-terraform -chdir=envs/prod init
-terraform -chdir=envs/prod apply
-```
 
 ## Development Workflow
 
@@ -223,33 +198,35 @@ source venv/bin/activate # Linux/Mac
 # Install dependencies
 pip install -r requirements.txt
 
-# Run tests (when implemented)
-pytest
+# Run tests
+pytest lambdas/ --cov --cov-report=term-missing
 ```
 
 ## Testing
 
 ```powershell
-# Unit tests (when implemented)
-pytest lambdas/etl/
-pytest lambdas/merge/
+# Unit tests (33 tests, 96% coverage)
+pytest lambdas/etl/ --cov=etl_handler --cov-report=term-missing
+pytest lambdas/merge/ --cov=merge_handler --cov-report=term-missing
+
+# Run all Lambda tests with combined coverage report
+pytest lambdas/ --cov --cov-report=term-missing
 
 # Integration tests
-# See scripts/ for test utilities
+# See scripts/ for test utilities (load_test.py sends 1000 events via Kinesis)
 ```
 
 ## Project Status
 
-**Current Phase**: Phase 8 Complete - Analytics & Query Layer
-**Overall Progress**: 90% (9 of 10 phases complete)
+**Status**: ✅ **PROJECT COMPLETE** — All 10 phases done (2026-04-05)
 
-This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) for detailed implementation phases and completion criteria.
+See [`docs/roadmap.md`](docs/roadmap.md) for full phase history and implementation details.
 
 ### ✅ Completed Phases
 
 **Phase 0: Bootstrap Infrastructure**
 - S3 state bucket with native locking (Terraform >= 1.11.0)
-- All environments initialized (dev, stg, prod)
+- Dev environment initialized
 
 **Phase 1: Data Lake Foundation**
 - S3 bucket: `ai-dp-data-lake-dev-us-west-2`
@@ -294,27 +271,31 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 - Responsive design: Real-time metrics, sentiment charts, entity analysis
 - Zero dependencies: Runs directly from file system or S3 static hosting
 
-### 🔄 Next Phase
+**Phase 9: Production Hardening** ✅ (100% — 7/7 tasks complete)
+- ✅ Lambda unit tests (33 tests, 96% coverage)
+- ✅ Load testing (1000 events, 0% errors)
+- ✅ CloudWatch Dashboard (8 widgets) + 6 Alarms + SNS + X-Ray active tracing (both Lambdas)
+- ✅ Security Review (IAM audit, KMS, tfsec — 0 critical findings)
+- ✅ Cost Optimization ($12/month actual, 76% under $50 budget)
+- ✅ Architecture Documentation (`docs/architecture.md`) — Mermaid diagrams, sequence flows, API contract
 
-**Phase 9: Production Hardening** (Next)
-- CloudWatch alarms for all critical components
-- API Gateway throttling and rate limiting
-- Lambda unit tests (pytest + moto)
-- Load testing streaming path
-- Security review (IAM audit, tfsec scan)
-
-### 📋 Planned
-
-- Phase 10: CI/CD Pipeline (GitHub Actions with OIDC)
+**Phase 10: CI/CD Pipeline** ✅ (100% — 6/6 tasks complete)
+- ✅ GitHub Actions OIDC role (`ai-dp-dev-github-actions`) — least-privilege IAM, Terraform-managed
+- ✅ CI workflow (`.github/workflows/ci.yml`) — fmt/validate/tflint/tfsec/plan on every PR
+- ✅ Deploy workflow (`.github/workflows/deploy.yml`) — `terraform apply` on merge to main
+- ✅ GitHub Environment (`dev`) with protection rules
+- ✅ Workflows tested end-to-end
+- ✅ CI/CD documentation (`docs/cicd.md`)
 
 ## Documentation
 
-- **[Project Overview](docs/ai-dp%20overview%20notion.md)**: Comprehensive architecture guide
 - **[Interview Walkthrough](docs/explained.md)**: How to explain this project in interviews
-- **[Data Flow](docs/data_flow.md)**: End-to-end data flow documentation
+- **[Error Log](docs/errorlog.md)**: Errors encountered, root causes, and fixes
+- **[Architecture](docs/architecture.md)**: Full diagrams, sequence flows, key decisions, API contract
+- **[Data Flow](docs/data_flow.md)**: End-to-end data flow with payloads and retention details
+- **[CI/CD](docs/cicd.md)**: CI/CD pipeline design and workflow documentation
 - **[Roadmap](docs/roadmap.md)**: Implementation phases and tasks
-- **[CLAUDE.md](CLAUDE.md)**: Development standards and patterns
-- **[Error Log](docs/errorlog.md)**: Common issues and solutions
+- **[Project Overview](docs/ai-dp%20overview%20notion.md)**: Comprehensive architecture guide
 
 ## Design Principles
 
@@ -322,17 +303,16 @@ This project is in active development. See [`docs/roadmap.md`](docs/roadmap.md) 
 2. **ROOT CAUSE, NOT BANDAID**: Fix underlying structural issues
 3. **DATA INTEGRITY**: Use consistent, authoritative data sources
 4. **SECURITY-FIRST**: OIDC authentication, least-privilege IAM, no long-term credentials
-5. **ENVIRONMENT ISOLATION**: Strict separation between dev/staging/prod
+5. **ENVIRONMENT ISOLATION**: Infrastructure designed for multi-environment deployment (dev active)
 
-## CI/CD Pipeline (Phase 10)
+## CI/CD Pipeline
 
-> **Note:** CI/CD deferred to Phase 10 after all infrastructure is built and proven working.
+Two GitHub Actions workflows handle the full CI/CD lifecycle:
 
-**Planned implementation:**
-- **CI Workflow** (Pull Requests): Terraform fmt, validate, plan, security scanning
-- **Deploy Workflow** (Main Branch): Automated deployment with approval gates
-- **Environment Promotion**: dev → staging → production
-- **OIDC Authentication**: No long-term credentials
+- **CI** (`.github/workflows/ci.yml`): Runs on every PR — fmt, validate, tflint, tfsec, plan. Posts plan output as PR comment.
+- **Deploy** (`.github/workflows/deploy.yml`): Runs on merge to `main` — plan + `terraform apply`. Posts plan to job summary.
+
+**Authentication:** GitHub OIDC — no long-term AWS credentials stored anywhere. See [`docs/cicd.md`](docs/cicd.md) for full documentation.
 
 ## Cost Optimization
 

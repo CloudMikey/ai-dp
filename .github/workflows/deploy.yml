@@ -1,0 +1,99 @@
+name: Deploy - Terraform Apply
+
+# Trigger: Any push to main (i.e. merged PR)
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent deploys — never cancel a running apply
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.13.0"    # Matches .terraform-version
+  WORKING_DIR: "envs/dev"
+  AWS_REGION: "us-west-2" # Application region (backend state is in us-west-1)
+
+jobs:
+  terraform-deploy:
+    name: Terraform Deploy
+    runs-on: ubuntu-latest
+    environment: dev  # Enables GitHub Environment protection rules (Task 4)
+
+    permissions:
+      id-token: write  # Required: request OIDC JWT from GitHub
+      contents: read   # Required: checkout the repo
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4.2.2
+
+      # ── 2. Run unit tests ────────────────────────────────────────────────────
+      # No AWS credentials needed — tests use moto to mock all AWS services.
+      # Runs before Terraform steps so a test failure blocks the deploy early.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install pytest pytest-cov boto3 moto
+
+      - name: Run unit tests
+        run: pytest lambdas/ --cov --cov-report=term-missing --cov-fail-under=90
+
+      # ── 3. Setup Terraform ───────────────────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── 4. Configure AWS credentials via OIDC ────────────────────────────────
+      # GitHub exchanges an OIDC token for short-lived AWS credentials.
+      # No long-term access keys are stored in GitHub secrets.
+      # Role trust policy is scoped to repo:CloudMikey/AI-DP:*
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-deploy-${{ github.run_id }}
+
+      # ── 5. Terraform Init ────────────────────────────────────────────────────
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=tf-state-aidp" \
+            -backend-config="key=envs/dev/terraform.tfstate" \
+            -backend-config="region=us-west-1" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+
+      # ── 6. Terraform Plan ────────────────────────────────────────────────────
+      # Saves plan to file so apply uses the exact same plan (no drift)
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}
+        run: terraform plan -no-color -out=tfplan
+
+      # ── 7. Post Plan to Job Summary ──────────────────────────────────────────
+      # No PR to comment on (push event), so write to the Actions job summary instead
+      - name: Post Plan to Summary
+        run: |
+          echo "### Terraform Plan Output" >> $GITHUB_STEP_SUMMARY
+          echo '```terraform' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.plan.outputs.stdout }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # ── 8. Terraform Apply ───────────────────────────────────────────────────
+      # Applies the saved plan — no interactive prompt needed with -auto-approve
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}
+        run: terraform apply -auto-approve tfplan

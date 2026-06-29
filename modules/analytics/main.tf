@@ -1,18 +1,13 @@
-#-------------------- Local Variables --------------------#
-
-locals {
+﻿locals {
   resource_prefix       = "${var.project_name}-${var.environment}"
   athena_results_bucket = "${var.project_name}-athena-results-${var.environment}-${var.aws_region}"
 }
-
-#-------------------- AWS Glue Catalog Database --------------------#
 
 resource "aws_glue_catalog_database" "analytics" {
   name        = "${local.resource_prefix}-analytics"
   description = "Data Catalog database for AI-DP processed data analytics"
 }
 
-#-------------------- AWS Glue Crawler --------------------#
 # Automatically discovers schema and partitions from S3 JSON files
 # Runs on-demand to catalog processed/ layer
 
@@ -61,7 +56,6 @@ resource "aws_glue_crawler" "processed_data" {
   )
 }
 
-#-------------------- S3 Bucket for Athena Query Results --------------------#
 # Stores Athena query outputs with 7-day automatic cleanup
 
 resource "aws_s3_bucket" "athena_results" {
@@ -129,7 +123,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "athena_results" {
   }
 }
 
-#-------------------- AWS Athena Workgroup --------------------#
 # Enforces consistent query settings and S3 output location
 
 resource "aws_athena_workgroup" "dev" {

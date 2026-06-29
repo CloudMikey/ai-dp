@@ -1,4 +1,3 @@
-#-------------------- Environment Variables --------------------#
 # Variables for the dev environment configuration
 
 variable "aws_region" {
@@ -17,3 +16,6 @@ variable "alarm_email" {
   description = "Email address for CloudWatch alarm notifications"
   type        = string
 }
+
+
+

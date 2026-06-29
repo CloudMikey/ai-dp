@@ -1,6 +1,4 @@
-#-------------------- Module Variables --------------------#
-
-variable "environment" {
+﻿variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
   validation {
@@ -18,8 +16,6 @@ variable "aws_region" {
   description = "AWS region for resources"
   type        = string
 }
-
-#-------------------- Logging Configuration --------------------#
 
 variable "log_retention_days" {
   description = "CloudWatch log retention period for Step Functions execution logs (days)"
@@ -41,8 +37,6 @@ variable "log_level" {
   }
 }
 
-#-------------------- Integration Variables --------------------#
-
 variable "data_lake_bucket_arn" {
   description = "ARN of the data lake S3 bucket for reading objects"
   type        = string
@@ -57,8 +51,6 @@ variable "merge_lambda_arn" {
   description = "ARN of Merge Lambda function for invoking from Step Functions"
   type        = string
 }
-
-#-------------------- Tagging Variables --------------------#
 
 variable "tags" {
   description = "Additional tags to apply to resources (merged with resource-specific tags)"

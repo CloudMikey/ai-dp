@@ -1,17 +1,12 @@
-#-------------------- Data Lake S3 Bucket --------------------#
-# Three-layer data lake: raw/ (ingested), processed/ (AI-enriched), curated/ (business-ready)
+﻿# Three-layer data lake: raw/ (ingested), processed/ (AI-enriched), curated/ (business-ready)
 
 locals {
   bucket_name = "${var.project_name}-data-lake-${var.environment}-${var.aws_region}"
 }
 
-#-------------------- S3 Bucket --------------------#
-
 resource "aws_s3_bucket" "data_lake" {
   bucket = local.bucket_name
 }
-
-#-------------------- Versioning --------------------#
 
 resource "aws_s3_bucket_versioning" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
@@ -20,8 +15,6 @@ resource "aws_s3_bucket_versioning" "data_lake" {
     status = var.enable_versioning ? "Enabled" : "Disabled"
   }
 }
-
-#-------------------- Encryption --------------------#
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
@@ -35,8 +28,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "data_lake" {
   }
 }
 
-#-------------------- Block Public Access --------------------#
-
 resource "aws_s3_bucket_public_access_block" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
 
@@ -46,12 +37,10 @@ resource "aws_s3_bucket_public_access_block" "data_lake" {
   restrict_public_buckets = true
 }
 
-#-------------------- Lifecycle Policies --------------------#
 # Cost optimization: Transition older data to cheaper storage tiers
 
 resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
   bucket = aws_s3_bucket.data_lake.id
-
 
   rule {
     id     = "raw-layer-lifecycle"
@@ -84,7 +73,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
 
-
     dynamic "noncurrent_version_transition" {
       for_each = var.enable_versioning && var.raw_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
       content {
@@ -100,7 +88,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       }
     }
   }
-
 
   rule {
     id     = "processed-layer-lifecycle"
@@ -132,7 +119,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
         days = var.processed_layer_lifecycle.expiration_days
       }
     }
-
 
     dynamic "noncurrent_version_transition" {
       for_each = var.enable_versioning && var.processed_layer_lifecycle.transition_to_glacier_days > 0 ? [1] : []
@@ -188,8 +174,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
   }
 }
 
-#-------------------- Bucket Policy - TLS Enforcement --------------------#
-
 resource "aws_s3_bucket_policy" "enforce_tls" {
   bucket = aws_s3_bucket.data_lake.id
 
@@ -214,8 +198,6 @@ resource "aws_s3_bucket_policy" "enforce_tls" {
     ]
   })
 }
-
-#-------------------- EventBridge Notification --------------------#
 
 resource "aws_s3_bucket_notification" "eventbridge" {
   bucket      = aws_s3_bucket.data_lake.id

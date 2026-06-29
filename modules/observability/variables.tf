@@ -1,6 +1,3 @@
-#-------------------- Module Variables --------------------#
-# Input variables for the observability module
-
 variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
@@ -19,8 +16,6 @@ variable "aws_region" {
   description = "AWS region for CloudWatch dashboard"
   type        = string
 }
-
-#-------------------- Resource References --------------------#
 
 variable "etl_lambda_function_name" {
   description = "Name of the ETL Lambda function"
@@ -61,8 +56,6 @@ variable "merge_dlq_name" {
   description = "Name of the Merge Dead Letter Queue"
   type        = string
 }
-
-#-------------------- Alarm Configuration Variables --------------------#
 
 variable "alarm_notification_emails" {
   description = "List of email addresses to receive CloudWatch alarm notifications"
@@ -118,8 +111,6 @@ variable "step_functions_failure_threshold" {
     error_message = "Step Functions failure threshold must be > 0."
   }
 }
-
-#-------------------- Tagging Variables --------------------#
 
 variable "tags" {
   description = "Additional tags to apply to resources"

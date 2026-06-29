@@ -4,7 +4,7 @@
 
 Creates a real-time data ingestion pipeline using AWS API Gateway HTTP API and Amazon Kinesis Data Streams. Clients send JSON payloads to an HTTP endpoint, which directly writes to a Kinesis stream without Lambda proxy overhead.
 
-**Data Flow**: Client → API Gateway (POST /ingest) → Kinesis Stream → (Future: Lambda ETL → S3)
+**Data Flow**: Client → API Gateway (POST /ingest) → Kinesis Stream → Lambda ETL → S3 `raw/`
 
 ---
 
@@ -22,7 +22,7 @@ Creates a real-time data ingestion pipeline using AWS API Gateway HTTP API and A
 
 **Kinesis as Buffer**:
 - Decouples ingestion from processing
-- Handles traffic spikes (1 MB/sec per shard)
+- Absorbs traffic within shard capacity (1 MB/s, 1k records/s per shard); switch to on-demand for unpredictable bursts
 - Enables replay and multi-consumer patterns
 
 ---
@@ -53,12 +53,17 @@ module "ingestion_stream" {
 
   environment  = "dev"
   project_name = "ai-dp"
-  aws_region   = "us-west-1"
+  aws_region   = "us-west-2"
 
-  # Kinesis configuration (1 shard = 1 MB/sec write capacity)
-  kinesis_shard_count     = 1  # Scale to 2-5 for production
-  kinesis_retention_hours = 24 # Increase for longer replay window
-  kinesis_encryption_type = "NONE" # Use "KMS" in production
+  # Data lake integration (ETL Lambda writes validated records to raw/)
+  data_lake_bucket_name = module.data_lake.bucket_name
+  data_lake_bucket_arn  = module.data_lake.bucket_arn
+
+  # Kinesis configuration (provisioned 1-shard — cost-optimized for steady low traffic)
+  kinesis_stream_mode     = "PROVISIONED" # or "ON_DEMAND" for bursty/load-test traffic
+  kinesis_shard_count     = 1             # 1 shard = 1 MB/s write capacity
+  kinesis_retention_hours = 24            # Increase for a longer replay window
+  kinesis_encryption_type = "KMS"         # AWS-managed key; "NONE" to disable
 
   # API Gateway configuration
   enable_api_gateway_logging     = true
@@ -83,6 +88,10 @@ module "ingestion_stream" {
 - **`aws_region`**: AWS region for resources
 
 ### Kinesis Configuration
+- **`kinesis_stream_mode`**: Capacity mode (default: "PROVISIONED")
+  - "PROVISIONED": ~$11/mo for 1 shard, best for steady low-volume traffic
+  - "ON_DEMAND": flat ~$29/mo, auto-scales for bursty/unpredictable traffic
+- **`kinesis_shard_count`**: Shards for PROVISIONED mode (default: 1, 1 shard = 1 MB/s write). Ignored when ON_DEMAND.
 - **`kinesis_retention_hours`**: Data retention (default: 24, max: 8760)
   - 24 hours: Good for dev, low cost
   - 168 hours (7 days): Good for production debugging
@@ -102,9 +111,9 @@ module "ingestion_stream" {
 ## Outputs
 
 ### For Testing
-- **`api_gateway_invoke_url`**: Full API endpoint URL (e.g., `https://abc123.execute-api.us-west-1.amazonaws.com/ingest`)
+- **`api_gateway_invoke_url`**: Full API endpoint URL (e.g., `https://abc123.execute-api.us-west-2.amazonaws.com/ingest`)
 
-### For Lambda Integration (Phase 2)
+### For Lambda Integration
 - **`kinesis_stream_name`**: Stream name for Lambda event source mapping
 - **`kinesis_stream_arn`**: Stream ARN for IAM policies
 
@@ -143,7 +152,7 @@ Invoke-RestMethod -Uri $url -Method Post `
 ### Test with cURL
 
 ```bash
-curl -X POST https://{api-id}.execute-api.us-west-1.amazonaws.com/ingest \
+curl -X POST https://{api-id}.execute-api.us-west-2.amazonaws.com/ingest \
   -H "Content-Type: application/json" \
   -H "X-Partition-Key: test-partition" \
   -d '{
@@ -171,13 +180,13 @@ curl -X POST https://{api-id}.execute-api.us-west-1.amazonaws.com/ingest \
 
 ---
 
-## EventBridge Batch Ingestion Detection (Phase 3)
+## EventBridge Batch Ingestion Detection
 
 ### What It Does
 
 Detects batch file uploads to the data lake `raw/` layer for orchestrated processing. When files are uploaded directly to S3 (bypassing the streaming API path), EventBridge triggers processing workflows.
 
-**Data Flow**: S3 upload to `raw/` → EventBridge rule → (Phase 4: Step Functions orchestration)
+**Data Flow**: S3 upload to `raw/` → EventBridge rule → Step Functions orchestration
 
 ### Why EventBridge vs S3 Notifications?
 
@@ -258,7 +267,7 @@ Detects batch file uploads to the data lake `raw/` layer for orchestrated proces
 **Test 1: Upload to raw/ (should trigger)**:
 ```powershell
 echo '{"test": "data"}' > test.json
-aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/raw/test.json
+aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 ```
 
 **Verify in AWS Console**:
@@ -268,8 +277,8 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/raw/test.json
 
 **Test 2 & 3: Upload to processed/ and curated/ (should NOT trigger)**:
 ```powershell
-aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/processed/test.json
-aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/curated/test.json
+aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/processed/test.json
+aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/curated/test.json
 # Invocations metric should NOT increase ✅
 ```
 
@@ -282,21 +291,24 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-1/curated/test.json
 > "The event pattern uses JSON to define three filters: source must be aws.s3, detail-type must be Object Created, and the object key must start with 'raw/'. This ensures only new uploads to the raw layer trigger processing. Uploads to processed or curated layers are ignored, preventing infinite loops."
 
 **Q: What happens if the rule fails to invoke a target?**
-> "In Phase 4, we'll add a dead letter queue for failed invocations. EventBridge has built-in retry logic - it retries failed deliveries with exponential backoff. If all retries fail, the event goes to the DLQ where we can replay it or investigate the failure."
+> "EventBridge has built-in retry logic - it retries failed deliveries with exponential backoff. Failed Lambda invocations downstream are captured in an SQS dead letter queue (14-day retention) with a CloudWatch alarm on DLQ depth, so I can investigate or re-submit them."
 
 ---
 
 ## Capacity Planning
 
-With **on-demand billing**, you no longer need to provision or manage shards. Kinesis automatically scales capacity based on your workload. This model is ideal for unpredictable or spiky workloads, as it eliminates the need for manual capacity planning.
+This stream runs in **provisioned mode with 1 shard** by default. Each shard provides 1 MB/s (1,000 records/s) of write capacity — comfortably above this workload's steady, low-volume traffic — at the lowest cost. For unpredictable or spiky workloads (e.g. load tests), set `kinesis_stream_mode = "ON_DEMAND"` to let Kinesis auto-scale without managing shards, at a higher flat hourly rate.
 
-### Cost Breakdown (us-west-1, as of 2025 - On-Demand)
+### Cost Breakdown (us-west-2, 2026)
 
-**Kinesis**:
-- Per-stream hour: ~$0.04 per hour
-- Data written: ~$0.20 per GB
-- Data read: ~$0.02 per GB
-- Extended Retention: $0.02 per hour for > 24 hours (billed per shard)
+**Kinesis — Provisioned (default, 1 shard)**:
+- Shard hour: ~$0.015 per hour (~$11/month for 1 shard)
+- PUT payload units: $0.014 per million 25 KB units (negligible at low volume)
+- Extended retention: $0.02 per shard-hour for > 24 hours
+
+**Kinesis — On-Demand (optional, for bursts)**:
+- Stream hour: ~$0.04 per hour (**~$29/month flat, regardless of throughput**)
+- Data written/read: per-GB charges on top of the stream hour
 
 **API Gateway HTTP API**:
 - First 300M requests: $1.00 per million
@@ -329,15 +341,15 @@ With **on-demand billing**, you no longer need to provision or manage shards. Ki
 ### Scaling Considerations
 
 **Q: How would you scale this for production?**
-> "I'd increase shard count based on expected throughput. For example, if we expect 5 MB/sec during peak hours, I'd provision 6 shards for headroom. I'd also enable KMS encryption for data at rest and restrict CORS to specific domains."
+> "The stream runs in provisioned mode with 1 shard — the cost-effective default for steady, low-volume traffic. To scale I'd add shards (each adds 1 MB/s of write capacity) with a good partition-key strategy to avoid hot shards, or switch to on-demand mode (`kinesis_stream_mode = \"ON_DEMAND\"`) for unpredictable, spiky traffic where I don't want to manage shard counts. Other levers: longer retention for a bigger replay window, and (already enabled here) KMS encryption at rest plus CORS restricted to specific domains."
 
 **Q: How do you monitor this?**
-> "CloudWatch metrics for Kinesis (PutRecord success rate, incoming data) and API Gateway (4xx/5xx errors, latency). I'd set up alarms for high error rates or when Kinesis utilization exceeds 80%. For production, I'd add X-Ray tracing to diagnose latency issues."
+> "CloudWatch metrics for Kinesis (PutRecord success rate, incoming data) and API Gateway (4xx/5xx errors, latency). I'd set up alarms for high error rates or when Kinesis utilization exceeds 80%. X-Ray active tracing is enabled on the ETL Lambda, so I can see per-invocation latency and downstream call timing (S3 writes) to diagnose bottlenecks."
 
 ### Cost Optimization
 
 **Q: How did you optimize costs?**
-> "Started with 1 shard for dev since our throughput is low. Used NONE encryption instead of KMS to save on KMS costs. Set 7-day log retention instead of indefinite. Used HTTP API instead of REST API for 70% cost savings. In production, I'd use Reserved Capacity for predictable shard usage."
+> "I right-sized Kinesis to provisioned 1-shard (~$11/mo) instead of on-demand (~$29/mo flat) once I saw the stream carried steady, low-volume traffic — on-demand's flat hourly rate only pays off at high or unpredictable throughput. I caught it in Cost Explorer: on-demand was billing ~$29/mo to move about 1 MB. I also set 7-day log retention instead of indefinite and used HTTP API instead of REST API for ~70% savings. For a high, bursty workload I'd switch back to on-demand to avoid throttling."
 
 ---
 
@@ -399,32 +411,19 @@ kinesis_kms_key_id      = aws_kms_key.kinesis.id
 
 ### Issue: High API Gateway latency
 
-**Cause**: Kinesis throttling due to stream capacity limits.
-**Check**: Kinesis CloudWatch metrics for `WriteThroughputExceeded` (on-demand mode metric).
-**Fix**: Although Kinesis scales automatically in on-demand mode, there are still account and stream-level limits. If throttling occurs, you may need to request a service quota increase or analyze your partition key strategy to ensure even distribution.
+**Cause**: Kinesis throttling due to shard capacity limits.
+**Check**: Kinesis CloudWatch metric `WriteProvisionedThroughputExceeded`.
+**Fix**: In provisioned mode each shard handles 1 MB/s (1k records/s). Add shards via `kinesis_shard_count` or improve the partition-key strategy to spread load evenly. For sustained unpredictable spikes, switch to `kinesis_stream_mode = "ON_DEMAND"`.
 
 ---
 
-## Next Steps (Phase 2)
+## Pipeline Integration
 
-After completing this module:
+This module is the entry point of the streaming path and connects to the rest of the deployed pipeline:
 
-1. **Create Lambda ETL Function** (`lambdas/etl/`)
-   - Consume from Kinesis stream
-   - Validate and normalize data
-   - Write to S3 `raw/` layer
-
-2. **Add Lambda Event Source Mapping**
-   - Connect Lambda to Kinesis stream
-   - Configure batch size and retry behavior
-
-3. **Add Dead Letter Queue (DLQ)**
-   - SQS queue for failed Lambda invocations
-   - CloudWatch alarm on DLQ depth
-
-4. **Enable EventBridge Notifications**
-   - S3 EventBridge notifications for batch uploads
-   - Triggers Step Functions orchestration
+1. **ETL Lambda** (`lambdas/etl/`) — consumes the Kinesis stream via an event source mapping, validates and normalizes records, and writes them to the S3 `raw/` layer. X-Ray active tracing is enabled for per-invocation latency visibility.
+2. **Dead Letter Queue** — an SQS DLQ (14-day retention) captures failed ETL invocations, with a CloudWatch alarm on DLQ depth.
+3. **EventBridge → Step Functions** — object-created events on `raw/` trigger the Step Functions orchestrator for AI enrichment (the EventBridge rule defined in this module).
 
 ---
 

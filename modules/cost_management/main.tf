@@ -1,16 +1,9 @@
-#=============================================================================#
-#                           Cost Management Module                            #
-#=============================================================================#
-# Manages AWS Budgets for cost monitoring and alerting.
-# Provides monthly budget tracking with configurable thresholds and
-# email notifications to prevent cost overruns.
-#=============================================================================#
+﻿# AWS Budgets for monthly cost monitoring with configurable thresholds and email alerts.
 
 locals {
   budget_name = "${var.project_name}-${var.environment}-monthly-budget"
 }
 
-#-------------------- AWS Budget --------------------#
 resource "aws_budgets_budget" "monthly_cost" {
   name              = local.budget_name
   budget_type       = "COST"

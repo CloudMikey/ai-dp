@@ -1,6 +1,4 @@
-#-------------------- Orchestration Module Outputs --------------------#
-
-output "lambda_function_arn" {
+﻿output "lambda_function_arn" {
   description = "ARN of Merge Lambda function (for Step Functions invocation)"
   value       = aws_lambda_function.merge.arn
 }
@@ -34,3 +32,6 @@ output "cloudwatch_log_group_name" {
   description = "CloudWatch Log Group name for Lambda logs"
   value       = aws_cloudwatch_log_group.merge_lambda.name
 }
+
+
+

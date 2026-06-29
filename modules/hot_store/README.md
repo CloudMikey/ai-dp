@@ -58,7 +58,7 @@ module "hot_store" {
 
   environment  = "dev"
   project_name = "ai-dp"
-  aws_region   = "us-west-1"
+  aws_region   = "us-west-2"
 
   enable_point_in_time_recovery = true
   enable_ttl                     = true
@@ -121,7 +121,7 @@ module "hot_store" {
 
 ## Security Considerations
 
-**IAM Policy** (Phase 7 - Merge Lambda):
+**IAM Policy** (used by the Merge Lambda):
 ```hcl
 # Least-privilege policy (scoped to specific table)
 policy = jsonencode({
@@ -154,13 +154,13 @@ policy = jsonencode({
 aws dynamodb put-item `
   --table-name ai-dp-dev-enriched-data `
   --item '{\"recordId\": {\"S\": \"test-001\"}, \"timestamp\": {\"N\": \"1737715800000\"}, \"recordType\": {\"S\": \"text\"}}' `
-  --region us-west-1
+  --region us-west-2
 
 # Read record
 aws dynamodb get-item `
   --table-name ai-dp-dev-enriched-data `
   --key '{\"recordId\": {\"S\": \"test-001\"}, \"timestamp\": {\"N\": \"1737715800000\"}}' `
-  --region us-west-1
+  --region us-west-2
 ```
 
 ### Test 2: GSI Query
@@ -171,21 +171,21 @@ aws dynamodb query `
   --index-name timestamp-index `
   --key-condition-expression \"recordType = :type\" `
   --expression-attribute-values '{\":type\": {\"S\": \"text\"}}' `
-  --region us-west-1
+  --region us-west-2
 ```
 
 ### Test 3: Verify TTL
 ```powershell
 aws dynamodb describe-time-to-live `
   --table-name ai-dp-dev-enriched-data `
-  --region us-west-1
+  --region us-west-2
 ```
 
 ### Test 4: Verify PITR
 ```powershell
 aws dynamodb describe-continuous-backups `
   --table-name ai-dp-dev-enriched-data `
-  --region us-west-1
+  --region us-west-2
 ```
 
 ## Common Pitfalls
@@ -216,8 +216,7 @@ attribute {
 }
 ```
 
-## Next Phase
+## Pipeline Integration
 
-**Phase 6: AI Enrichment** - Step Functions calls Amazon Comprehend for sentiment analysis
-
-**Phase 7: Merge Lambda** - Writes enriched data to both S3 `processed/` AND this DynamoDB table
+- **AI Enrichment** — Step Functions calls Amazon Comprehend for sentiment + entity detection.
+- **Merge Lambda** — writes the enriched records to both S3 `processed/` and this DynamoDB table (real-time hot store).

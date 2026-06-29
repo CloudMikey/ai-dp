@@ -1,5 +1,4 @@
-#-------------------- Streaming Ingestion Module --------------------#
-# Direct API Gateway → Kinesis integration (no Lambda proxy for lower latency)
+# Direct API Gateway to Kinesis integration (no Lambda proxy for lower latency)
 
 locals {
   resource_prefix       = "${var.project_name}-${var.environment}"
@@ -9,17 +8,19 @@ locals {
   eventbridge_rule_name = "${local.resource_prefix}-s3-batch-ingestion"
 }
 
-#-------------------- Kinesis Data Stream --------------------#
-
 resource "aws_kinesis_stream" "ingestion" {
   name             = local.stream_name
   retention_period = var.kinesis_retention_hours
+
+  # PROVISIONED 1-shard (~$11/mo) over ON_DEMAND (flat ~$29/mo): this workload is ~1 MB/month.
+  # shard_count must be null in ON_DEMAND mode; toggle via kinesis_stream_mode for burst load tests.
+  shard_count = var.kinesis_stream_mode == "PROVISIONED" ? var.kinesis_shard_count : null
 
   encryption_type = var.kinesis_encryption_type
   kms_key_id      = var.kinesis_encryption_type == "KMS" ? var.kinesis_kms_key_id : null
 
   stream_mode_details {
-    stream_mode = "ON_DEMAND"
+    stream_mode = var.kinesis_stream_mode
   }
 
   tags = merge(
@@ -30,8 +31,6 @@ resource "aws_kinesis_stream" "ingestion" {
     }
   )
 }
-
-#-------------------- API Gateway HTTP API --------------------#
 
 resource "aws_apigatewayv2_api" "ingestion" {
   name          = local.api_name
@@ -58,8 +57,6 @@ resource "aws_apigatewayv2_api" "ingestion" {
   )
 }
 
-#-------------------- API Gateway Integration --------------------#
-
 resource "aws_apigatewayv2_integration" "kinesis" {
   api_id              = aws_apigatewayv2_api.ingestion.id
   integration_type    = "AWS_PROXY"
@@ -76,16 +73,12 @@ resource "aws_apigatewayv2_integration" "kinesis" {
   payload_format_version = "1.0"
 }
 
-#-------------------- API Gateway Route --------------------#
-
 resource "aws_apigatewayv2_route" "ingest" {
   api_id    = aws_apigatewayv2_api.ingestion.id
   route_key = "POST /ingest"
 
   target = "integrations/${aws_apigatewayv2_integration.kinesis.id}"
 }
-
-#-------------------- API Gateway Stage --------------------#
 
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.ingestion.id
@@ -121,8 +114,6 @@ resource "aws_apigatewayv2_stage" "default" {
   )
 }
 
-#-------------------- CloudWatch Logs (API Gateway) --------------------#
-
 resource "aws_cloudwatch_log_group" "api_gateway" {
   count             = var.enable_api_gateway_logging ? 1 : 0
   name              = "/aws/apigateway/${local.api_name}"
@@ -137,8 +128,6 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
   )
 }
 
-#-------------------- Lambda Code Packaging --------------------#
-
 data "archive_file" "etl_lambda" {
   type        = "zip"
   source_dir  = "${path.module}/../../lambdas/etl"
@@ -148,11 +137,12 @@ data "archive_file" "etl_lambda" {
     "lambda_etl.zip",
     "__pycache__",
     "*.pyc",
-    ".pytest_cache"
+    ".pytest_cache",
+    "test_*.py",   # unit tests not needed at runtime
+    "conftest.py", # pytest fixtures
+    ".coverage"    # coverage DB (binary, changes every test run)
   ]
 }
-
-#-------------------- Dead Letter Queue --------------------#
 
 resource "aws_sqs_queue" "etl_dlq" {
   name = "${local.resource_prefix}-etl-dlq"
@@ -169,8 +159,6 @@ resource "aws_sqs_queue" "etl_dlq" {
   )
 }
 
-#-------------------- CloudWatch Logs (Lambda) --------------------#
-
 resource "aws_cloudwatch_log_group" "etl_lambda" {
   name              = "/aws/lambda/${local.lambda_name}"
   retention_in_days = 7
@@ -184,19 +172,17 @@ resource "aws_cloudwatch_log_group" "etl_lambda" {
   )
 }
 
-#-------------------- Lambda Function --------------------#
-
 resource "aws_lambda_function" "etl" {
   function_name = local.lambda_name
-  description   = "ETL function: Kinesis → S3 raw layer with validation and normalization"
+  description   = "ETL function: Kinesis to S3 raw layer with validation and normalization"
 
   filename         = data.archive_file.etl_lambda.output_path
   source_code_hash = data.archive_file.etl_lambda.output_base64sha256
 
   runtime     = "python3.11"
   handler     = "etl_handler.lambda_handler"
-  timeout     = 60
-  memory_size = 256
+  timeout     = 60  # Kinesis batch window is 5s; 60s allows for S3 write latency + retries without approaching stream retention boundary
+  memory_size = 256 # 256MB sufficient for JSON decode + S3 write; load test confirmed P95=2044ms well within timeout
   role        = aws_iam_role.etl_lambda.arn
   environment {
     variables = {
@@ -208,6 +194,14 @@ resource "aws_lambda_function" "etl" {
 
   dead_letter_config {
     target_arn = aws_sqs_queue.etl_dlq.arn
+  }
+
+  # X-Ray active tracing: per-invocation latency timeline + downstream AWS SDK call segments
+  dynamic "tracing_config" {
+    for_each = var.enable_xray_tracing ? [1] : []
+    content {
+      mode = "Active"
+    }
   }
 
   depends_on = [
@@ -225,11 +219,9 @@ resource "aws_lambda_function" "etl" {
   )
 }
 
-#-------------------- Lambda Event Source Mapping --------------------#
-
 resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
-  event_source_arn  = aws_kinesis_stream.ingestion.arn
-  function_name     = aws_lambda_function.etl.arn
+  event_source_arn                   = aws_kinesis_stream.ingestion.arn
+  function_name                      = aws_lambda_function.etl.arn
   starting_position                  = "LATEST"
   batch_size                         = 100
   maximum_batching_window_in_seconds = 5
@@ -240,14 +232,12 @@ resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
       destination_arn = aws_sqs_queue.etl_dlq.arn
     }
   }
-  # option: Bisect on Funtion Error
+  # bisect_batch_on_function_error not set â€” poison-pill protection handled by maximum_retry_attempts = 3 + DLQ
   depends_on = [
     aws_iam_role_policy_attachment.lambda_kinesis_execution,
     aws_lambda_function.etl
   ]
 }
-
-#-------------------- EventBridge Rule (Batch Ingestion) --------------------#
 
 resource "aws_cloudwatch_event_rule" "s3_batch_ingestion" {
   name        = local.eventbridge_rule_name
@@ -279,8 +269,6 @@ resource "aws_cloudwatch_event_rule" "s3_batch_ingestion" {
     }
   )
 }
-
-#-------------------- EventBridge Target --------------------#
 
 resource "aws_cloudwatch_event_target" "step_functions" {
   count     = var.create_eventbridge_target ? 1 : 0

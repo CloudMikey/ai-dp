@@ -1,8 +1,4 @@
-#============================================================#
-#  AI Enrichment Module Variables
-#============================================================#
-
-variable "environment" {
+﻿variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
 }

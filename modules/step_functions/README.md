@@ -2,38 +2,42 @@
 
 ## What It Does
 
-Orchestrates the AI-powered data pipeline by coordinating parallel AI enrichment tasks (Comprehend, SageMaker) and merging results. Phase 4 implements a minimal Pass state to validate EventBridge integration; Phase 5+ expands to actual Lambda task orchestration.
+Orchestrates the batch AI-enrichment pipeline. When a file lands in the data lake `raw/` layer, EventBridge triggers this state machine, which reads the object from S3, runs Amazon Comprehend **sentiment and entity detection in parallel**, then invokes the Merge Lambda to write enriched results to the S3 `processed/` layer and the DynamoDB hot store.
+
+**Data Flow**: S3 `raw/` upload → EventBridge → Step Functions → (read S3 → parallel Comprehend → Merge Lambda) → S3 `processed/` + DynamoDB
 
 ## Why Step Functions?
 
 **Architecture Decision Justification:**
-- **Visual Workflow Management**: State machine provides graphical representation of pipeline flow
-- **Built-in Error Handling**: Retry policies and error catching without custom code
-- **Parallel Execution**: Fan-out to multiple AI services simultaneously, improving throughput
+- **Visual Workflow Management**: State machine provides a graphical representation of pipeline flow
+- **Built-in Error Handling**: Retry policies and `Catch` blocks without custom orchestration code
+- **Parallel Execution**: Sentiment analysis and entity detection run concurrently, reducing latency
 - **Serverless Orchestration**: No infrastructure to manage, pay-per-execution pricing
 - **Audit Trail**: CloudWatch Logs capture every state transition for debugging
 
-**Cost Consideration**: At $0.025 per 1,000 state transitions, even 10,000 monthly batch uploads cost only $0.25 - negligible for the orchestration value provided.
+**Cost Consideration**: At $0.025 per 1,000 state transitions and ~10 transitions per execution, even 10,000 monthly batch uploads cost roughly $2.50 — negligible for the orchestration value provided.
 
 ## Resources Created
 
-- **Step Functions State Machine** - Orchestrates pipeline execution with Amazon States Language (ASL)
-- **IAM Execution Role** - Allows state machine to invoke AWS services (currently CloudWatch Logs only)
-- **CloudWatch Log Group** - Captures execution logs with ALL level detail for dev debugging
-- **IAM Policy for Logging** - Grants state machine permissions to write CloudWatch Logs
+- **Step Functions State Machine** — 8-state workflow defined in Amazon States Language (ASL)
+- **IAM Execution Role** — scoped to S3 read (`raw/`), Comprehend, Merge Lambda invoke, and CloudWatch Logs
+- **CloudWatch Log Group** — captures execution logs at the configured level for debugging
+- **IAM Policies** — separate inline policies for logging, S3 read, and Lambda invoke; Comprehend permissions attached via a managed policy passed in from the `ai_enrichment` module
 
-## Phase 4 Scope
+## State Machine Workflow
 
-**What's Included NOW:**
-- Minimal Pass state (no actual processing, just validates event delivery)
-- CloudWatch Logs integration (execution visibility)
-- IAM role with least-privilege permissions (CloudWatch Logs only)
+| # | State | Type | Purpose |
+|---|-------|------|---------|
+| 1 | `PrepareComprehendInput` | Pass | Extract bucket / key / size from the EventBridge event |
+| 2 | `ReadS3Object` | Task (SDK: `s3:getObject`) | Read the object's text content from `raw/` |
+| 3 | `PrepareTextContent` | Pass | Combine text content with object metadata |
+| 4 | `ComprehendAnalysis` | **Parallel** | Branch A: `DetectSentiment` · Branch B: `DetectEntities` (both AWS SDK Comprehend tasks) |
+| 5 | `FormatResults` | Pass | Structure the sentiment + entity results for downstream writes |
+| 6 | `InvokeMergeLambda` | Task (Merge Lambda) | Merge results → S3 `processed/` + DynamoDB. Has `Retry` (3 attempts, backoff 2.0) and `Catch` |
+| 7 | `MergeComplete` | Succeed | Terminal success state |
+| 8 | `MergeFailed` | Fail | Terminal failure state (entered via `Catch` if the merge fails after retries) |
 
-**What's Coming in Phase 5+:**
-- Replace Pass state with Parallel state for AI enrichment
-- Add Lambda task invocations (Comprehend, SageMaker)
-- Error handling (Retry, Catch blocks)
-- Merge Lambda for DynamoDB writes
+> Comprehend is invoked through Step Functions' native AWS SDK integrations (`arn:aws:states:::aws-sdk:comprehend:*`), so no glue Lambda is needed for the AI calls.
 
 ## Usage Example
 
@@ -41,16 +45,19 @@ Orchestrates the AI-powered data pipeline by coordinating parallel AI enrichment
 module "step_functions" {
   source = "../../modules/step_functions"
 
-  # Required variables
   environment  = "dev"
   project_name = "ai-dp"
-  aws_region   = "us-west-1"
+  aws_region   = "us-west-2"
 
-  # Optional variables (defaults shown)
-  log_retention_days = 7      # 7 days for dev, increase for prod
-  log_level          = "ALL"  # ALL, ERROR, FATAL, or OFF
+  # Pipeline integration
+  data_lake_bucket_arn  = module.data_lake.bucket_arn          # S3 read scope (raw/)
+  comprehend_policy_arn = module.ai_enrichment.comprehend_policy_arn
+  merge_lambda_arn      = module.orchestration.lambda_function_arn
 
-  # Additional tags (merged with resource-specific tags)
+  # Logging
+  log_retention_days = 7     # 7 days for dev, increase for prod
+  log_level          = "ALL" # ALL, ERROR, FATAL, or OFF
+
   tags = {}
 }
 ```
@@ -58,7 +65,7 @@ module "step_functions" {
 ## Outputs
 
 ```hcl
-# For EventBridge target configuration (Task 2)
+# For the EventBridge target in the ingestion_stream module
 module.step_functions.state_machine_arn
 
 # For CloudWatch Logs testing
@@ -70,172 +77,116 @@ module.step_functions.state_machine_id
 
 ## Testing
 
-### Manual Testing via AWS Console (Phase 4)
+### End-to-end (recommended)
+
+The simplest realistic test is to upload a file to the `raw/` layer — EventBridge triggers the
+state machine automatically:
 
 ```powershell
-# 1. Deploy the module (requires wiring in envs/dev/main.tf - Task 3)
-terraform -chdir=envs/dev apply
-
-# 2. Navigate to AWS Console
-# - Service: Step Functions
-# - Find: ai-dp-dev-orchestrator
-# - Click: "Start execution"
-
-# 3. Input test event (minimal JSON)
-{}
-
-# 4. Verify execution succeeds
-# Expected output:
-{
-  "processing_result": {
-    "message": "Event received successfully",
-    "phase": "4-complete",
-    "next_steps": "Add Lambda tasks in Phase 5"
-  }
-}
-
-# 5. Check CloudWatch Logs
-# - Navigate to: CloudWatch → Log groups
-# - Find: /aws/states/ai-dp-dev-orchestrator
-# - Verify: Execution logs appear with detailed state transitions
+echo '{"text":"AWS Comprehend makes sentiment analysis easy in Seattle."}' > test.json
+aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 ```
 
-### CLI Testing
+Then watch the execution in the Step Functions console (`ai-dp-dev-orchestrator`) or tail the logs:
 
 ```powershell
-# List state machines
-aws stepfunctions list-state-machines
+aws logs tail /aws/states/ai-dp-dev-orchestrator --follow
+```
 
-# Start execution
+### Manual start-execution
+
+To start an execution directly, provide an input shaped like the EventBridge S3 event the
+first state expects:
+
+```json
+{
+  "detail": {
+    "bucket": { "name": "ai-dp-data-lake-dev-us-west-2" },
+    "object": { "key": "raw/test.json", "size": 64 }
+  }
+}
+```
+
+```powershell
 aws stepfunctions start-execution `
   --state-machine-arn <state-machine-arn> `
-  --input '{}'
-
-# View execution history
-aws stepfunctions get-execution-history `
-  --execution-arn <execution-arn>
-
-# Tail CloudWatch Logs
-aws logs tail /aws/states/ai-dp-dev-orchestrator --follow
+  --input file://event.json
 ```
 
 ## Key Variables
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `environment` | string | - | Environment name (dev, stg, prod) - validated |
+| `environment` | string | - | Environment name (dev, stg, prod) — validated |
 | `project_name` | string | - | Project name for resource naming |
 | `aws_region` | string | - | AWS region for resources |
-| `log_retention_days` | number | `7` | CloudWatch log retention (days) - validated against AWS valid values |
+| `data_lake_bucket_arn` | string | - | Data lake bucket ARN; scopes S3 read to `raw/*` |
+| `comprehend_policy_arn` | string | - | Managed policy ARN granting `DetectSentiment` + `DetectEntities` |
+| `merge_lambda_arn` | string | - | Merge Lambda ARN to invoke after enrichment |
+| `log_retention_days` | number | `7` | CloudWatch log retention (days) — validated against AWS valid values |
 | `log_level` | string | `"ALL"` | Step Functions log level (ALL, ERROR, FATAL, OFF) |
 | `tags` | map(string) | `{}` | Additional tags merged with resource-specific tags |
 
-## Amazon States Language (ASL) Explanation
+## Amazon States Language (ASL) Highlights
 
-**Current Definition (Phase 4):**
-```json
-{
-  "Comment": "Phase 4: Minimal orchestration - validates EventBridge integration",
-  "StartAt": "ReceiveEvent",
-  "States": {
-    "ReceiveEvent": {
-      "Type": "Pass",
-      "Comment": "Placeholder state - accepts S3 event, no processing yet",
-      "Result": {
-        "message": "Event received successfully",
-        "phase": "4-complete",
-        "next_steps": "Add Lambda tasks in Phase 5"
-      },
-      "ResultPath": "$.processing_result",
-      "End": true
-    }
-  }
-}
-```
+The workflow uses several core ASL constructs (full definition in `main.tf`):
 
-**ASL Concepts:**
-- `StartAt` - First state to execute (`ReceiveEvent`)
-- `Type: Pass` - No-op state that passes input to output (testing integration)
-- `Result` - Static JSON data injected into output
-- `ResultPath` - Where to store Result in output (`$.processing_result` merges with input)
-- `End: true` - Marks this as the final state
-
-**Future Expansion (Phase 5+):**
-```json
-{
-  "StartAt": "Parallel_AI_Enrichment",
-  "States": {
-    "Parallel_AI_Enrichment": {
-      "Type": "Parallel",
-      "Branches": [
-        {"StartAt": "Comprehend_Sentiment", "States": {...}},
-        {"StartAt": "SageMaker_Anomaly", "States": {...}}
-      ],
-      "Next": "Merge_Results"
-    },
-    "Merge_Results": {
-      "Type": "Task",
-      "Resource": "arn:aws:lambda:...:function:ai-dp-dev-merge",
-      "End": true
-    }
-  }
-}
-```
+- **`Pass`** states (`PrepareComprehendInput`, `PrepareTextContent`, `FormatResults`) reshape the
+  data between steps using `Parameters` and JSONPath (`$.detail.bucket.name`, etc.) — no compute cost.
+- **AWS SDK service integrations** (`arn:aws:states:::aws-sdk:s3:getObject`,
+  `arn:aws:states:::aws-sdk:comprehend:detectSentiment`) call AWS services directly from the state
+  machine without a Lambda.
+- **`Parallel`** runs the sentiment and entity branches concurrently; their outputs are collected
+  into an array at `$.comprehend_results`.
+- **`Retry` / `Catch`** on the Merge Lambda task retry transient Lambda errors
+  (`Lambda.ServiceException`, `Lambda.TooManyRequestsException`) up to 3 times with exponential
+  backoff, then route any remaining failure to the `MergeFailed` state.
 
 ## Security
 
 **IAM Role Trust Policy:**
-- Allows `states.amazonaws.com` to assume role
-- No additional conditions (Phase 4 scope)
-- Future: Add confused deputy protection for production
+- Allows `states.amazonaws.com` to assume the role
 
-**IAM Permissions (Current - Phase 4):**
-- CloudWatch Logs: `logs:CreateLogDelivery`, `logs:PutResourcePolicy`, etc.
-- **No service invocation permissions** - Pass state doesn't invoke external services
+**IAM Permissions (least privilege):**
+- **S3**: `s3:GetObject`, `s3:GetObjectVersion` scoped to `raw/*` only (read of the ingestion entry point)
+- **Comprehend**: `DetectSentiment` + `DetectEntities` via the managed policy from the `ai_enrichment` module
+- **Lambda**: `lambda:InvokeFunction` scoped to the specific Merge Lambda ARN
+- **CloudWatch Logs**: log-delivery actions on `Resource = "*"` — a wildcard **required by AWS** for
+  Step Functions logging setup (AWS does not support resource-level permissions here).
+  Ref: https://docs.aws.amazon.com/step-functions/latest/dg/cw-logs.html
 
-**IAM Permissions (Future - Phase 5+):**
-- Lambda: `lambda:InvokeFunction` (scoped to specific function ARNs)
-- S3: `s3:GetObject`, `s3:PutObject` (scoped to data lake bucket)
-- DynamoDB: `dynamodb:PutItem` (scoped to hot store table)
-
-**Least Privilege Principle**: Only permissions needed for current phase are granted. Future permissions added incrementally as tasks are added to state machine.
+**Least Privilege Principle**: every permission maps to a specific state in the workflow — S3 read for
+`ReadS3Object`, Comprehend for the parallel branches, Lambda invoke for `InvokeMergeLambda`.
 
 ## Interview Talking Points
 
 ### Q: Why did you choose Step Functions for orchestration?
 
-> "I need to coordinate multiple AWS AI services (Comprehend for sentiment analysis, SageMaker for anomaly detection) in parallel, then merge results into DynamoDB and S3. Step Functions provides visual workflow management and built-in error handling without writing orchestration logic in code. The declarative Amazon States Language makes the pipeline easy to understand, modify, and debug."
+> "I needed to coordinate several steps — read from S3, call two Comprehend APIs in parallel, then invoke a merge Lambda — with retries and a clear failure path. Step Functions gives me visual workflow management and built-in error handling without writing orchestration logic in code. The declarative ASL makes the pipeline easy to understand, modify, and debug, and the native AWS SDK integrations let me call S3 and Comprehend directly without glue Lambdas."
 
-### Q: Why start with a Pass state instead of implementing the full pipeline?
+### Q: How do you run the two Comprehend calls efficiently?
 
-> "I'm following an incremental development approach. Phase 4 validates the EventBridge integration with a minimal Pass state - no processing, just proof that S3 uploads trigger the state machine. Once proven, Phase 5 adds actual Lambda tasks. This prevents debugging integration issues AND business logic simultaneously. It's easier to troubleshoot one thing at a time."
+> "Sentiment and entity detection are independent, so I run them in a `Parallel` state with two branches. They execute concurrently and their results are merged into a single array, which roughly halves the enrichment latency compared to calling them sequentially."
 
 ### Q: How do you handle errors in Step Functions?
 
-> "Step Functions provides built-in error handling with Retry and Catch blocks. In Phase 5+, I'll add retry policies for transient failures (like Lambda throttling) and Catch blocks to route failed tasks to a fallback state or error notification. For now, the Pass state can't fail, but the architecture is ready for error handling when I add real tasks."
+> "The Merge Lambda task has a `Retry` block for transient failures — `Lambda.ServiceException` and `Lambda.TooManyRequestsException` — with 3 attempts and exponential backoff (rate 2.0). If it still fails, a `Catch` on `States.ALL` routes the execution to a dedicated `MergeFailed` state that captures the error. The Lambda also has its own SQS DLQ, so failed payloads aren't lost."
 
 ### Q: What's the cost of using Step Functions?
 
-> "Step Functions costs $0.025 per 1,000 state transitions. With my current Pass state (2 transitions: start + end), each execution costs $0.00005. Even scaling to 10,000 batch uploads per month, that's only $0.50. For production with more complex workflows (5-10 states), cost might reach $2-5/month for the same volume - still negligible compared to the orchestration value and reduced development time."
+> "It's $0.025 per 1,000 state transitions. This workflow is about 10 transitions per execution, so each run costs roughly $0.00025. Even at 10,000 batch uploads a month that's about $2.50 — negligible compared to the orchestration and debugging value."
 
 ### Q: How do you monitor Step Functions executions?
 
-> "I've configured CloudWatch Logs with log level ALL for dev, which captures every state transition, input/output data, and execution metadata. I can view real-time execution graphs in the Step Functions console, set CloudWatch alarms on execution failures, and query logs with CloudWatch Insights. For production, I'd reduce log level to ERROR to save costs while maintaining visibility into failures."
+> "CloudWatch Logs with `include_execution_data` capture every state transition and the input/output at each step. I can watch real-time execution graphs in the console, set alarms on `ExecutionsFailed`, and query logs with CloudWatch Insights. For production I'd lower the log level from ALL to ERROR to cut cost while keeping failure visibility."
 
 ### Q: How would you handle long-running tasks in this pipeline?
 
-> "Step Functions supports two workflow types: Standard (long-running, up to 1 year) and Express (high-throughput, max 5 minutes). For this data pipeline, I'm using Standard workflows because AI enrichment tasks can take minutes. If I needed faster processing for high-volume streaming, I'd switch to Express workflows and implement a different error handling strategy (since Express doesn't support visual debugging of individual executions)."
-
-## Next Steps (After Task 1)
-
-1. **Task 2**: Add EventBridge target configuration to `modules/ingestion_stream/`
-2. **Task 3**: Wire Step Functions module in `envs/dev/main.tf`
-3. **Task 4**: Integration testing (S3 upload → EventBridge → Step Functions → SUCCESS)
-4. **Phase 5**: Replace Pass state with Parallel Lambda tasks for AI enrichment
+> "I'm using Standard workflows (up to 1 year) because AI enrichment can take seconds to minutes and I want the full execution history for debugging. For very high-volume, short-lived processing I'd evaluate Express workflows, accepting that they trade per-execution visibility for throughput and lower cost."
 
 ## Resources
 
 - [AWS Step Functions Documentation](https://docs.aws.amazon.com/step-functions/)
 - [Amazon States Language Specification](https://states-language.net/spec.html)
+- [Step Functions AWS SDK service integrations](https://docs.aws.amazon.com/step-functions/latest/dg/supported-services-awssdk.html)
 - [Terraform aws_sfn_state_machine Resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine)
-- [Step Functions Best Practices](https://docs.aws.amazon.com/step-functions/latest/dg/bp-express.html)

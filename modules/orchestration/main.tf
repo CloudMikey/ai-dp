@@ -1,12 +1,13 @@
-#-------------------- Merge Lambda Module --------------------#
-# Combines AI enrichment → S3 processed/ + DynamoDB
+﻿# Merge Lambda: combines Comprehend outputs (sentiment + entities) into enriched records
+# Writes to S3 processed/ (historical) + DynamoDB (real-time queries)
 
 locals {
   resource_prefix = "${var.project_name}-${var.environment}"
   lambda_name     = "${local.resource_prefix}-merge"
 }
 
-#-------------------- Lambda Code Packaging --------------------#
+# Package Lambda function code into deployment zip
+# Excludes: compiled Python, cache files, previous zip (prevents recursion)
 
 data "archive_file" "merge_lambda" {
   type        = "zip"
@@ -17,16 +18,20 @@ data "archive_file" "merge_lambda" {
     "lambda_merge.zip",
     "__pycache__",
     "*.pyc",
-    ".pytest_cache"
+    ".pytest_cache",
+    "test_*.py",   # unit tests not needed at runtime
+    "conftest.py", # pytest fixtures
+    ".coverage"    # coverage DB (binary, changes every test run)
   ]
 }
 
-#-------------------- Dead Letter Queue --------------------#
+# DLQ for failed Lambda invocations (14-day retention for debugging)
+# Failures captured here: Comprehend timeout, S3 write errors, DynamoDB throttling
 
 resource "aws_sqs_queue" "merge_dlq" {
   name = "${local.resource_prefix}-merge-dlq"
 
-  message_retention_seconds = 1209600
+  message_retention_seconds = 1209600 # 14 days
 
   tags = merge(
     var.tags,
@@ -38,7 +43,7 @@ resource "aws_sqs_queue" "merge_dlq" {
   )
 }
 
-#-------------------- CloudWatch Log Group --------------------#
+# CloudWatch Logs for debugging Comprehend API failures and DynamoDB write issues
 
 resource "aws_cloudwatch_log_group" "merge_lambda" {
   name              = "/aws/lambda/${local.lambda_name}"
@@ -53,8 +58,6 @@ resource "aws_cloudwatch_log_group" "merge_lambda" {
   )
 }
 
-#-------------------- Lambda Function --------------------#
-
 resource "aws_lambda_function" "merge" {
   function_name = local.lambda_name
   description   = "Merge AI enrichment results and write to S3 processed layer + DynamoDB hot store"
@@ -64,8 +67,8 @@ resource "aws_lambda_function" "merge" {
 
   runtime     = "python3.11"
   handler     = "merge_handler.lambda_handler"
-  timeout     = 60
-  memory_size = 256
+  timeout     = 60  # Load test P95=2044ms; S3 + DynamoDB writes
+  memory_size = 256 # JSON merge + DecimalEncoder serialization
 
   role = aws_iam_role.merge_lambda.arn
 
@@ -81,6 +84,14 @@ resource "aws_lambda_function" "merge" {
 
   dead_letter_config {
     target_arn = aws_sqs_queue.merge_dlq.arn
+  }
+
+  # X-Ray active tracing: per-invocation latency timeline + downstream AWS SDK call segments
+  dynamic "tracing_config" {
+    for_each = var.enable_xray_tracing ? [1] : []
+    content {
+      mode = "Active"
+    }
   }
 
   depends_on = [

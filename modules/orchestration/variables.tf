@@ -1,6 +1,4 @@
-#-------------------- Orchestration Module Variables --------------------#
-
-variable "environment" {
+﻿variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
 
@@ -15,8 +13,6 @@ variable "project_name" {
   type        = string
   default     = "ai-dp"
 }
-
-#-------------------- Data Lake Configuration --------------------#
 
 variable "data_lake_bucket_name" {
   description = "S3 bucket name for data lake (from data_lake module)"
@@ -33,8 +29,6 @@ variable "processed_prefix" {
   type        = string
   default     = "processed/"
 }
-
-#-------------------- DynamoDB Configuration --------------------#
 
 variable "dynamodb_table_name" {
   description = "DynamoDB table name for hot store (from hot_store module)"
@@ -56,8 +50,6 @@ variable "ttl_days" {
     error_message = "TTL must be between 1 and 365 days"
   }
 }
-
-#-------------------- Lambda Configuration --------------------#
 
 variable "log_level" {
   description = "Lambda logging level (INFO, DEBUG, ERROR)"
@@ -81,7 +73,11 @@ variable "log_retention_days" {
   }
 }
 
-#-------------------- Tags --------------------#
+variable "enable_xray_tracing" {
+  description = "Enable X-Ray active tracing on the Lambda (per-invocation latency + downstream call timeline)"
+  type        = bool
+  default     = true
+}
 
 variable "tags" {
   description = "Resource-specific tags (merged with provider default_tags)"

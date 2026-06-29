@@ -1,5 +1,3 @@
-#-------------------- Observability Module Outputs --------------------#
-
 output "dashboard_name" {
   description = "Name of the CloudWatch operational dashboard"
   value       = aws_cloudwatch_dashboard.operations.dashboard_name
@@ -9,8 +7,6 @@ output "dashboard_arn" {
   description = "ARN of the CloudWatch operational dashboard"
   value       = aws_cloudwatch_dashboard.operations.dashboard_arn
 }
-
-#-------------------- Alarm Outputs --------------------#
 
 output "sns_topic_arn" {
   description = "ARN of SNS topic for CloudWatch alarm notifications"

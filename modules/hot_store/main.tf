@@ -1,5 +1,4 @@
-#-------------------- DynamoDB Hot Store --------------------#
-# Fast queries for recent AI-enriched data (auto-deletes old records via TTL)
+﻿# Fast queries for recent AI-enriched data (auto-deletes old records via TTL)
 
 locals {
   table_name = "${var.project_name}-${var.environment}-enriched-data"

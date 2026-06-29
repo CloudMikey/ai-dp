@@ -1,8 +1,4 @@
-#-------------------- Module Variables --------------------#
-# Input variables for the data lake module
-# Defines S3 bucket configuration for raw, processed, and curated data layers
-
-variable "environment" {
+﻿variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
   validation {
@@ -31,8 +27,6 @@ variable "enable_versioning" {
   description = "Enable S3 bucket versioning"
   type        = bool
 }
-
-#-------------------- Lifecycle Policy Variables --------------------#
 
 variable "raw_layer_lifecycle" {
   description = "Lifecycle configuration for raw data layer"
@@ -75,8 +69,6 @@ variable "curated_layer_lifecycle" {
     expiration_days            = 0  # 0 means disabled
   }
 }
-
-#-------------------- Tagging Variables --------------------#
 
 variable "tags" {
   description = "Additional tags to apply to resources"

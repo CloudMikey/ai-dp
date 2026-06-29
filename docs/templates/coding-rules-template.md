@@ -53,16 +53,13 @@
 - Maintain clear separation between test and production code
 
 ## Terraform Code Style
-- **Section Headers**: Use decorative comment headers to separate logical resource groups
+- **Resource Comments**: Add concise comments above resources explaining non-obvious decisions
   ```hcl
-  #--------------------DynamoDB Table --------------------#
-  #--------------------Lambda Resources --------------------#
+  # TTL auto-cleanup reduces storage cost for old events
+  resource "aws_dynamodb_table" "events" {
+    ttl { ... }
+  }
   ```
-- **Resource Comments**: Add descriptive comments above each resource explaining its purpose
-  ```hcl
-  # This DynamoDB table will be used to store website visitor counts.
-  resource "aws_dynamodb_table" "example_table" 
-  ```
-- **Inline Comments**: Use single-line comments for quick explanations above complex configurations
-- **Comment Formatting**: Start comments with `#` followed by a space, use proper capitalization and periods
-- **Consistent Spacing**: Maintain consistent spacing around comment blocks and resource definitions
+- **Inline Comments**: Use for complex configurations or justified exceptions (e.g., security tradeoffs)
+- **Avoid Decorators**: Resource names are self-documenting; decorator headers add noise
+- **Comment Formatting**: Start comments with `#` followed by a space; explain **why**, not **what**

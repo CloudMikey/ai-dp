@@ -18,3 +18,6 @@ terraform {
     use_lockfile = true # Native S3 locking (Terraform >= 1.11.0)
   }
 }
+
+
+

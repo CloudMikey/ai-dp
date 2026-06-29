@@ -1,7 +1,3 @@
-#-------------------- Module Variables --------------------#
-# Input variables for the streaming ingestion module
-# Configures API Gateway HTTP API and Kinesis Data Stream for real-time data ingestion
-
 variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
@@ -21,7 +17,25 @@ variable "aws_region" {
   type        = string
 }
 
-#-------------------- Kinesis Configuration --------------------#
+variable "kinesis_stream_mode" {
+  description = "Kinesis capacity mode: PROVISIONED (cheaper for steady traffic) or ON_DEMAND (auto-scales for bursts)."
+  type        = string
+  default     = "PROVISIONED"
+  validation {
+    condition     = contains(["PROVISIONED", "ON_DEMAND"], var.kinesis_stream_mode)
+    error_message = "Stream mode must be PROVISIONED or ON_DEMAND."
+  }
+}
+
+variable "kinesis_shard_count" {
+  description = "Shard count for PROVISIONED mode (1 shard = 1 MB/s write). Ignored when ON_DEMAND."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.kinesis_shard_count >= 1
+    error_message = "Shard count must be at least 1."
+  }
+}
 
 variable "kinesis_retention_hours" {
   description = "Data retention period in hours (24-8760). Default 24 hours balances cost and debugging time."
@@ -49,8 +63,6 @@ variable "kinesis_kms_key_id" {
   default     = null
 }
 
-#-------------------- API Gateway Configuration --------------------#
-
 variable "enable_api_gateway_logging" {
   description = "Enable CloudWatch logging for API Gateway. Useful for dev/debugging, adds CloudWatch costs."
   type        = bool
@@ -73,6 +85,12 @@ variable "enable_cors" {
   default     = true
 }
 
+variable "enable_xray_tracing" {
+  description = "Enable X-Ray active tracing on the Lambda (per-invocation latency + downstream call timeline)"
+  type        = bool
+  default     = true
+}
+
 variable "cors_allow_origins" {
   description = "List of allowed CORS origins. Use ['*'] for dev, specific domains for prod."
   type        = list(string)
@@ -85,8 +103,6 @@ variable "cors_allow_methods" {
   default     = ["POST", "OPTIONS"]
 }
 
-#-------------------- Data Lake Integration --------------------#
-
 variable "data_lake_bucket_name" {
   description = "Name of the S3 data lake bucket (for Lambda environment variable)"
   type        = string
@@ -97,15 +113,11 @@ variable "data_lake_bucket_arn" {
   type        = string
 }
 
-#-------------------- Tagging Variables --------------------#
-
 variable "tags" {
   description = "Additional tags to apply to resources"
   type        = map(string)
   default     = {}
 }
-
-#-------------------- Step Functions Integration (Phase 4) --------------------#
 
 variable "state_machine_arn" {
   description = "ARN of the Step Functions state machine for batch ingestion orchestration (from step_functions module)"
@@ -114,7 +126,10 @@ variable "state_machine_arn" {
 }
 
 variable "create_eventbridge_target" {
-  description = "Create EventBridge target to invoke Step Functions. Set to true after Step Functions module is deployed (Phase 4, Task 3)."
+  description = "Create EventBridge target to invoke Step Functions. Set to true once the Step Functions module is deployed."
   type        = bool
   default     = false
 }
+
+
+

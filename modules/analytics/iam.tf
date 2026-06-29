@@ -1,6 +1,4 @@
-#-------------------- Glue Crawler IAM Role --------------------#
-
-resource "aws_iam_role" "glue_crawler" {
+﻿resource "aws_iam_role" "glue_crawler" {
   name        = "${var.project_name}-${var.environment}-glue-crawler-role"
   description = "IAM role for Glue Crawler to access S3 and Glue Data Catalog"
 
@@ -27,7 +25,6 @@ resource "aws_iam_role" "glue_crawler" {
   )
 }
 
-#-------------------- S3 Read Permissions --------------------#
 # Scoped to processed/* prefix only
 
 resource "aws_iam_role_policy" "glue_s3_read" {
@@ -65,8 +62,6 @@ resource "aws_iam_role_policy" "glue_s3_read" {
     ]
   })
 }
-
-#-------------------- Glue Data Catalog Permissions --------------------#
 
 resource "aws_iam_role_policy" "glue_catalog_access" {
   name = "glue-catalog-access"
@@ -106,8 +101,6 @@ resource "aws_iam_role_policy" "glue_catalog_access" {
     ]
   })
 }
-
-#-------------------- CloudWatch Logs Permissions --------------------#
 
 resource "aws_iam_role_policy" "glue_logs" {
   name = "cloudwatch-logs-access"

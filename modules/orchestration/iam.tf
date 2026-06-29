@@ -1,7 +1,6 @@
-#-------------------- IAM Resources for Merge Lambda --------------------#
-
-#-------------------- Lambda Execution Role --------------------#
-# Allows Lambda service to assume this role
+﻿# Merge Lambda execution role
+# Reads Comprehend outputs (raw/) + writes enriched data to dual storage (DynamoDB + S3 curated/)
+# Scoped: no read from processed/, no access to other buckets
 
 resource "aws_iam_role" "merge_lambda" {
   name = "${local.resource_prefix}-merge-lambda-role"
@@ -28,8 +27,8 @@ resource "aws_iam_role" "merge_lambda" {
   )
 }
 
-#-------------------- S3 Write Policy --------------------#
-# Least-privilege: Lambda can write to processed/* and curated/* prefixes
+# S3 write policy: processed/ (enriched data) + curated/ (pre-aggregated summary)
+# Write only; no read from processed (prevents circular dependencies)
 
 resource "aws_iam_role_policy" "s3_write" {
   name = "${local.resource_prefix}-merge-s3-write"
@@ -59,8 +58,7 @@ resource "aws_iam_role_policy" "s3_write" {
   })
 }
 
-#-------------------- S3 Read Policy --------------------#
-# Allows Lambda to read raw/* prefix for text preview extraction
+# Read raw/ to extract text preview and compute statistics (DecimalEncoder handles JSON serialization)
 
 resource "aws_iam_role_policy" "s3_read" {
   name = "${local.resource_prefix}-merge-s3-read"
@@ -80,8 +78,8 @@ resource "aws_iam_role_policy" "s3_read" {
   })
 }
 
-#-------------------- DynamoDB Write Policy --------------------#
-# Least-privilege: Lambda can ONLY write items (no read/scan/delete)
+# DynamoDB write-only (PutItem only; no Scan, Query, GetItem for security)
+# 30-day TTL auto-cleanup prevents cost growth
 
 resource "aws_iam_role_policy" "dynamodb_write" {
   name = "${local.resource_prefix}-merge-dynamodb-write"
@@ -101,17 +99,33 @@ resource "aws_iam_role_policy" "dynamodb_write" {
   })
 }
 
-#-------------------- CloudWatch Logs Policy --------------------#
-# Standard Lambda logging permissions
-
+# AWS managed policy (preferred over inline for standard permissions)
 resource "aws_iam_role_policy_attachment" "cloudwatch_logs" {
   role       = aws_iam_role.merge_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-#-------------------- SQS DLQ Write Policy --------------------#
-# Allows Lambda to send failed invocations to DLQ
+# X-Ray write access for active tracing. PutTraceSegments/PutTelemetryRecords do not support
+# resource-level permissions, so the wildcard is required by AWS.
+# Ref: https://docs.aws.amazon.com/xray/latest/devguide/security_iam_id-based-policy-examples.html
+resource "aws_iam_role_policy" "xray_write" {
+  count = var.enable_xray_tracing ? 1 : 0
+  name  = "${local.resource_prefix}-merge-xray-write"
+  role  = aws_iam_role.merge_lambda.id
 
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# DLQ error handling: failed Step Functions invocations are retained for replay/debugging
 resource "aws_iam_role_policy" "dlq_write" {
   name = "${local.resource_prefix}-merge-dlq-write"
   role = aws_iam_role.merge_lambda.id

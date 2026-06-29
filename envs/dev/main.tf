@@ -1,5 +1,3 @@
-#-------------------- Provider Configuration --------------------#
-
 provider "aws" {
   region = var.aws_region
 
@@ -14,7 +12,6 @@ provider "aws" {
   }
 }
 
-#-------------------- Data Lake Module --------------------#
 # Creates S3 bucket with raw, processed, and curated data layers
 
 module "data_lake" {
@@ -50,9 +47,7 @@ module "data_lake" {
   }
 }
 
-#-------------------- Step Functions Orchestration Module --------------------#
-# State machine for batch data pipeline orchestration
-# Phase 6: Comprehend AI enrichment integration
+# State machine for batch pipeline orchestration: invokes Comprehend enrichment then the merge Lambda
 
 module "step_functions" {
   source = "../../modules/step_functions"
@@ -65,7 +60,7 @@ module "step_functions" {
   data_lake_bucket_arn  = module.data_lake.bucket_arn
   comprehend_policy_arn = module.ai_enrichment.comprehend_policy_arn
 
-  # Merge Lambda integration (Phase 7)
+  # Final state invokes the merge Lambda to combine enrichment outputs
   merge_lambda_arn = module.orchestration.lambda_function_arn
 
   # CloudWatch Logs configuration
@@ -77,7 +72,6 @@ module "step_functions" {
   }
 }
 
-#-------------------- AI Enrichment Module --------------------#
 # AWS Comprehend integration for sentiment analysis and entity detection
 
 module "ai_enrichment" {
@@ -87,7 +81,6 @@ module "ai_enrichment" {
   project_name = var.project_name
 }
 
-#-------------------- DynamoDB Hot Store Module --------------------#
 # Fast query store for AI-enriched data (recent records only)
 
 module "hot_store" {
@@ -108,7 +101,6 @@ module "hot_store" {
   }
 }
 
-#-------------------- Orchestration Module --------------------#
 # Merge Lambda: Combines AI enrichment results and writes to S3 processed/ + DynamoDB
 
 module "orchestration" {
@@ -128,8 +120,9 @@ module "orchestration" {
   ttl_days            = 30
 
   # Lambda configuration
-  log_level          = "INFO"
-  log_retention_days = 7
+  log_level           = "INFO"
+  log_retention_days  = 7
+  enable_xray_tracing = true
 
   tags = {
     Component = "Orchestration"
@@ -137,7 +130,6 @@ module "orchestration" {
   }
 }
 
-#-------------------- Streaming Ingestion Module --------------------#
 # API Gateway HTTP API + Kinesis Data Stream for real-time ingestion
 
 module "ingestion_stream" {
@@ -151,13 +143,15 @@ module "ingestion_stream" {
   data_lake_bucket_name = module.data_lake.bucket_name
   data_lake_bucket_arn  = module.data_lake.bucket_arn
 
-  # Step Functions integration (Phase 4: EventBridge → Step Functions)
+  # EventBridge rule on S3 object-created events triggers the Step Functions state machine
   state_machine_arn         = module.step_functions.state_machine_arn
   create_eventbridge_target = true
 
-  # Kinesis configuration (on-demand mode - pay per use)
+  # Kinesis: provisioned 1-shard for steady low-volume dev traffic (cost-optimized vs on-demand)
+  kinesis_stream_mode     = "PROVISIONED"
+  kinesis_shard_count     = 1
   kinesis_retention_hours = 24
-  kinesis_encryption_type = "KMS"               # Enabled during Phase 9 security review
+  kinesis_encryption_type = "KMS"               # Encrypt data at rest in the stream
   kinesis_kms_key_id      = "alias/aws/kinesis" # AWS-managed key (no additional cost)
 
   # API Gateway configuration
@@ -166,13 +160,14 @@ module "ingestion_stream" {
   enable_cors                    = true
   cors_allow_origins             = ["*"] # Restrict in production
 
+  enable_xray_tracing = true
+
   tags = {
     Component = "Ingestion"
     DataFlow  = "Streaming"
   }
 }
 
-#-------------------- Analytics Module --------------------#
 # AWS Glue Data Catalog + Athena for SQL queries on enriched data
 
 module "analytics" {
@@ -192,7 +187,6 @@ module "analytics" {
   }
 }
 
-#-------------------- Observability Module --------------------#
 # CloudWatch operational dashboard for pipeline health monitoring
 
 module "observability" {
@@ -220,7 +214,7 @@ module "observability" {
   etl_dlq_name   = module.ingestion_stream.dlq_name
   merge_dlq_name = module.orchestration.dlq_name
 
-  # Alarm Configuration (Phase 9 Task 4)
+  # SNS email notifications for the 6 operational alarms
   alarm_notification_emails = [var.alarm_email]
 
   tags = {
@@ -229,7 +223,6 @@ module "observability" {
   }
 }
 
-#-------------------- Cost Management Module --------------------#
 # AWS Budgets for cost monitoring and alerting
 
 module "cost_management" {
@@ -247,3 +240,5 @@ module "cost_management" {
     Component = "CostManagement"
   }
 }
+
+

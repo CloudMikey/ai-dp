@@ -67,7 +67,7 @@ def process_record(record: Dict[str, Any]) -> Dict[str, str]:
     encoded_data = record['kinesis']['data']
     decoded_data = base64.b64decode(encoded_data).decode('utf-8')
     data = json.loads(decoded_data)
-    #Base64 String > Bytes > UTF-8 String > Python Dictionary
+    # Base64 string → bytes → UTF-8 string → Python dict
 
     validated_data = validate_json(data)
     normalized_data = normalize_data(validated_data)
@@ -101,7 +101,7 @@ def validate_json(data: Dict[str, Any]) -> Dict[str, Any]:
 def normalize_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Standardize timestamps to ISO8601, add metadata."""
     normalized = data.copy()
-    #Prevent mutation of orginal data
+    # Prevent mutation of original data
 
     if 'timestamp' in normalized and 'event_timestamp' not in normalized:
         normalized['event_timestamp'] = normalized.pop('timestamp')

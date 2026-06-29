@@ -1,11 +1,6 @@
-#-------------------- Observability Module --------------------#
-# CloudWatch operational dashboard for pipeline health monitoring
-
 locals {
   resource_prefix = "${var.project_name}-${var.environment}"
 }
-
-#-------------------- CloudWatch Dashboard --------------------#
 
 resource "aws_cloudwatch_dashboard" "operations" {
   dashboard_name = "${local.resource_prefix}-operations"
@@ -13,7 +8,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
   dashboard_body = jsonencode({
     widgets = [
 
-      #--- Row 1: Lambda Invocations ---#
+      # Row 1: Lambda invocation counts
       {
         type   = "metric"
         x      = 0
@@ -23,7 +18,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         properties = {
           title  = "Lambda Invocations"
           region = var.aws_region
-          period = 300               # 5 min
+          period = 300 # 5 min
           stat   = "Sum"
           metrics = [
             ["AWS/Lambda", "Invocations", "FunctionName", var.etl_lambda_function_name, { label = "ETL Lambda" }],
@@ -32,7 +27,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         }
       },
 
-      #--- Row 2: Lambda Errors ---#
+      # Row 2 left: Lambda error counts
       {
         type   = "metric"
         x      = 0
@@ -51,7 +46,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         }
       },
 
-      #--- Row 2: Lambda Duration ---#
+      # Row 2 right: Lambda execution duration
       {
         type   = "metric"
         x      = 12
@@ -70,7 +65,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         }
       },
 
-      #--- Row 3: Kinesis Stream ---#
+      # Row 3: Kinesis throughput and consumer lag
       {
         type   = "metric"
         x      = 0
@@ -94,7 +89,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         width  = 12
         height = 6
         properties = {
-          title  = "Kinesis - Iterator Age (ms)"  # How long data is in Kinesis 
+          title  = "Kinesis - Iterator Age (ms)" # How long data is in Kinesis 
           region = var.aws_region
           period = 300
           stat   = "Maximum"
@@ -104,7 +99,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         }
       },
 
-      #--- Row 4: Step Functions ---#
+      # Row 4: Step Functions execution outcomes
       {
         type   = "metric"
         x      = 0
@@ -124,7 +119,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         }
       },
 
-      #--- Row 5: DLQ Depth ---#
+      # Row 5: Dead-letter queue backlog
       {
         type   = "metric"
         x      = 0
@@ -143,7 +138,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         }
       },
 
-      #--- Row 6: DynamoDB Capacity ---#
+      # Row 6: DynamoDB consumed capacity
       {
         type   = "metric"
         x      = 0

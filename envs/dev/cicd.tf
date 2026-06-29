@@ -1,5 +1,4 @@
-#-------------------- GitHub Actions OIDC Role --------------------#
-# Phase 10, Task 1: IAM role for GitHub Actions CI/CD
+# IAM role assumed by GitHub Actions via OIDC for Terraform CI/CD (no long-term credentials)
 #
 # The OIDC Identity Provider already exists in this account (created for a
 # previous project). We reference it via data source rather than recreating it.
@@ -31,7 +30,7 @@ resource "aws_iam_role" "github_actions_dev" {
         }
         StringLike = {
           # Trusts any workflow triggered from the AI-DP repo
-          # Branch/environment restrictions enforced via GitHub branch protection rules (Task 4)
+          # Branch restrictions enforced via GitHub branch protection (repo Settings -> Branches)
           "token.actions.githubusercontent.com:sub" = "repo:CloudMikey/ai-dp:*"
         }
       }
@@ -44,5 +43,8 @@ resource "aws_iam_role" "github_actions_dev" {
   }
 }
 
-# Note: The inline policy (ai-dp-dev-terraform-policy) is managed via the AWS Console,
-# not Terraform. This keeps the policy lifecycle independent of Terraform state.
+# Note: The inline policy (ai-dp-dev-terraform-policy) is managed via the AWS Console.
+# The role itself is in Terraform state; the policy is discovered at deploy time.
+
+
+

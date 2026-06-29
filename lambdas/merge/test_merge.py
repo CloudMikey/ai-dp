@@ -10,8 +10,6 @@ import boto3
 import merge_handler
 
 
-#-------------------- Test DecimalEncoder --------------------#
-
 class TestDecimalEncoder:
     """Tests for the DecimalEncoder JSON class."""
 
@@ -51,8 +49,6 @@ class TestDecimalEncoder:
         assert parsed['null'] is None
 
 
-#-------------------- Test validate_environment --------------------#
-
 class TestValidateEnvironment:
     """Tests for environment validation."""
 
@@ -60,8 +56,6 @@ class TestValidateEnvironment:
         """Pass when all required env vars are set."""
         merge_handler.validate_environment()  # Should not raise
 
-
-#-------------------- Test get_text_preview --------------------#
 
 class TestGetTextPreview:
     """Tests for text preview extraction from S3."""
@@ -129,8 +123,6 @@ class TestGetTextPreview:
         assert result is None
 
 
-#-------------------- Test merge_ai_results --------------------#
-
 class TestMergeAiResults:
     """Tests for AI result merging logic."""
 
@@ -182,8 +174,6 @@ class TestMergeAiResults:
         assert result['sentimentScore'] == 0.0
         assert result['entities'] == []
 
-
-#-------------------- Test write_to_s3_processed --------------------#
 
 class TestWriteToS3Processed:
     """Tests for S3 processed layer writes."""
@@ -241,8 +231,6 @@ class TestWriteToS3Processed:
         matches = re.findall(scientific_pattern, content)
         assert len(matches) == 0, f"Found scientific notation: {matches}"
 
-
-#-------------------- Test write_to_dynamodb --------------------#
 
 class TestWriteToDynamodb:
     """Tests for DynamoDB hot store writes."""
@@ -311,8 +299,6 @@ class TestWriteToDynamodb:
         assert 'expiresAt' in response['Item']
 
 
-#-------------------- Test update_curated_summary --------------------#
-
 class TestUpdateCuratedSummary:
     """Tests for curated layer summary updates."""
 
@@ -342,8 +328,6 @@ class TestUpdateCuratedSummary:
         assert summary['total_records'] == 1
         assert summary['sentiment_counts']['POSITIVE'] == 1
 
-
-#-------------------- Test lambda_handler --------------------#
 
 class TestLambdaHandler:
     """Integration tests for the main lambda_handler."""

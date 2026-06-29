@@ -20,13 +20,13 @@ Ingests batch and streaming data, enriches it with AWS AI services (Comprehend),
 - **Storage**: S3 (raw/processed/curated), DynamoDB (on-demand)
 - **AI/ML**: Amazon Comprehend (sentiment + entity extraction)
 - **Analytics**: Glue Crawler, Athena, static dashboard (Vanilla JS + Chart.js v4.4.0 + AWS SDK v2)
-- **Observability**: CloudWatch Dashboard (8 widgets), 6 alarms, SNS, SQS DLQs, X-Ray
+- **Observability**: CloudWatch Dashboard (8 widgets), 6 alarms, SNS, SQS DLQs, X-Ray active tracing (both Lambdas, mode=Active)
 
-## Current Status (~92% Complete)
+## Current Status (100% Complete ✅ — 2026-04-05)
 - **Phases 0-8**: Complete (bootstrap through analytics/dashboard)
-- **Phase 9**: 6/9 tasks done (tests, load test, dashboard, alarms, security, cost review)
-  - Remaining: Architecture docs, runbooks, staging deployment
-- **Phase 10**: CI/CD (deferred)
+- **Phase 9**: All tasks complete (tests, load test, dashboard, alarms, security, cost review, architecture docs)
+  - Runbooks and staging deployment intentionally skipped (not needed for portfolio)
+- **Phase 10**: CI/CD — 6/6 tasks complete (OIDC role, CI workflow, deploy workflow, environment protection, testing, docs)
 
 ## Deployed Resources (dev, us-west-2)
 - State bucket: `tf-state-aidp` (us-west-1)

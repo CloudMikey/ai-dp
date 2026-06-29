@@ -36,7 +36,19 @@
       "mcp__serena__find_file",
       "mcp__aws-terraform__SearchAwsccProviderDocs",
       "mcp__serena__get_symbols_overview",
-      "mcp__serena__find_symbol"
+      "mcp__serena__find_symbol",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__serena__write_memory",
+      "mcp__serena__initial_instructions",
+      "Bash(git -C /z/CODE/Projects/Proj2/AI-DP log --oneline)",
+      "Bash(git -C /z/CODE/Projects/Proj2/AI-DP log --stat)",
+      "mcp__serena__check_onboarding_performed",
+      "Bash(Get-ChildItem \"Z:\\\\CODE\\\\Notes\\\\AI-DP Docs\" -Filter \"*.md\")",
+      "Bash(Select-Object Name)",
+      "Bash(python -c \"import zipfile; print\\('\\\\n'.join\\(zipfile.ZipFile\\('lambdas/merge/lambda_merge.zip'\\).namelist\\(\\)\\)\\)\")",
+      "Bash(python -c \"import zipfile; print\\('\\\\n'.join\\(zipfile.ZipFile\\('lambdas/etl/lambda_etl.zip'\\).namelist\\(\\)\\)\\)\")",
+      "mcp__c835bcc9-13a2-4f59-8a29-f1a8c33b0428__fetch"
     ],
     "deny": [],
     "ask": []

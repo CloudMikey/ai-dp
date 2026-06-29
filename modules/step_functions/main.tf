@@ -1,13 +1,11 @@
-#-------------------- Step Functions Orchestration --------------------#
-# AI enrichment orchestration: S3 → EventBridge → Step Functions → Comprehend → Merge Lambda
+﻿# Batch processing workflow: S3 raw/ → EventBridge → Step Functions → Comprehend → Merge Lambda
 
 locals {
   resource_prefix    = "${var.project_name}-${var.environment}"
   state_machine_name = "${local.resource_prefix}-orchestrator"
 }
 
-#-------------------- CloudWatch Log Group --------------------#
-
+# Logs execution history for debugging state machine failures and API errors
 resource "aws_cloudwatch_log_group" "step_functions" {
   name              = "/aws/states/${local.state_machine_name}"
   retention_in_days = var.log_retention_days
@@ -21,14 +19,12 @@ resource "aws_cloudwatch_log_group" "step_functions" {
   )
 }
 
-#-------------------- State Machine --------------------#
-
 resource "aws_sfn_state_machine" "orchestrator" {
   name     = local.state_machine_name
   role_arn = aws_iam_role.step_functions.arn
 
   definition = jsonencode({
-    Comment = "Phase 6: AI Enrichment - Comprehend sentiment and entity detection"
+    Comment = "AI Enrichment: reads S3 objects, runs Comprehend (sentiment + entities in parallel), merges results"
     StartAt = "PrepareComprehendInput"
     States = {
       PrepareComprehendInput = {
