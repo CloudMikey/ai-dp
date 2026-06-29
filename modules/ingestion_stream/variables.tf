@@ -17,6 +17,26 @@ variable "aws_region" {
   type        = string
 }
 
+variable "kinesis_stream_mode" {
+  description = "Kinesis capacity mode: PROVISIONED (cheaper for steady traffic) or ON_DEMAND (auto-scales for bursts)."
+  type        = string
+  default     = "PROVISIONED"
+  validation {
+    condition     = contains(["PROVISIONED", "ON_DEMAND"], var.kinesis_stream_mode)
+    error_message = "Stream mode must be PROVISIONED or ON_DEMAND."
+  }
+}
+
+variable "kinesis_shard_count" {
+  description = "Shard count for PROVISIONED mode (1 shard = 1 MB/s write). Ignored when ON_DEMAND."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.kinesis_shard_count >= 1
+    error_message = "Shard count must be at least 1."
+  }
+}
+
 variable "kinesis_retention_hours" {
   description = "Data retention period in hours (24-8760). Default 24 hours balances cost and debugging time."
   type        = number

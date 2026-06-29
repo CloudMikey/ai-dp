@@ -147,7 +147,9 @@ module "ingestion_stream" {
   state_machine_arn         = module.step_functions.state_machine_arn
   create_eventbridge_target = true
 
-  # Kinesis configuration (on-demand mode - pay per use)
+  # Kinesis: provisioned 1-shard for steady low-volume dev traffic (cost-optimized vs on-demand)
+  kinesis_stream_mode     = "PROVISIONED"
+  kinesis_shard_count     = 1
   kinesis_retention_hours = 24
   kinesis_encryption_type = "KMS"               # Encrypt data at rest in the stream
   kinesis_kms_key_id      = "alias/aws/kinesis" # AWS-managed key (no additional cost)

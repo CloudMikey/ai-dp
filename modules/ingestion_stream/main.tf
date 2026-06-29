@@ -12,11 +12,15 @@ resource "aws_kinesis_stream" "ingestion" {
   name             = local.stream_name
   retention_period = var.kinesis_retention_hours
 
+  # PROVISIONED 1-shard (~$11/mo) over ON_DEMAND (flat ~$29/mo): this workload is ~1 MB/month.
+  # shard_count must be null in ON_DEMAND mode; toggle via kinesis_stream_mode for burst load tests.
+  shard_count = var.kinesis_stream_mode == "PROVISIONED" ? var.kinesis_shard_count : null
+
   encryption_type = var.kinesis_encryption_type
   kms_key_id      = var.kinesis_encryption_type == "KMS" ? var.kinesis_kms_key_id : null
 
   stream_mode_details {
-    stream_mode = "ON_DEMAND"
+    stream_mode = var.kinesis_stream_mode
   }
 
   tags = merge(

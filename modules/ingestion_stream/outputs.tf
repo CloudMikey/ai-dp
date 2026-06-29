@@ -42,6 +42,16 @@ output "kinesis_retention_hours" {
   value       = var.kinesis_retention_hours
 }
 
+output "kinesis_stream_mode" {
+  description = "Capacity mode configured for the Kinesis stream (PROVISIONED or ON_DEMAND)"
+  value       = var.kinesis_stream_mode
+}
+
+output "kinesis_shard_count" {
+  description = "Number of shards configured for the Kinesis stream (PROVISIONED mode)"
+  value       = var.kinesis_shard_count
+}
+
 output "lambda_function_name" {
   description = "Name of the ETL Lambda function"
   value       = aws_lambda_function.etl.function_name

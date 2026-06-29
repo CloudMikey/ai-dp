@@ -47,7 +47,8 @@
       "Bash(Get-ChildItem \"Z:\\\\CODE\\\\Notes\\\\AI-DP Docs\" -Filter \"*.md\")",
       "Bash(Select-Object Name)",
       "Bash(python -c \"import zipfile; print\\('\\\\n'.join\\(zipfile.ZipFile\\('lambdas/merge/lambda_merge.zip'\\).namelist\\(\\)\\)\\)\")",
-      "Bash(python -c \"import zipfile; print\\('\\\\n'.join\\(zipfile.ZipFile\\('lambdas/etl/lambda_etl.zip'\\).namelist\\(\\)\\)\\)\")"
+      "Bash(python -c \"import zipfile; print\\('\\\\n'.join\\(zipfile.ZipFile\\('lambdas/etl/lambda_etl.zip'\\).namelist\\(\\)\\)\\)\")",
+      "mcp__c835bcc9-13a2-4f59-8a29-f1a8c33b0428__fetch"
     ],
     "deny": [],
     "ask": []
