@@ -35,8 +35,15 @@ async function loadDynamoDBData() {
     setTableLoading(true);
 
     try {
-        const result = await dynamoDB.scan({
+        // Query the timestamp-index GSI (recordType HASH + timestamp RANGE) for true
+        // newest-first results. A plain scan returns items in hash order, not by time,
+        // so it can't power a "recent events" view and never surfaces new records.
+        const result = await dynamoDB.query({
             TableName: CONFIG.DYNAMODB_TABLE,
+            IndexName: 'timestamp-index',
+            KeyConditionExpression: 'recordType = :rt',
+            ExpressionAttributeValues: { ':rt': 'text' },
+            ScanIndexForward: false, // newest first
             Limit: 50
         }).promise();
 
@@ -44,10 +51,9 @@ async function loadDynamoDBData() {
         // Filter out internal metadata records (e.g. METRICS_SUMMARY) that have no sentiment
         const items = allItems.filter(item => item.sentiment);
         cachedDynamoDBItems = items;
-        console.log(`DynamoDB: ${items.length} event records (${allItems.length} total including metadata)`);
+        console.log(`DynamoDB: ${items.length} recent event records`);
 
         updateTable(items);
-        updateMetrics(items);
 
     } catch (error) {
         console.error('DynamoDB error:', error);
@@ -69,6 +75,7 @@ async function loadCuratedSummary() {
 
         const summary = JSON.parse(result.Body.toString('utf-8'));
         cachedCuratedSummary = summary;
+        updateMetrics(summary);
         updateEntitiesChart(summary.top_entities || {});
         console.log(`Curated: ${summary.total_records} total records`);
 
@@ -119,24 +126,20 @@ async function sendTestEvent() {
     }
 }
 
-function updateMetrics(data) {
-    let positive = 0, neutral = 0, negative = 0, mixed = 0;
+// Cards reflect pipeline-wide aggregates from the curated summary (total_records +
+// sentiment_counts), not the recent-events sample — so they show true, self-consistent
+// totals (the sentiment counts sum to the total) that update as the pipeline runs.
+function updateMetrics(summary) {
+    const counts = (summary && summary.sentiment_counts) || {};
+    const total  = (summary && typeof summary.total_records === 'number') ? summary.total_records : 0;
 
-    data.forEach(item => {
-        const s = item.sentiment;
-        if (s === 'POSITIVE')  positive++;
-        else if (s === 'NEUTRAL')   neutral++;
-        else if (s === 'NEGATIVE')  negative++;
-        else if (s === 'MIXED')     mixed++;
-    });
-
-    document.getElementById('total-records').textContent    = data.length;
-    document.getElementById('positive-count').textContent   = positive;
-    document.getElementById('neutral-count').textContent    = neutral;
-    document.getElementById('negative-count').textContent   = negative;
+    document.getElementById('total-records').textContent  = total;
+    document.getElementById('positive-count').textContent = counts.POSITIVE || 0;
+    document.getElementById('neutral-count').textContent  = counts.NEUTRAL  || 0;
+    document.getElementById('negative-count').textContent = counts.NEGATIVE || 0;
 
     const mixedEl = document.getElementById('mixed-count');
-    if (mixedEl) mixedEl.textContent = mixed;
+    if (mixedEl) mixedEl.textContent = counts.MIXED || 0;
 }
 
 function updateEntitiesChart(topEntities) {
@@ -204,7 +207,7 @@ function updateTable(data) {
     tbody.innerHTML = '';
 
     if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="no-data">No recent events found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="no-data">No recent events found</td></tr>';
         return;
     }
 
@@ -249,10 +252,17 @@ function updateTable(data) {
             entitiesHtml = `<div class="entity-list">${badges.join('')}</div>`;
         }
 
+        // Full text lives in the title attribute; CSS truncates the visible cell
+        const preview = item.textPreview || '';
+        const previewHtml = preview
+            ? `<td class="text-preview" title="${escapeHtml(preview)}">${escapeHtml(preview)}</td>`
+            : '<td class="text-preview"><span class="no-data">—</span></td>';
+
         row.innerHTML = `
             <td>${timestamp}</td>
             <td><span class="sentiment-badge ${sentimentClass}">${sentiment}</span></td>
             <td>${confidence}</td>
+            ${previewHtml}
             <td>${entitiesHtml}</td>
         `;
 
@@ -272,7 +282,7 @@ function escapeHtml(text) {
 function setTableLoading(isLoading) {
     const tbody = document.getElementById('events-tbody');
     if (isLoading) {
-        tbody.innerHTML = '<tr><td colspan="4" class="loading">Loading recent events...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">Loading recent events...</td></tr>';
     }
 }
 
@@ -296,7 +306,7 @@ function setChartLoading(isLoading, chartId) {
 
 function showTableError(message) {
     document.getElementById('events-tbody').innerHTML =
-        `<tr><td colspan="4" class="error">${message}</td></tr>`;
+        `<tr><td colspan="5" class="error">${message}</td></tr>`;
 }
 
 function showChartError(message, chartId) {

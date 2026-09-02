@@ -12,6 +12,8 @@ AI-DP/
 │   ├── status.md          # Comprehensive project status
 │   ├── errorlog.md        # ALWAYS CHECK before fixing errors
 │   ├── security-audit-report.md
+│   ├── architecture.md        # Mermaid architecture docs + decisions
+│   ├── architecture.drawio    # AWS-icon architecture diagram (draw.io)
 │   └── ai-dp overview notion.md
 ├── envs/              # Environment-specific Terraform configs
 │   ├── dev/           # ACTIVE environment
