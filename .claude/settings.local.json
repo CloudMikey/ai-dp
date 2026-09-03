@@ -48,7 +48,13 @@
       "Bash(Select-Object Name)",
       "Bash(python -c \"import zipfile; print\\('\\\\n'.join\\(zipfile.ZipFile\\('lambdas/merge/lambda_merge.zip'\\).namelist\\(\\)\\)\\)\")",
       "Bash(python -c \"import zipfile; print\\('\\\\n'.join\\(zipfile.ZipFile\\('lambdas/etl/lambda_etl.zip'\\).namelist\\(\\)\\)\\)\")",
-      "mcp__c835bcc9-13a2-4f59-8a29-f1a8c33b0428__fetch"
+      "mcp__c835bcc9-13a2-4f59-8a29-f1a8c33b0428__fetch",
+      "Read(//z/CODE/Notes/AI-DP Docs/python//**)",
+      "Read(//z/CODE/Notes/AI-DP Docs/python/**)",
+      "Bash(cat \"Z:/CODE/Notes/AI-DP Docs/python/README.md\")",
+      "Bash(cd \"Z:/CODE/Notes/AI-DP Docs/python\" && echo \"=== does 06 cover unittest.mock? ===\" && grep -n \"unittest.mock\\\\|patch\\\\|side_effect\\\\|Mock\" 06-testing-with-pytest.md | head -8 && echo && echo \"=== does anything cover **kwargs unpacking / ClientError / argparse / Counter? ===\" && grep -rn \"ClientError\\\\|argparse\\\\|Counter\\\\|\\\\*\\\\*kwargs\\\\|dict unpack\" *.md | head -10 && echo && echo \"=== 06.8 'things this suite does not use' ===\" && sed -n '431,468p' 06-testing-with-pytest.md)",
+      "Bash(python -m pytest lambdas/ --collect-only -q)",
+      "Bash(python -)"
     ],
     "deny": [],
     "ask": []

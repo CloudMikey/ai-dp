@@ -27,6 +27,8 @@ AI-DP/
 │   └── observability/  # CloudWatch dashboard + alarms + SNS
 ├── lambdas/            # Python Lambda functions (etl, merge)
 ├── dashboard/          # Browser-based analytics dashboard
+├── scripts/            # load_test.py, rebuild_summary.py
+├── test-data/batch/    # 8 sample .txt files for batch-path testing
 └── docs/               # Project documentation
 ```
 
@@ -52,7 +54,7 @@ AI-DP/
 | GitHub Actions OIDC Role | `ai-dp-dev-github-actions` | ✅ |
 
 **Phase 9 Progress (7/7 tasks) ✅ COMPLETE:**
-- ✅ Lambda unit tests (33 tests, 96% coverage)
+- ✅ Lambda unit tests (42 tests, 95% coverage; CI gate at 90%)
 - ✅ Load testing (1000 events, 0% errors)
 - ✅ CloudWatch Dashboard (8 widgets)
 - ✅ CloudWatch Alarms + SNS notifications
@@ -71,6 +73,15 @@ AI-DP/
 **Project is complete. No remaining tasks.**
 
 **Post-completion maintenance (2026-06-28):** Kinesis capacity mode is parameterized (`kinesis_stream_mode`, default `PROVISIONED` 1-shard ≈ $11/mo). It had drifted to `ON_DEMAND` (flat ≈ $29/mo regardless of throughput) during Phase 9 load testing and was left there; reverted to provisioned, and `test/deploy-workflow` was merged to `main` via PR #2. Toggle `ON_DEMAND` only for burst load tests, then revert.
+
+**Post-completion maintenance (2026-08-31):** Batch-path testing surfaced and fixed two latent bugs — see `docs/errorlog.md` Error #6.
+
+- **Lost-update race in the curated summary (FIXED, deployed).** Eight concurrent batch uploads produced 9 records but a summary reading 7. `update_curated_summary` did an unguarded read-modify-write on one shared S3 object. Now uses conditional writes (`IfMatch` on the ETag; `IfNoneMatch='*'` on create) with bounded retries and jittered exponential backoff. Verified by re-running the failing scenario: 17 records, summary reads 17, with real `PreconditionFailed` retries in CloudWatch proving the mechanism engages. **Known limit:** makes lost updates rare, not impossible; a DynamoDB atomic counter (`ADD`) is the right fix at higher write rates.
+- **`get_text_preview` assumed JSON (FIXED, deployed).** Held for seven months because only the streaming path (which writes JSON) was exercised. Plain-text batch files made `json.loads` raise into a broad `except`, silently emptying previews. Now falls back to the raw body on `json.JSONDecodeError`, so both ingestion paths produce identical record shapes.
+- **Text preview feature completed.** The `td.text-preview` CSS had existed unused since a removed column; added the `Text` column to the dashboard table with full text in a `title` tooltip on hover, and corrected all `colspan` values from 4 to 5.
+- **New tooling:** `scripts/rebuild_summary.py` (recomputes the summary from DynamoDB; absolute write, idempotent, `--dry-run`) and the `/reset-data` slash command (clears only the two sources the dashboard reads, never `raw/` or `processed/`).
+
+**Batch path input contract (verified 2026-08-31):** Step Functions passes the **entire file body** to Comprehend (`"text_content.$" = "$.s3_response.Body"`) — no JSON parsing, no field extraction. Use plain `.txt`, one document per file, under **5,000 bytes** (`DetectSentiment`'s limit; `DetectEntities` allows 100 KB, so sentiment binds). EventBridge matches any key under `raw/`, with no extension filter. One file = one record = one sentiment.
 
 **For full phase history, achievements, and next steps:** Load Serena memory `project-status-and-roadmap`.
 
@@ -154,6 +165,14 @@ terraform -chdir=envs/dev apply
 # Load test (sends 25 events to Kinesis via boto3)
 python scripts/load_test.py
 
+# Repair curated summary drift from DynamoDB (always --dry-run first)
+python scripts/rebuild_summary.py --dry-run
+python scripts/rebuild_summary.py
+
+# Batch-path test: 8 sample .txt files -> 8 concurrent Step Functions executions
+aws s3 cp test-data/batch/ s3://ai-dp-data-lake-dev-us-west-2/raw/batch-test/ `
+  --recursive --region us-west-2
+
 # Test streaming ingestion
 curl -X POST "https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest" `
   -H "Content-Type: application/json" -H "X-Partition-Key: test" `
@@ -173,6 +192,8 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 | Full roadmap | `docs/roadmap.md` |
 | Error solutions | `docs/errorlog.md` |
 | Architecture overview | `docs/ai-dp overview notion.md` |
+| How the dashboard works | `docs/dashboard-explained.md` |
+| Reset data for a clean retest | `/reset-data` slash command |
 | Terraform patterns | Serena memory: `coding-standards` |
 | Implementation guide | `.claude/agents/portfolio.md` |
 
