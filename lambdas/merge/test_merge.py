@@ -5,6 +5,8 @@ import re
 import pytest
 from datetime import datetime, timezone
 from moto import mock_aws
+from unittest.mock import patch
+from botocore.exceptions import ClientError
 import boto3
 
 import merge_handler
@@ -75,6 +77,56 @@ class TestGetTextPreview:
         result = merge_handler.get_text_preview(bucket, key)
 
         assert result == raw_s3_object_content['text']
+
+    @mock_aws
+    def test_extracts_plain_text_body(self, set_env_vars):
+        """Batch path: uploaded .txt files are not JSON, so the body IS the text."""
+        client = boto3.client('s3', region_name='us-west-2')
+        bucket = 'test-data-lake-bucket'
+        key = 'raw/batch-test/positive-delta.txt'
+        client.create_bucket(
+            Bucket=bucket,
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+        body = "Delta Airlines made our trip to Atlanta wonderful.\n"
+        client.put_object(Bucket=bucket, Key=key, Body=body)
+
+        result = merge_handler.get_text_preview(bucket, key)
+
+        assert result == "Delta Airlines made our trip to Atlanta wonderful."
+
+    @mock_aws
+    def test_truncates_long_plain_text(self, set_env_vars):
+        """Plain-text bodies honour the same max_length as the JSON path."""
+        client = boto3.client('s3', region_name='us-west-2')
+        bucket = 'test-data-lake-bucket'
+        key = 'raw/batch-test/long.txt'
+        client.create_bucket(
+            Bucket=bucket,
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+        client.put_object(Bucket=bucket, Key=key, Body='x' * 600)
+
+        result = merge_handler.get_text_preview(bucket, key, max_length=500)
+
+        assert result == 'x' * 500 + '...'
+        assert len(result) == 503
+
+    @mock_aws
+    def test_returns_none_for_empty_plain_text(self, set_env_vars):
+        """An empty or whitespace-only file yields None, not an empty string."""
+        client = boto3.client('s3', region_name='us-west-2')
+        bucket = 'test-data-lake-bucket'
+        key = 'raw/batch-test/blank.txt'
+        client.create_bucket(
+            Bucket=bucket,
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+        client.put_object(Bucket=bucket, Key=key, Body='   \n  ')
+
+        result = merge_handler.get_text_preview(bucket, key)
+
+        assert result is None
 
     @mock_aws
     def test_truncates_long_text(self, set_env_vars):
@@ -173,6 +225,36 @@ class TestMergeAiResults:
         assert result['sentiment'] == 'UNKNOWN'
         assert result['sentimentScore'] == 0.0
         assert result['entities'] == []
+
+    @mock_aws
+    def test_filters_noise_entity_types(self, set_env_vars):
+        """DATE/QUANTITY entities are dropped from entities; entityDetails keeps all."""
+        client = boto3.client('s3', region_name='us-west-2')
+        bucket = 'test-data-lake-bucket'
+        key = 'raw/test.json'
+        client.create_bucket(
+            Bucket=bucket,
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+        client.put_object(Bucket=bucket, Key=key, Body=json.dumps({'text': 'test'}))
+
+        ai_enrichment = {
+            'sentiment': {'Sentiment': 'NEUTRAL', 'SentimentScore': {'Neutral': 0.9}},
+            'entities': {'Entities': [
+                {'Text': 'Amazon', 'Type': 'ORGANIZATION', 'Score': 0.99},
+                {'Text': '00:00', 'Type': 'DATE', 'Score': 0.9},
+                {'Text': '3770', 'Type': 'QUANTITY', 'Score': 0.9},
+            ]}
+        }
+
+        result = merge_handler.merge_ai_results(
+            {'bucket': bucket, 'key': key},
+            ai_enrichment,
+            {'timestamp': '2026-01-25T12:00:00Z'}
+        )
+
+        assert result['entities'] == ['Amazon']
+        assert {d['Text'] for d in result['entityDetails']} == {'Amazon', '00:00', '3770'}
 
 
 class TestWriteToS3Processed:
@@ -327,6 +409,169 @@ class TestUpdateCuratedSummary:
         summary = json.loads(response['Body'].read().decode('utf-8'))
         assert summary['total_records'] == 1
         assert summary['sentiment_counts']['POSITIVE'] == 1
+
+    @mock_aws
+    def test_retries_on_precondition_failure(self, set_env_vars):
+        """A losing writer re-reads and reapplies rather than clobbering the winner."""
+        client = boto3.client('s3', region_name='us-west-2')
+        client.create_bucket(
+            Bucket='test-data-lake-bucket',
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+
+        enriched_data = {
+            'sentiment': 'POSITIVE',
+            'sentimentScore': 0.95,
+            'entities': ['Amazon'],
+            'mergedAt': '2026-01-25T12:00:00Z',
+            'textPreview': 'Sample text'
+        }
+
+        # Seed a summary so the first attempt takes the IfMatch path
+        merge_handler.update_curated_summary(enriched_data)
+
+        real_put = merge_handler.s3_client.put_object
+        calls = {'n': 0}
+
+        def flaky_put(**kwargs):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                raise ClientError(
+                    {'Error': {'Code': 'PreconditionFailed', 'Message': 'stale etag'}},
+                    'PutObject'
+                )
+            return real_put(**kwargs)
+
+        with patch.object(merge_handler.s3_client, 'put_object', side_effect=flaky_put):
+            key = merge_handler.update_curated_summary(enriched_data)
+
+        assert key == 'curated/latest_summary.json'
+        assert calls['n'] == 2, 'should have retried exactly once'
+
+        response = client.get_object(Bucket='test-data-lake-bucket', Key=key)
+        summary = json.loads(response['Body'].read().decode('utf-8'))
+        # Both the seed and the retried write counted - nothing was lost
+        assert summary['total_records'] == 2
+        assert summary['sentiment_counts']['POSITIVE'] == 2
+
+    @mock_aws
+    def test_gives_up_after_max_retries(self, set_env_vars):
+        """Sustained contention returns None instead of raising - summary is non-critical."""
+        client = boto3.client('s3', region_name='us-west-2')
+        client.create_bucket(
+            Bucket='test-data-lake-bucket',
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+
+        enriched_data = {
+            'sentiment': 'NEGATIVE',
+            'sentimentScore': 0.9,
+            'entities': [],
+            'mergedAt': '2026-01-25T12:00:00Z',
+            'textPreview': ''
+        }
+
+        always_conflict = ClientError(
+            {'Error': {'Code': 'PreconditionFailed', 'Message': 'stale etag'}},
+            'PutObject'
+        )
+
+        with patch.object(merge_handler.s3_client, 'put_object', side_effect=always_conflict):
+            with patch.object(merge_handler.time, 'sleep'):  # keep the test fast
+                key = merge_handler.update_curated_summary(enriched_data)
+
+        assert key is None
+
+    @mock_aws
+    def test_create_path_uses_if_none_match(self, set_env_vars):
+        """First write guards with IfNoneMatch so two creators cannot both win."""
+        client = boto3.client('s3', region_name='us-west-2')
+        client.create_bucket(
+            Bucket='test-data-lake-bucket',
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+
+        enriched_data = {
+            'sentiment': 'NEUTRAL',
+            'sentimentScore': 0.8,
+            'entities': [],
+            'mergedAt': '2026-01-25T12:00:00Z',
+            'textPreview': ''
+        }
+
+        real_put = merge_handler.s3_client.put_object
+        seen = {}
+
+        def capture(**kwargs):
+            seen.update(kwargs)
+            return real_put(**kwargs)
+
+        with patch.object(merge_handler.s3_client, 'put_object', side_effect=capture):
+            merge_handler.update_curated_summary(enriched_data)
+
+        assert seen.get('IfNoneMatch') == '*'
+        assert 'IfMatch' not in seen
+
+    @mock_aws
+    def test_update_path_uses_if_match(self, set_env_vars):
+        """Subsequent writes pin the ETag that was read."""
+        client = boto3.client('s3', region_name='us-west-2')
+        client.create_bucket(
+            Bucket='test-data-lake-bucket',
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+
+        enriched_data = {
+            'sentiment': 'POSITIVE',
+            'sentimentScore': 0.95,
+            'entities': [],
+            'mergedAt': '2026-01-25T12:00:00Z',
+            'textPreview': ''
+        }
+
+        merge_handler.update_curated_summary(enriched_data)
+
+        real_put = merge_handler.s3_client.put_object
+        seen = {}
+
+        def capture(**kwargs):
+            seen.update(kwargs)
+            return real_put(**kwargs)
+
+        with patch.object(merge_handler.s3_client, 'put_object', side_effect=capture):
+            merge_handler.update_curated_summary(enriched_data)
+
+        assert 'IfMatch' in seen
+        assert 'IfNoneMatch' not in seen
+
+    @mock_aws
+    def test_eight_merges_all_counted(self, set_env_vars):
+        """The batch-upload scenario from errorlog #6: every record must be tallied."""
+        client = boto3.client('s3', region_name='us-west-2')
+        client.create_bucket(
+            Bucket='test-data-lake-bucket',
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+
+        sentiments = ['POSITIVE'] * 3 + ['NEGATIVE'] * 3 + ['MIXED'] * 2
+        for i, sentiment in enumerate(sentiments):
+            merge_handler.update_curated_summary({
+                'sentiment': sentiment,
+                'sentimentScore': 0.9,
+                'entities': [f'Entity{i}'],
+                'mergedAt': '2026-01-25T12:00:00Z',
+                'textPreview': ''
+            })
+
+        response = client.get_object(Bucket='test-data-lake-bucket', Key='curated/latest_summary.json')
+        summary = json.loads(response['Body'].read().decode('utf-8'))
+
+        assert summary['total_records'] == 8
+        assert summary['sentiment_counts']['POSITIVE'] == 3
+        assert summary['sentiment_counts']['NEGATIVE'] == 3
+        assert summary['sentiment_counts']['MIXED'] == 2
+        # Counts must be self-consistent - this is what broke in production
+        assert sum(summary['sentiment_counts'].values()) == summary['total_records']
 
 
 class TestLambdaHandler:

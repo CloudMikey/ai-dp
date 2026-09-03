@@ -3,11 +3,14 @@
 import json
 import logging
 import os
+import random
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import boto3
+from botocore.exceptions import ClientError
 
 class DecimalEncoder(json.JSONEncoder):
     """Custom JSON encoder that formats floats without scientific notation.
@@ -55,6 +58,11 @@ logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 
 s3_client = boto3.client('s3')
 dynamodb_client = boto3.client('dynamodb')
+
+# Drop Comprehend DATE/QUANTITY/OTHER noise (timestamps, bare numbers) from entity views.
+MEANINGFUL_ENTITY_TYPES = frozenset(
+    {'PERSON', 'LOCATION', 'ORGANIZATION', 'COMMERCIAL_ITEM', 'EVENT', 'TITLE'}
+)
 
 
 def get_config():
@@ -132,16 +140,22 @@ def get_text_preview(bucket: str, key: str, max_length: int = 500) -> Optional[s
     """
     try:
         response = s3_client.get_object(Bucket=bucket, Key=key)
-        raw_data = json.loads(response['Body'].read().decode('utf-8'))
+        body = response['Body'].read().decode('utf-8')
 
-        # Extract text from common field names
-        text = (
-            raw_data.get('text') or
-            raw_data.get('content') or
-            raw_data.get('message') or
-            raw_data.get('body') or
-            None
-        )
+        try:
+            raw_data = json.loads(body)
+            # Streaming path: ETL Lambda writes JSON, text lives in a known field
+            text = (
+                raw_data.get('text') or
+                raw_data.get('content') or
+                raw_data.get('message') or
+                raw_data.get('body') or
+                None
+            )
+        except json.JSONDecodeError:
+            # Batch path: uploaded files are plain text, so the body IS the text.
+            # Matches Step Functions, which passes the whole body to Comprehend unparsed.
+            text = body.strip()
 
         if not text:
             logger.debug("No text field found in raw data")
@@ -182,9 +196,12 @@ def merge_ai_results(source_object: Dict[str, Any], ai_enrichment: Dict[str, Any
         'Mixed': float(f"{raw_scores.get('Mixed', 0.0):.10f}")
     }
 
-    entity_texts = [entity['Text'] for entity in entities if 'Text' in entity]
+    entity_texts = [
+        entity['Text'] for entity in entities
+        if entity.get('Text') and entity.get('Type') in MEANINGFUL_ENTITY_TYPES
+    ]
 
-    # Format entity details without scientific notation in Score field
+    # entityDetails keeps all types (incl. DATE/QUANTITY) for the Athena cold path
     entity_details = []
     for entity in entities:
         entity_details.append({
@@ -274,66 +291,110 @@ def write_to_dynamodb(enriched_data: Dict[str, Any], s3_key: str) -> str:
     return record_id
 
 
-def update_curated_summary(enriched_data: Dict[str, Any]) -> str:
+SUMMARY_MAX_ATTEMPTS = 5
+
+
+def _empty_summary(first_record_at: str) -> Dict[str, Any]:
+    """Starting shape for a summary that does not exist yet."""
+    return {
+        'sentiment_counts': {'POSITIVE': 0, 'NEGATIVE': 0, 'NEUTRAL': 0, 'MIXED': 0},
+        'total_records': 0,
+        'top_entities': {},
+        'first_record_at': first_record_at
+    }
+
+
+def _apply_to_summary(summary: Dict[str, Any], enriched_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Fold one enriched record into a summary. Pure — no I/O, safe to re-run on retry."""
+    sentiment = enriched_data.get('sentiment', 'UNKNOWN')
+    if sentiment in summary['sentiment_counts']:
+        summary['sentiment_counts'][sentiment] += 1
+    summary['total_records'] += 1
+
+    for entity in enriched_data.get('entities', []):
+        if entity and len(entity) > 2:  # Skip very short strings
+            summary['top_entities'][entity] = summary['top_entities'].get(entity, 0) + 1
+
+    # Keep only the top 10 by count so the object stays small
+    sorted_entities = sorted(summary['top_entities'].items(), key=lambda x: x[1], reverse=True)[:10]
+    summary['top_entities'] = dict(sorted_entities)
+
+    summary['last_updated'] = enriched_data['mergedAt']
+    summary['latest_sentiment'] = sentiment
+    summary['latest_confidence'] = enriched_data.get('sentimentScore', 0)
+    preview = enriched_data.get('textPreview', '')
+    summary['latest_text_preview'] = preview[:100] if preview else ''
+    return summary
+
+
+def update_curated_summary(enriched_data: Dict[str, Any]) -> Optional[str]:
     """Update the curated layer with a running summary for fast dashboard access.
 
     This demonstrates the 3-tier data lake pattern:
     - Raw: Original ingested data
     - Processed: AI-enriched data
     - Curated: Business-ready aggregated summaries
+
+    The summary is a read-modify-write against one shared object, so concurrent
+    merges (the batch path fires one execution per uploaded file) would otherwise
+    overwrite each other and silently drop increments — see docs/errorlog.md #6,
+    where 9 processed records produced a total of 7.
+
+    Each attempt therefore writes conditionally: IfMatch pins the ETag we read, and
+    IfNoneMatch='*' guards the create case. S3 rejects a write whose precondition no
+    longer holds, so a losing writer re-reads current state and reapplies its own
+    increment instead of clobbering the winner.
+
+    Returns the object key, or None if every attempt lost the race. The caller treats
+    the summary as non-critical — the record itself is already durable in S3 and
+    DynamoDB, and scripts/rebuild_summary.py can recompute this file from DynamoDB.
     """
     config = get_config()
     summary_key = f"{config['curated_prefix']}latest_summary.json"
 
-    # Try to read existing summary, or create new one
-    try:
-        response = s3_client.get_object(Bucket=config['bucket'], Key=summary_key)
-        summary = json.loads(response['Body'].read().decode('utf-8'))
-    except s3_client.exceptions.NoSuchKey:
-        # First record - initialize summary
-        summary = {
-            'sentiment_counts': {'POSITIVE': 0, 'NEGATIVE': 0, 'NEUTRAL': 0, 'MIXED': 0},
-            'total_records': 0,
-            'top_entities': {},
-            'first_record_at': enriched_data['mergedAt']
-        }
-    except Exception as e:
-        logger.warning(f"Could not read existing summary, creating new: {e}")
-        summary = {
-            'sentiment_counts': {'POSITIVE': 0, 'NEGATIVE': 0, 'NEUTRAL': 0, 'MIXED': 0},
-            'total_records': 0,
-            'top_entities': {},
-            'first_record_at': enriched_data['mergedAt']
-        }
+    for attempt in range(SUMMARY_MAX_ATTEMPTS):
+        try:
+            response = s3_client.get_object(Bucket=config['bucket'], Key=summary_key)
+            summary = json.loads(response['Body'].read().decode('utf-8'))
+            # Only overwrite the exact version we just read
+            condition = {'IfMatch': response['ETag']}
+        except s3_client.exceptions.NoSuchKey:
+            summary = _empty_summary(enriched_data['mergedAt'])
+            # Only create if nobody beat us to it
+            condition = {'IfNoneMatch': '*'}
+        except Exception as e:
+            logger.warning(f"Could not read existing summary, creating new: {e}")
+            summary = _empty_summary(enriched_data['mergedAt'])
+            condition = {'IfNoneMatch': '*'}
 
-    # Update counts
-    sentiment = enriched_data.get('sentiment', 'UNKNOWN')
-    if sentiment in summary['sentiment_counts']:
-        summary['sentiment_counts'][sentiment] += 1
-    summary['total_records'] += 1
+        summary = _apply_to_summary(summary, enriched_data)
 
-    # Track top entities (keep top 10 by count)
-    for entity in enriched_data.get('entities', []):
-        if entity and len(entity) > 2:  # Skip very short strings
-            summary['top_entities'][entity] = summary['top_entities'].get(entity, 0) + 1
+        try:
+            s3_client.put_object(
+                Bucket=config['bucket'],
+                Key=summary_key,
+                Body=json.dumps(summary, indent=2),
+                ContentType='application/json',
+                **condition
+            )
+        except ClientError as e:
+            if e.response['Error']['Code'] not in ('PreconditionFailed', 'ConditionalRequestConflict'):
+                raise
+            # Jitter keeps simultaneous losers from retrying in lockstep
+            delay = (2 ** attempt) * 0.05 + random.uniform(0, 0.05)
+            logger.info(
+                f"Curated summary changed under us (attempt {attempt + 1}/{SUMMARY_MAX_ATTEMPTS}); "
+                f"retrying in {delay:.3f}s"
+            )
+            time.sleep(delay)
+            continue
 
-    # Sort and keep only top 10 entities
-    sorted_entities = sorted(summary['top_entities'].items(), key=lambda x: x[1], reverse=True)[:10]
-    summary['top_entities'] = dict(sorted_entities)
+        logger.info(f"Updated curated summary: total={summary['total_records']}, "
+                    f"sentiment={summary['latest_sentiment']}")
+        return summary_key
 
-    # Update metadata
-    summary['last_updated'] = enriched_data['mergedAt']
-    summary['latest_sentiment'] = sentiment
-    summary['latest_confidence'] = enriched_data.get('sentimentScore', 0)
-    summary['latest_text_preview'] = enriched_data.get('textPreview', '')[:100] if enriched_data.get('textPreview') else ''
-
-    # Write updated summary
-    s3_client.put_object(
-        Bucket=config['bucket'],
-        Key=summary_key,
-        Body=json.dumps(summary, indent=2),
-        ContentType='application/json'
+    logger.warning(
+        f"Curated summary not updated after {SUMMARY_MAX_ATTEMPTS} attempts (contention). "
+        f"Record is safe in S3 + DynamoDB; run scripts/rebuild_summary.py to resync."
     )
-
-    logger.info(f"Updated curated summary: total={summary['total_records']}, sentiment={sentiment}")
-    return summary_key
+    return None

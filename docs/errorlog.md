@@ -548,8 +548,115 @@ Action = [
 
 **Key Principle**: Only grant permissions that are actively used. If unsure, remove and test. Prefer bucket policies over object ACLs.
 
+## Error #6: Lost Updates in Curated Summary Under Concurrent Merges
+
+**Date**: 2026-08-31
+**Context**: Batch path testing — uploaded 8 `.txt` files to S3 `raw/` in a single `aws s3 cp --recursive`, triggering 8 concurrent Step Functions executions.
+
+### Symptom
+
+The dashboard metric cards showed **7 total records** when **9** had actually been processed. Sentiment counts were also short:
+
+| Source | Total | POSITIVE | NEGATIVE | NEUTRAL | MIXED |
+|--------|-------|----------|----------|---------|-------|
+| DynamoDB (truth) | 9 | 3 | 3 | 1 | 2 |
+| `curated/latest_summary.json` (cards) | 7 | 2 | 2 | 1 | 2 |
+
+All 9 records were correctly written to DynamoDB and S3 `processed/`. **No data was lost — only the running tally undercounted.**
+
+### Root Cause
+
+Classic **lost-update race condition**. `update_curated_summary()` in `lambdas/merge/merge_handler.py` does an unguarded read-modify-write against a single shared S3 object:
+
+```python
+response = s3_client.get_object(Bucket=..., Key='curated/latest_summary.json')
+summary = json.loads(response['Body'].read())
+summary['total_records'] += 1
+s3_client.put_object(Bucket=..., Key='curated/latest_summary.json', Body=json.dumps(summary))
+```
+
+There is no lock, no ETag check, and no conditional write. With 8 Merge Lambdas running concurrently, two or more read the same value before any of them wrote back:
+
+```
+Lambda A:  GET (total=5) ---- +1 ---- PUT (total=6)
+Lambda B:      GET (total=5) ---- +1 ---- PUT (total=6)
+               ^                          ^
+         reads the SAME 5           B overwrites A; one increment lost
+```
+
+Two collisions occurred, so two increments vanished (one POSITIVE, one NEGATIVE).
+
+**Why DynamoDB was unaffected**: each Lambda writes its own row keyed by a unique `recordId`, so concurrent writers never collide. The summary is the only place all 8 write to one shared object.
+
+**Why this did not surface earlier**: the streaming path processes records through a single-shard Kinesis stream with `parallelization_factor = 1`, so the ETL Lambda never runs concurrently with itself. Merges are effectively serialized. The batch path has no such constraint — S3 uploads fire fully parallel executions.
+
+### Attempted Solutions
+
+1. **Upload files one at a time with a sleep between them** — works, but only by removing the concurrency the architecture is designed to have. Masks the bug rather than fixing it.
+
+### Working Fix
+
+**Applied 2026-08-31.** Conditional writes on the summary object, in `update_curated_summary()`:
+
+```python
+try:
+    response = s3_client.get_object(Bucket=..., Key=summary_key)
+    summary = json.loads(response['Body'].read().decode('utf-8'))
+    condition = {'IfMatch': response['ETag']}      # only overwrite what we read
+except s3_client.exceptions.NoSuchKey:
+    summary = _empty_summary(enriched_data['mergedAt'])
+    condition = {'IfNoneMatch': '*'}               # only create if nobody beat us
+
+summary = _apply_to_summary(summary, enriched_data)
+
+try:
+    s3_client.put_object(..., **condition)
+except ClientError as e:
+    if e.response['Error']['Code'] not in ('PreconditionFailed', 'ConditionalRequestConflict'):
+        raise
+    delay = (2 ** attempt) * 0.05 + random.uniform(0, 0.05)   # jitter avoids lockstep retries
+    time.sleep(delay)
+    continue
+```
+
+S3 rejects a write whose precondition no longer holds, so a losing writer re-reads current state and reapplies its own increment rather than clobbering the winner. Bounded at 5 attempts; exhaustion logs a warning and returns `None` (the record is already durable in S3 and DynamoDB).
+
+The `IfNoneMatch='*'` branch matters as much as `IfMatch` — without it, two Lambdas that both see "no file" would both create one and lose an increment. Reachable in practice after a `/reset-data`.
+
+**Verification**: re-ran the exact failing scenario — 8 files uploaded in one `aws s3 cp --recursive`.
+
+| | Before fix | After fix |
+|--------|-----------|-----------|
+| DynamoDB records | 9 | 17 |
+| Summary `total_records` | 7 | **17** |
+| Sentiment counts sum to total | no | **yes** |
+
+CloudWatch confirmed the mechanism actually engaged rather than the collisions simply not recurring: 5 `PreconditionFailed` retries across 4 concurrent invocations, one needing 2 attempts, all recovering well inside the 5-attempt bound.
+
+**Drift repair**: `scripts/rebuild_summary.py` recomputes the summary from DynamoDB (absolute write, idempotent). Conditional writes prevent new drift but do not repair existing drift — this fixed the 7-to-9 gap and doubles as the deterministic reset tool.
+
+**Tests**: `lambdas/merge/test_merge.py` — retry-then-succeed, retry exhaustion returns `None`, `IfNoneMatch` on create, `IfMatch` on update, and an 8-merge scenario asserting counts sum to the total. Merge suite 17 to 22. Moto enforces both preconditions, so these exercise real semantics rather than just argument passing.
+
+### Known Limitation
+
+This makes lost updates **rare, not impossible**. Retries are bounded, so sustained high contention could still exhaust them. At the observed concurrency (8 writers, max depth 2) there is wide headroom.
+
+At materially higher write rates the retry rate itself would become the bottleneck, and the correct fix is a **DynamoDB atomic counter** — `ADD` in an `UpdateExpression` removes the read-modify-write entirely instead of retrying around it. Rejected here as the heavier option: it needs an IAM change, a `terraform apply`, a dashboard read-path change, and a backfill, for no benefit at current scale.
+
+Trade-off in one line: **conditional write = detect and retry; atomic counter = cannot conflict.**
+
+### Related Issue
+
+Batch-path records have no `textPreview` attribute, so `latest_text_preview` in the summary comes back empty. `get_text_preview()` expects the raw object to be the ETL Lambda's JSON, but batch files are plain text. Harmless for the dashboard table (that column is not rendered), but it is a real behavioral gap between the two ingestion paths.
+
+### Key Principle
+
+**Read-modify-write on a shared object is not safe under concurrency.** Any counter written by more than one concurrent writer needs an atomic operation or a conditional write. Verify the record count against the authoritative store (DynamoDB), not the derived aggregate.
+
 ---
 
-**Last Updated**: 2026-01-28
-**Total Errors Documented**: 5
+---
+
+**Last Updated**: 2026-08-31
+**Total Errors Documented**: 6
 **Total Preventive Patterns Documented**: 4

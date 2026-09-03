@@ -40,7 +40,7 @@ AI-DP/
 |-----------|---------------|--------|
 | State Bucket | `tf-state-aidp` (us-west-1) | ✅ |
 | Data Lake | `ai-dp-data-lake-dev-us-west-2` | ✅ |
-| Kinesis | `ai-dp-dev-ingestion-stream` (KMS encrypted) | ✅ |
+| Kinesis | `ai-dp-dev-ingestion-stream` (KMS, PROVISIONED 1-shard) | ✅ |
 | API Gateway | `https://pvqb2gzg7i.execute-api.us-west-2.amazonaws.com/ingest` | ✅ |
 | Step Functions | `ai-dp-dev-orchestrator` | ✅ |
 | DynamoDB | `ai-dp-dev-enriched-data` | ✅ |
@@ -69,6 +69,8 @@ AI-DP/
 - ✅ **CI/CD Documentation** — `docs/cicd.md`
 
 **Project is complete. No remaining tasks.**
+
+**Post-completion maintenance (2026-06-28):** Kinesis capacity mode is parameterized (`kinesis_stream_mode`, default `PROVISIONED` 1-shard ≈ $11/mo). It had drifted to `ON_DEMAND` (flat ≈ $29/mo regardless of throughput) during Phase 9 load testing and was left there; reverted to provisioned, and `test/deploy-workflow` was merged to `main` via PR #2. Toggle `ON_DEMAND` only for burst load tests, then revert.
 
 **For full phase history, achievements, and next steps:** Load Serena memory `project-status-and-roadmap`.
 

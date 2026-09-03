@@ -1,83 +1,69 @@
 # AI-DP Analytics Dashboard
 
-A dual-query dashboard built with vanilla HTML, CSS, and JavaScript that visualizes sentiment analysis data from the AI-DP pipeline.
+A lightweight analytics dashboard built with vanilla HTML, CSS, and JavaScript that visualizes
+sentiment-analysis results from the AI-DP pipeline. It runs entirely in the browser (no backend, no
+build step) and talks directly to AWS via the AWS SDK for JavaScript.
 
 ## Architecture
 
-This dashboard implements the **dual-query strategy** from the AI-DP architecture:
+The dashboard reads from two of the pipeline's storage layers — the **hot store** for recent
+records and a **pre-aggregated summary** in the data lake for the chart:
 
-| Data Source | Use Case | Features |
-|-------------|----------|----------|
-| **DynamoDB** | Real-time (last 30 days) | Metrics cards, Recent events table |
-| **Athena** | Historical (all data) | Sentiment distribution, Entity type analysis, Total processed count |
-| **SQS** | Pipeline health | DLQ message count (optional) |
+| Data Source | What it powers | How it's read |
+|-------------|----------------|---------------|
+| **DynamoDB** (`ai-dp-dev-enriched-data`) | Metric cards + Recent Events table | `Scan` (limit 50), aggregated client-side |
+| **S3 curated layer** (`curated/latest_summary.json`) | "Top Entities Detected" chart | `GetObject` of a pre-aggregated JSON file |
+| **Kinesis** (`ai-dp-dev-ingestion-stream`) | "Send Test Event" button | `PutRecord` into the ingestion stream |
+
+> **Note on historical analytics:** Athena + Glue exist in this project as the **cold / historical
+> query path** over the S3 data lake's `processed/` layer, but they are queried **manually via the
+> AWS console / CLI** — the dashboard does **not** call Athena. The chart uses the pre-aggregated
+> S3 summary instead, which loads in ~100 ms versus paying Athena query latency and cost on every
+> page view.
 
 ## Features & Functionality
 
-### 1. Real-Time Metrics (DynamoDB)
-- **Total Records**: Count of records in hot store (last 30 days with TTL)
-- **Sentiment Breakdown**: POSITIVE, NEUTRAL, NEGATIVE, MIXED counts
-- **Color-coded Cards**: Visual indicators for each sentiment category
-- **Live Updates**: Auto-refresh every 60 seconds
+### 1. Sentiment Metric Cards (DynamoDB)
+- **Total Records**: count of event records returned by the DynamoDB scan (limited to 50)
+- **Sentiment breakdown**: POSITIVE, NEUTRAL, NEGATIVE, MIXED counts, tallied in the browser
+- **Color-coded cards** for each sentiment category
 
-### 2. Pipeline Status Monitoring
-- **Total Processed**: All-time count from Athena historical data
-- **Last Record Time**: Time ago format (e.g., "5m ago", "2h ago") from most recent DynamoDB record
-- **Pipeline Health**:
-  - Healthy (green) - 0 DLQ messages
-  - Warning (orange) - 1-10 DLQ messages
-  - Degraded (red) - 10+ DLQ messages
-- **DLQ Message Count**: Dead letter queue depth for error monitoring (optional, requires SQS permissions)
+### 2. Top Entities Detected (S3 curated summary)
+- **Doughnut chart** (Chart.js) of the most frequently detected entities
+- Data comes from `curated/latest_summary.json` (`top_entities`), which the **Merge Lambda
+  pre-aggregates** on each run — no SQL, no query latency
+- Legend shows each entity with its count (e.g. "AWS: 12")
 
-### 3. Sentiment Distribution Chart (Athena)
-- **Pie chart** showing historical sentiment breakdown across all processed data
-- **SQL aggregation** using Athena for scalable analytics
-- **Query**: `SELECT sentiment, COUNT(*) FROM processed GROUP BY sentiment`
-- Shows exact counts in legend (e.g., "Positive: 150")
+### 3. Recent Events Table (DynamoDB)
+- **Up to 20 most recent records**, sorted by timestamp (newest first)
+- Columns:
+  - **Time**: local timestamp
+  - **Sentiment**: color-coded badge
+  - **Confidence**: `sentimentScore` as a percentage (e.g. "99.0%")
+  - **Entities**: up to 4 entity badges with a "+N" overflow indicator
+- Junk "entities" that Comprehend misidentifies (timestamps, time strings) are filtered out before
+  display, and all entity text is HTML-escaped to prevent injection
 
-### 4. Entity Type Analysis (Athena)
-- **Doughnut chart** visualizing entity types detected by AWS Comprehend
-- **Entity types tracked**:
-  - ORGANIZATION (blue) - Companies, government agencies
-  - PERSON (pink) - People names
-  - LOCATION (green) - Cities, countries, landmarks
-  - DATE (orange) - Dates and times
-  - QUANTITY (indigo) - Numbers and measurements
-  - TITLE (purple) - Job titles, document titles
-  - COMMERCIAL_ITEM (teal) - Products and brands
-  - EVENT (orange-red) - Events and occasions
-  - OTHER (gray) - Miscellaneous entities
-- **SQL query**: Uses `CROSS JOIN UNNEST(entitydetails)` to flatten nested entity array
+### 4. Send Test Event (Kinesis)
+- The **Send Test Event** button writes a sample record **directly to Kinesis** (`PutRecord`) — the
+  same entry point as API Gateway, bypassing HTTP to avoid browser CORS
+- After ~10–30s (ETL → Comprehend → Merge), the new event appears in the table on the next refresh
+- Great for demoing the live pipeline end-to-end
 
-### 5. Recent Events Table (DynamoDB)
-- **20 most recent records** sorted by timestamp (newest first)
-- **Columns**:
-  - **Time**: Local timestamp (e.g., "1/19/2026, 8:25:05 PM")
-  - **Sentiment**: Color-coded badge (green/orange/red/purple)
-  - **Confidence**: Percentage score (e.g., "99.0%")
-  - **Entities**: Badges showing extracted entities
-    - Shows up to 4 entities with "+N more" indicator
-    - Clean badge UI with hover effects
-- **Entity display**: Simple text badges (full entity type analysis available in chart)
-
-### 6. User Experience
-- **Auto-refresh**: Data reloads every 60 seconds automatically
-- **Loading states**: Visual feedback while fetching from DynamoDB and Athena
-- **Error handling**: Graceful fallback with error messages if queries fail
-- **Responsive design**:
-  - Desktop: 5-column metrics grid, side-by-side charts
-  - Tablet: 3-column metrics, stacked charts
-  - Mobile: 2-column metrics, vertical layout
-- **Performance**: Parallel queries (DynamoDB + Athena run simultaneously)
+### 5. User Experience
+- **Auto-refresh** every 60 seconds, plus a manual **Refresh** button
+- **Loading states** while fetching, and per-widget **error handling** so a failure in one source
+  doesn't blank the whole page
+- **Last updated** timestamp in the footer
 
 ## Files
 
 ```
 dashboard/
-├── index.html    # Main page structure
-├── styles.css    # All styling (colors, layout, responsive)
-├── app.js        # JavaScript (AWS SDK, data fetching, chart rendering)
-├── config.js     # AWS credentials (DO NOT COMMIT!)
+├── index.html    # Page structure
+├── styles.css    # Styling (colors, layout, responsive)
+├── app.js        # AWS SDK calls, data fetching, chart + table rendering
+├── config.js     # AWS credentials + resource names (DO NOT COMMIT — gitignored)
 └── README.md     # This file
 ```
 
@@ -85,7 +71,7 @@ dashboard/
 
 ### Step 1: Configure AWS Credentials
 
-Create `config.js` with your AWS credentials:
+Create `config.js` with your AWS credentials and resource names:
 
 ```javascript
 const CONFIG = {
@@ -98,49 +84,33 @@ const CONFIG = {
     // Your AWS Secret Access Key
     AWS_SECRET_ACCESS_KEY: 'YOUR_SECRET_KEY_HERE',
 
-    // DynamoDB Table Name (real-time data)
+    // DynamoDB hot store (metric cards + recent events)
     DYNAMODB_TABLE: 'ai-dp-dev-enriched-data',
 
-    // Athena Configuration (historical analytics)
-    ATHENA_DATABASE: 'ai-dp-dev-analytics',
-    ATHENA_TABLE: 'processed',
-    ATHENA_WORKGROUP: 'ai-dp-dev-workgroup',
-    ATHENA_OUTPUT_LOCATION: 's3://ai-dp-athena-results-dev-us-west-2/query-results/',
+    // S3 data lake (curated/latest_summary.json powers the Top Entities chart)
+    DATA_LAKE_BUCKET: 'ai-dp-data-lake-dev-us-west-2',
 
-    // SQS DLQ URL (optional - for pipeline health monitoring)
-    // Leave empty if you don't want to monitor DLQ
-    DLQ_URL: ''  // e.g., 'https://sqs.us-west-2.amazonaws.com/123456789/ai-dp-dev-etl-dlq'
+    // Kinesis ingestion stream ("Send Test Event" button)
+    KINESIS_STREAM: 'ai-dp-dev-ingestion-stream'
 };
 ```
 
 ### Step 2: IAM Permissions Required
 
-Your AWS credentials need these permissions:
+The credentials in `config.js` need these permissions:
 
 **DynamoDB:**
 - `dynamodb:Scan` on `ai-dp-dev-enriched-data`
 
-**Athena:**
-- `athena:StartQueryExecution`
-- `athena:GetQueryExecution`
-- `athena:GetQueryResults`
+**S3 (for the Top Entities chart):**
+- `s3:GetObject` on the data lake bucket (`curated/latest_summary.json`)
 
-**S3 (for Athena results):**
-- `s3:GetObject` on Athena results bucket
-- `s3:PutObject` on Athena results bucket
-- `s3:GetBucketLocation` on Athena results bucket
-
-**Glue (for Athena catalog):**
-- `glue:GetTable`
-- `glue:GetDatabase`
-
-**SQS (optional - for DLQ monitoring):**
-- `sqs:GetQueueAttributes` on your DLQ (e.g., `ai-dp-dev-etl-dlq`)
-- If you don't have SQS permissions, leave `DLQ_URL` empty - dashboard will skip DLQ checks
+**Kinesis (for the "Send Test Event" button):**
+- `kinesis:PutRecord` on `ai-dp-dev-ingestion-stream`
 
 ### Step 3: Open the Dashboard
 
-Simply open `index.html` in your web browser:
+Open `index.html` in your web browser:
 
 ```bash
 # Windows
@@ -153,136 +123,86 @@ open index.html
 xdg-open index.html
 ```
 
-### Step 4: Check Browser Console
+### Step 4: Check the Browser Console
 
-Press `F12` to open Developer Tools and check the Console tab:
-- Should see "AI-DP Dashboard loaded!"
-- Should see DynamoDB and Athena query logs
-- Any errors will appear here
+Press `F12` and open the Console tab:
+- You should see "AI-DP Dashboard loaded" and per-source load logs
+- Any errors (credentials, permissions, CORS) appear here
 
 ## How It Works
 
 ### Data Flow
 
-1. **Page Load**: Triggers `loadData()` which runs 3 parallel operations:
-   - DynamoDB scan for recent events
-   - Athena queries (sentiment + entities)
-   - Pipeline status check (Athena count + SQS DLQ)
-
-2. **DynamoDB Query**:
-   - Scans hot store for up to 50 recent records
-   - Updates metrics cards (Total, Positive, Neutral, Negative, Mixed)
-   - Populates Recent Events table
-
-3. **Athena Queries** (run in parallel):
-   - **Sentiment aggregation**: Updates pie chart
-   - **Entity type analysis**: Updates doughnut chart
-   - **Total count**: For pipeline status card
-   - Each query waits for completion (polling with 1s interval)
-
-4. **Pipeline Status**:
-   - Total processed from Athena COUNT query
-   - Last record time from cached DynamoDB results
-   - DLQ count from SQS (if configured)
-   - Health status computed based on DLQ depth
-
-5. **Auto-refresh**: Every 60 seconds, all queries run again
-
-### Athena Queries
-
-**Sentiment Distribution:**
-```sql
-SELECT sentiment, COUNT(*) as count
-FROM "ai-dp-dev-analytics"."processed"
-GROUP BY sentiment
-```
-
-**Entity Type Analysis:**
-```sql
-SELECT entity.Type as entity_type, COUNT(*) as count
-FROM "ai-dp-dev-analytics"."processed"
-CROSS JOIN UNNEST(entitydetails) AS t(entity)
-GROUP BY entity.Type
-ORDER BY count DESC
-```
-
-**Total Processed Count:**
-```sql
-SELECT COUNT(*) as total
-FROM "ai-dp-dev-analytics"."processed"
-```
+1. **Page load** triggers `loadData()`, which runs two operations in parallel (`Promise.all`):
+   - `loadDynamoDBData()` — scans the hot store (limit 50), filters out metadata records, then
+     updates the metric cards and the Recent Events table
+   - `loadCuratedSummary()` — fetches `curated/latest_summary.json` from S3 and renders the
+     Top Entities doughnut chart
+2. **Auto-refresh** re-runs `loadData()` every 60 seconds; the **Refresh** button runs it on demand.
+3. **Send Test Event** is independent: it `PutRecord`s a sample payload to Kinesis and the result
+   shows up in the table after the pipeline processes it.
 
 ### Fallback Behavior
 
-If Athena queries fail:
-- Error message shown in affected chart area
-- DynamoDB data still displays normally
-- Pipeline status shows "-" for total processed
-- Check browser console for detailed error messages
+- If the DynamoDB scan fails, the table shows an error and the chart still renders (and vice versa) —
+  the two sources fail independently.
+- If `curated/latest_summary.json` doesn't exist yet (e.g. before the Merge Lambda has run), the
+  chart shows "Curated summary not available" instead of breaking the page.
 
 ## Customization
 
-### Change Auto-refresh Interval
+### Auto-refresh interval
+Edit the `setInterval(...)` call at the bottom of `app.js` (currently `60000` ms).
 
-Edit `app.js` line ~420:
-```javascript
-}, 60000); // Change to desired milliseconds (e.g., 30000 for 30s)
-```
+### Number of table rows
+Edit `sorted.slice(0, 20)` in `updateTable()` in `app.js`.
 
-### Change Number of Table Records
-
-Edit `app.js` line ~305:
-```javascript
-const displayData = sortedData.slice(0, 20); // Change 20 to desired number
-```
-
-### Modify Colors
-
-Edit `styles.css`:
-- Lines 86-100: Metric card colors
-- Lines 201-228: Sentiment badge colors
-- Lines 240-252: Pie chart colors are in `app.js`
+### Colors
+- Metric card colors: `styles.css`
+- Sentiment badge colors: `styles.css`
+- Chart palette: the `colors` array in `updateEntitiesChart()` in `app.js`
 
 ## Troubleshooting
 
 ### "Failed to load recent events from DynamoDB"
-- Check AWS credentials in `config.js`
-- Verify DynamoDB table name matches your deployed table
-- Ensure IAM user has `dynamodb:Scan` permission
+- Check the credentials in `config.js`
+- Verify `DYNAMODB_TABLE` matches your deployed table
+- Ensure the IAM user has `dynamodb:Scan`
 
-### "Athena query failed"
-- Check Athena workgroup name in `config.js`
-- Verify Glue database and table exist (run crawler first)
-- Ensure IAM user has Athena and Glue permissions
-- Check S3 results bucket exists and is accessible
+### "Curated summary not available" (chart empty)
+- The Merge Lambda writes `curated/latest_summary.json` on each run — send some data through the
+  pipeline first (e.g. the **Send Test Event** button), then refresh
+- Verify `DATA_LAKE_BUCKET` is correct and the IAM user has `s3:GetObject`
 
-### No data in pie chart
-- Run the Glue Crawler to catalog data: `aws glue start-crawler --name ai-dp-dev-crawler`
-- Wait for crawler to complete
-- Refresh dashboard
+### "Send Test Event" fails
+- Ensure the IAM user has `kinesis:PutRecord` on `ai-dp-dev-ingestion-stream`
+- Check `KINESIS_STREAM` in `config.js`
 
 ### CORS errors
-- This is expected when running locally with browser-based AWS SDK
-- The dashboard uses direct AWS API calls which may be blocked by CORS
-- Solution: Use a local web server or deploy to S3 static hosting
+- Expected when calling AWS APIs directly from a local `file://` page
+- Workaround: serve the folder from a local web server, or deploy to S3 static hosting
 
 ## Security Notes
 
-**LOCAL DEMO ONLY - NOT FOR PRODUCTION**
+**LOCAL DEMO ONLY — NOT FOR PRODUCTION**
 
-This dashboard uses hardcoded AWS credentials for **local demonstration purposes only**.
+This dashboard uses static AWS credentials in `config.js` for **local demonstration only**.
 
-**Why this is OK for a portfolio project:**
+**Why this is acceptable for a portfolio demo:**
 - Runs only on your local machine
-- `config.js` is in `.gitignore` and never committed
-- Perfect for demos, screenshots, and portfolio videos
+- `config.js` is in `.gitignore` and is never committed
+- Fine for demos, screenshots, and portfolio videos
 
-**For production, you would use:**
-- AWS Cognito Identity Pools (temporary browser credentials)
-- Backend API with Lambda + API Gateway
+**For production, you would instead use:**
+- AWS Cognito Identity Pools (temporary, scoped browser credentials)
+- A backend API (Lambda + API Gateway) so the browser holds no credentials
 - IAM roles for hosted applications
 
-**Interview talking point:** "For this portfolio demo, I'm using local credentials since it only runs on my machine. In production, I would implement Cognito Identity Pools for secure, temporary browser credentials, or route all AWS calls through a backend API."
+**Interview talking point:** *"For this local demo I use static credentials since it only runs on my
+machine and `config.js` is gitignored. In production I'd use Cognito Identity Pools for temporary
+browser credentials, or route all AWS calls through a backend API. I also deliberately keep Athena
+out of the dashboard — it's the console-only cold path for historical queries — and feed the chart
+from a pre-aggregated S3 summary for fast, cheap loads."*
 
 ## Data Schema
 
@@ -296,18 +216,27 @@ This dashboard uses hardcoded AWS credentials for **local demonstration purposes
   "sentiment": "POSITIVE",
   "sentimentScore": 0.9876,
   "entities": ["AWS", "Lambda", "Terraform"],
-  "rawDataLocation": "s3://ai-dp-data-lake-dev/raw/year=2026/month=01/day=15/file.json",
-  "processedDataLocation": "s3://ai-dp-data-lake-dev/processed/year=2026/month=01/day=15/uuid.json",
+  "rawDataLocation": "s3://ai-dp-data-lake-dev-us-west-2/raw/...",
+  "processedDataLocation": "s3://ai-dp-data-lake-dev-us-west-2/processed/...",
   "mergedAt": "2026-01-15T12:00:05.123Z",
   "expiresAt": 1739534400
 }
 ```
 
-### Athena Table Schema
+### Curated Summary (`curated/latest_summary.json`)
 
-The `processed` table contains enriched data with these key columns:
-- `sentiment`: POSITIVE, NEUTRAL, NEGATIVE, or MIXED
-- `sentimentscore`: Confidence score (0.0 to 1.0)
-- `entities`: Array of extracted entities
-- `timestamp`: Processing timestamp
-- Partition keys: `year`, `month`, `day`
+Pre-aggregated by the Merge Lambda on each run. The dashboard reads `top_entities` (for the chart)
+and logs `total_records`; the other fields are available for future widgets:
+
+```json
+{
+  "sentiment_counts": { "POSITIVE": 0, "NEGATIVE": 0, "NEUTRAL": 0, "MIXED": 0 },
+  "total_records": 123,
+  "top_entities": { "AWS": 12, "Lambda": 9, "Terraform": 7 },
+  "first_record_at": "2026-01-15T12:00:05.123Z",
+  "last_updated": "2026-01-15T12:30:05.456Z",
+  "latest_sentiment": "POSITIVE",
+  "latest_confidence": 0.9876,
+  "latest_text_preview": "..."
+}
+```
