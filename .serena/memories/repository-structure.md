@@ -4,6 +4,7 @@
 ```
 AI-DP/
 ├── .claude/           # Claude Code configs & agent prompts (portfolio.md)
+│   └── commands/      # Slash commands incl. /reset-data (clears dashboard data only)
 ├── .github/           # GitHub Actions workflows (Phase 10 CI/CD)
 ├── bootstrap/         # Terraform for S3 state bucket creation
 ├── dashboard/         # Static analytics dashboard (index.html, styles.css, app.js, config.js)
@@ -13,6 +14,7 @@ AI-DP/
 │   ├── errorlog.md        # ALWAYS CHECK before fixing errors
 │   ├── security-audit-report.md
 │   ├── architecture.md        # Mermaid architecture docs + decisions
+│   ├── dashboard-explained.md # Plain-language dashboard walkthrough
 │   ├── architecture.drawio    # AWS-icon architecture diagram (draw.io)
 │   └── ai-dp overview notion.md
 ├── envs/              # Environment-specific Terraform configs
@@ -27,7 +29,10 @@ AI-DP/
 │   ├── hot_store/         ├── orchestration/     ├── analytics/
 │   ├── ai_enrichment/     ├── observability/     └── cost_management/
 ├── scripts/
-│   └── load_test.py   # Boto3 load tester (25 events default)
+│   ├── load_test.py        # Boto3 load tester (25 events default)
+│   └── rebuild_summary.py  # Recompute curated summary from DynamoDB (idempotent, --dry-run)
+├── test-data/
+│   └── batch/         # 8 sample .txt files (3 POS / 3 NEG / 2 MIXED) for batch-path testing
 ├── CLAUDE.md          # Primary guidance file
 ├── .terraform-version # Pinned to 1.13.0
 ├── .tflint.hcl        # TFLint config (snake_case, documented vars/outputs)
@@ -53,9 +58,11 @@ modules/<name>/
 ## Lambda Standard Structure
 ```
 lambdas/<name>/
-├── app.py            # Handler with try/except, logging module, env vars
-└── requirements.txt  # Python dependencies
+├── <name>_handler.py # Handler with try/except, logging module, env vars
+├── conftest.py       # pytest fixtures
+└── test_<name>.py    # unit tests (excluded from the deployment zip)
 ```
+Packaging is Terraform `archive_file` in `modules/orchestration/main.tf`, which excludes `test_*.py`, `conftest.py`, `__pycache__`, and the previous zip. Deploy a Lambda code change with `terraform -chdir=envs/dev apply` — there is no separate upload step.
 
 ## Key Config Files
 - `CLAUDE.md` - Claude Code instructions (authoritative)

@@ -53,6 +53,14 @@ Use dynamic blocks with conditional `for_each` to avoid empty rule errors. See `
 - Idempotency (safe to reprocess same event)
 - SQS DLQ for async error handling
 
+### Concurrency (learned the hard way — errorlog #6)
+- **Never read-modify-write a shared object without a guard.** The batch path fires one Lambda per uploaded file, so any shared counter has concurrent writers. Use an S3 conditional write (`IfMatch` on the ETag, `IfNoneMatch='*'` on create) with bounded retries, or a DynamoDB atomic `ADD`.
+- **Bound every retry loop** and add jitter to the backoff — unbounded retries are a self-inflicted DoS, and un-jittered ones cause thundering herds.
+- **Keep the retried body pure** (no I/O) so re-running an attempt cannot double-write.
+- Re-raise with a bare `raise`, never `raise e` (preserves the traceback). Inspect `e.response['Error']['Code']` to decide what is actually retryable.
+- **Broad `except` at the boundary, narrow inside.** A broad `except Exception` hid the `get_text_preview` JSON assumption for seven months. Catch the narrowest exception that names the expected failure.
+- Ask of any shared-state write: *what if two copies run at once? what if it fails halfway? what if it runs twice?*
+
 ## Anti-Patterns to Avoid
 - ❌ Hardcoded account IDs, regions, ARNs
 - ❌ Wildcard IAM permissions without justification
