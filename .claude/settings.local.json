@@ -54,7 +54,13 @@
       "Bash(cat \"Z:/CODE/Notes/AI-DP Docs/python/README.md\")",
       "Bash(cd \"Z:/CODE/Notes/AI-DP Docs/python\" && echo \"=== does 06 cover unittest.mock? ===\" && grep -n \"unittest.mock\\\\|patch\\\\|side_effect\\\\|Mock\" 06-testing-with-pytest.md | head -8 && echo && echo \"=== does anything cover **kwargs unpacking / ClientError / argparse / Counter? ===\" && grep -rn \"ClientError\\\\|argparse\\\\|Counter\\\\|\\\\*\\\\*kwargs\\\\|dict unpack\" *.md | head -10 && echo && echo \"=== 06.8 'things this suite does not use' ===\" && sed -n '431,468p' 06-testing-with-pytest.md)",
       "Bash(python -m pytest lambdas/ --collect-only -q)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "Bash(uv tool *)",
+      "Bash(uv pip *)",
+      "Bash(curl -s https://pypi.org/pypi/serena-agent/json)",
+      "Bash(python -c \"import sys,json; print\\(json.load\\(sys.stdin\\)['info']['version']\\)\")",
+      "Bash(C:/Users/mikha/AppData/Roaming/uv/tools/serena-agent/Scripts/python.exe -c ' *)",
+      "Read(//c/Users/mikha/AppData/Roaming/Claude/**)"
     ],
     "deny": [],
     "ask": []
