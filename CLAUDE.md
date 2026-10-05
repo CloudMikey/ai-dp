@@ -81,7 +81,7 @@ AI-DP/
 - **Text preview feature completed.** The `td.text-preview` CSS had existed unused since a removed column; added the `Text` column to the dashboard table with full text in a `title` tooltip on hover, and corrected all `colspan` values from 4 to 5.
 - **New tooling:** `scripts/rebuild_summary.py` (recomputes the summary from DynamoDB; absolute write, idempotent, `--dry-run`) and the `/reset-data` slash command (clears only the two sources the dashboard reads, never `raw/` or `processed/`).
 
-**Batch path input contract (verified 2026-08-31):** Step Functions passes the **entire file body** to Comprehend (`"text_content.$" = "$.s3_response.Body"`) — no JSON parsing, no field extraction. Use plain `.txt`, one document per file, under **5,000 bytes** (`DetectSentiment`'s limit; `DetectEntities` allows 100 KB, so sentiment binds). EventBridge matches any key under `raw/`, with no extension filter. One file = one record = one sentiment.
+**Comprehend input contract:** Step Functions routes on the object key. Keys ending in `.json` (the streaming path) are parsed with `States.StringToJson` and only the `text` field is scored; events without `text` end at `NoTextToAnalyze` with no Comprehend calls. Any other key is treated as plain text and the **entire body** is scored. Keep each document under **5,000 bytes** (`DetectSentiment`'s limit; `DetectEntities` allows 100 KB, so sentiment binds). EventBridge matches any key under `raw/`. One file = one record = one sentiment.
 
 **For full phase history, achievements, and next steps:** Load Serena memory `project-status-and-roadmap`.
 
@@ -178,7 +178,7 @@ aws s3 cp test-data/batch/ s3://ai-dp-data-lake-dev-us-west-2/raw/batch-test/ `
 # Test streaming ingestion
 curl -X POST "https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest" `
   -H "Content-Type: application/json" -H "X-Partition-Key: test" `
-  -d '{"event_type":"test","event_timestamp":"2026-01-25T12:00:00Z"}'
+  -d '{"event_type":"test","event_timestamp":"2026-01-25T12:00:00Z","text":"Fast shipping, great product."}'
 
 # Test batch ingestion
 aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json

@@ -127,9 +127,8 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
 
 ## Limitations and what I'd change
 
-- **On the streaming path, Comprehend scores the whole JSON envelope**, not just the review. The ETL Lambda writes the full event (timestamps, field names, Lambda name) to `raw/`, and Step Functions passes the whole file to Comprehend. Sentiment and entities are therefore computed partly on metadata. The dashboard filters out timestamp "entities" to hide the symptom. The fix is deciding what text each path sends before building it.
+- **Comprehend used to score the whole JSON envelope on the streaming path**, timestamps and field names included, and the dashboard filtered out timestamp "entities" to hide the symptom. Step Functions now parses `.json` events and sends only the `text` field; events without one stop before Comprehend. Records written before the fix still carry the old scores.
 - **The merge Lambda's DLQ never receives anything.** Its `dead_letter_config` only applies to asynchronous invocations, and Step Functions calls it synchronously, so failures go to the state machine's `Catch` instead. The DLQ and its alarm should be removed. See [`docs/runbooks.md`](docs/runbooks.md).
-- **No retries on the Comprehend steps**, so a throttled call fails the execution.
 - **Batch files must be under 5,000 bytes** (Comprehend's sentiment limit), and nothing enforces that.
 - **If I started over:** check which regions each service is available in before picking one, use SQS instead of Kinesis at this volume, decide what text each ingestion path sends to Comprehend before building, and put the CI deploy policy in Terraform from day one.
 

@@ -87,13 +87,15 @@ An EventBridge rule filters for `s3:ObjectCreated:*` events on the `raw/` prefix
 
 ### Step 4 — Step Functions orchestrates AI enrichment
 
-The state machine (`ai-dp-dev-orchestrator`) runs 6 states:
+The state machine (`ai-dp-dev-orchestrator`) runs these states:
 
 | State | Type | What it does |
 |-------|------|-------------|
 | PrepareComprehendInput | Pass | Extracts bucket + key from EventBridge event |
 | ReadS3Object | Task | Calls `s3:GetObject` to read file contents |
-| PrepareTextContent | Pass | Packages text for Comprehend input |
+| CheckFileFormat | Choice | `.json` keys (streaming events) go to parsing; anything else is plain text |
+| ParseJsonEvent / CheckForText / ExtractEventText | Pass / Choice / Pass | Parses the event and keeps only its `text` field; events with no `text` end at `NoTextToAnalyze` (Succeed) |
+| PrepareTextContent | Pass | Plain-text batch files: the whole body is the document |
 | ComprehendAnalysis | Parallel | Runs DetectSentiment + DetectEntities simultaneously |
 | FormatResults | Pass | Merges both Comprehend outputs with source metadata |
 | InvokeMergeLambda | Task | Calls Merge Lambda with enriched payload |

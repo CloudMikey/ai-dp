@@ -30,12 +30,18 @@ Orchestrates the batch AI-enrichment pipeline. When a file lands in the data lak
 |---|-------|------|---------|
 | 1 | `PrepareComprehendInput` | Pass | Extract bucket / key / size from the EventBridge event |
 | 2 | `ReadS3Object` | Task (SDK: `s3:getObject`) | Read the object's text content from `raw/` |
-| 3 | `PrepareTextContent` | Pass | Combine text content with object metadata |
-| 4 | `ComprehendAnalysis` | **Parallel** | Branch A: `DetectSentiment` · Branch B: `DetectEntities` (both AWS SDK Comprehend tasks) |
-| 5 | `FormatResults` | Pass | Structure the sentiment + entity results for downstream writes |
-| 6 | `InvokeMergeLambda` | Task (Merge Lambda) | Merge results → S3 `processed/` + DynamoDB. Has `Retry` (3 attempts, backoff 2.0) and `Catch` |
-| 7 | `MergeComplete` | Succeed | Terminal success state |
-| 8 | `MergeFailed` | Fail | Terminal failure state (entered via `Catch` if the merge fails after retries) |
+| 3 | `CheckFileFormat` | Choice | `.json` keys (streaming events) → step 4; anything else → step 7 |
+| 4 | `ParseJsonEvent` | Pass | `States.StringToJson` turns the body into an object |
+| 5 | `CheckForText` | Choice | `text` field present → step 6; otherwise `NoTextToAnalyze` (Succeed, no Comprehend calls) |
+| 6 | `ExtractEventText` | Pass | Keep only the `text` field, so metadata isn't scored |
+| 7 | `PrepareTextContent` | Pass | Plain-text batch files: the whole body is the document |
+| 8 | `ComprehendAnalysis` | **Parallel** | Branch A: `DetectSentiment` · Branch B: `DetectEntities` (both AWS SDK Comprehend tasks) |
+| 9 | `FormatResults` | Pass | Structure the sentiment + entity results for downstream writes |
+| 10 | `InvokeMergeLambda` | Task (Merge Lambda) | Merge results → S3 `processed/` + DynamoDB. Has `Retry` (3 attempts, backoff 2.0) and `Catch` |
+| 11 | `MergeComplete` | Succeed | Terminal success state |
+| 12 | `MergeFailed` | Fail | Terminal failure state (entered via `Catch` if the merge fails after retries) |
+
+`ReadS3Object` and both Comprehend tasks share one retry policy: errors a retry can't fix (text too long, invalid request, missing key, archived object) fail immediately; any other task failure retries 3 times with backoff and full jitter.
 
 > Comprehend is invoked through Step Functions' native AWS SDK integrations (`arn:aws:states:::aws-sdk:comprehend:*`), so no glue Lambda is needed for the AI calls.
 
@@ -131,7 +137,9 @@ aws stepfunctions start-execution `
 
 The workflow uses several core ASL constructs (full definition in `main.tf`):
 
-- **`Pass`** states (`PrepareComprehendInput`, `PrepareTextContent`, `FormatResults`) reshape the
+- **`Choice`** states (`CheckFileFormat`, `CheckForText`) route streaming JSON events and plain-text
+  batch files to the right text-extraction step.
+- **`Pass`** states (`PrepareComprehendInput`, `ParseJsonEvent`, `ExtractEventText`, `PrepareTextContent`, `FormatResults`) reshape the
   data between steps using `Parameters` and JSONPath (`$.detail.bucket.name`, etc.) — no compute cost.
 - **AWS SDK service integrations** (`arn:aws:states:::aws-sdk:s3:getObject`,
   `arn:aws:states:::aws-sdk:comprehend:detectSentiment`) call AWS services directly from the state

@@ -143,18 +143,10 @@ def get_text_preview(bucket: str, key: str, max_length: int = 500) -> Optional[s
         body = response['Body'].read().decode('utf-8')
 
         try:
-            raw_data = json.loads(body)
-            # Streaming path: ETL Lambda writes JSON, text lives in a known field
-            text = (
-                raw_data.get('text') or
-                raw_data.get('content') or
-                raw_data.get('message') or
-                raw_data.get('body') or
-                None
-            )
+            # Streaming path: same 'text' field Step Functions sends to Comprehend
+            text = json.loads(body).get('text')
         except json.JSONDecodeError:
-            # Batch path: uploaded files are plain text, so the body IS the text.
-            # Matches Step Functions, which passes the whole body to Comprehend unparsed.
+            # Batch path: uploaded files are plain text, so the body IS the text
             text = body.strip()
 
         if not text:

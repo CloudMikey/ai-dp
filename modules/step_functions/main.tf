@@ -46,7 +46,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
   role_arn = aws_iam_role.step_functions.arn
 
   definition = jsonencode({
-    Comment = "AI Enrichment: reads S3 objects, runs Comprehend (sentiment + entities in parallel), merges results"
+    Comment = "AI Enrichment: reads S3 objects, extracts the text to score, runs Comprehend (sentiment + entities in parallel), merges results"
     StartAt = "PrepareComprehendInput"
     States = {
       PrepareComprehendInput = {
@@ -70,12 +70,68 @@ resource "aws_sfn_state_machine" "orchestrator" {
         }
         ResultPath = "$.s3_response"
         Retry      = local.sdk_task_retry
-        Next       = "PrepareTextContent"
+        Next       = "CheckFileFormat"
       }
 
+      # Streaming events arrive as JSON envelopes (event_type, timestamps, text);
+      # only the review text should be scored, not the metadata around it.
+      CheckFileFormat = {
+        Type = "Choice"
+        Choices = [
+          {
+            Variable      = "$.key"
+            StringMatches = "*.json"
+            Next          = "ParseJsonEvent"
+          }
+        ]
+        Default = "PrepareTextContent"
+      }
+
+      ParseJsonEvent = {
+        Type = "Pass"
+        Parameters = {
+          "event.$"  = "States.StringToJson($.s3_response.Body)"
+          "bucket.$" = "$.bucket"
+          "key.$"    = "$.key"
+          "size.$"   = "$.size"
+        }
+        Next = "CheckForText"
+      }
+
+      CheckForText = {
+        Type = "Choice"
+        Choices = [
+          {
+            # IsPresent first: comparing a missing path is a runtime error, not a false
+            And = [
+              { Variable = "$.event.text", IsPresent = true },
+              { Variable = "$.event.text", IsString = true }
+            ]
+            Next = "ExtractEventText"
+          }
+        ]
+        Default = "NoTextToAnalyze"
+      }
+
+      # Events without a text field (e.g. load-test pings) have nothing to score
+      NoTextToAnalyze = {
+        Type = "Succeed"
+      }
+
+      ExtractEventText = {
+        Type = "Pass"
+        Parameters = {
+          "text_content.$" = "$.event.text"
+          "bucket.$"       = "$.bucket"
+          "key.$"          = "$.key"
+          "size.$"         = "$.size"
+        }
+        Next = "ComprehendAnalysis"
+      }
+
+      # Batch uploads are plain text: the whole body is the document
       PrepareTextContent = {
-        Type    = "Pass"
-        Comment = "Combine S3 object content with metadata for AI analysis"
+        Type = "Pass"
         Parameters = {
           "text_content.$" = "$.s3_response.Body"
           "bucket.$"       = "$.bucket"

@@ -35,7 +35,7 @@ Deploys run through GitHub Actions. Full workflow detail is in [cicd.md](cicd.md
    $api = terraform -chdir=envs/dev output -raw api_gateway_invoke_url   # already ends in /ingest
    curl -X POST $api `
      -H "Content-Type: application/json" -H "X-Partition-Key: smoke" `
-     -d '{"event_type":"smoke","event_timestamp":"2026-01-25T12:00:00Z"}'
+     -d '{"event_type":"smoke","event_timestamp":"2026-01-25T12:00:00Z","text":"Smoke test: fast shipping, great product."}'
    ```
    Within ~1 minute a new row should appear in the dashboard and the `ai-dp-dev-operations` CloudWatch dashboard should show an ETL invocation with no errors.
 

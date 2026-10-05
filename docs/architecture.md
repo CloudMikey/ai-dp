@@ -148,7 +148,11 @@ sequenceDiagram
     SF->>S3: GetObject (read file contents)
     S3-->>SF: File body as text
 
-    SF->>SF: PrepareTextContent<br/>(package text + metadata)
+    alt key ends in .json (streaming event)
+        SF->>SF: ParseJsonEvent + CheckForText<br/>(score only the text field; no text = stop)
+    else plain-text batch file
+        SF->>SF: PrepareTextContent<br/>(whole body is the document)
+    end
 
     par Parallel AI Analysis
         SF->>Comprehend: DetectSentiment (en)
@@ -184,9 +188,22 @@ flowchart TD
     A --> B
 
     B["ReadS3Object\nTask — S3 SDK GetObject"]
-    B --> C
+    B --> K
 
-    C["PrepareTextContent\nPass — package text + metadata"]
+    K{"CheckFileFormat\nChoice — key ends in .json?"}
+    K -->|.json| L
+    K -->|other| C
+
+    L["ParseJsonEvent\nPass — States.StringToJson"]
+    L --> M
+    M{"CheckForText\nChoice — text field present?"}
+    M -->|yes| N
+    M -->|no| O
+    N["ExtractEventText\nPass — text field only"]
+    N --> D
+    O(["NoTextToAnalyze\nSucceed"])
+
+    C["PrepareTextContent\nPass — whole body is the text"]
     C --> D
 
     D{"ComprehendAnalysis\nParallel"}
@@ -209,6 +226,8 @@ flowchart TD
     I(["MergeComplete\nSucceed"])
     J(["MergeFailed\nFail — check DLQ + CloudWatch"])
 ```
+
+**Retry policy on ReadS3Object, DetectSentiment, DetectEntities:** errors a retry can't fix (`Comprehend.TextSizeLimitExceededException`, `InvalidRequestException`, `UnsupportedLanguageException`, `S3.NoSuchKeyException`, `S3.InvalidObjectStateException`) fail immediately; every other task failure (throttling, 5xx) retries 3 times from 2s with backoff 2.0 and full jitter.
 
 **Retry policy on InvokeMergeLambda:**
 - Errors: `Lambda.ServiceException`, `Lambda.TooManyRequestsException`
