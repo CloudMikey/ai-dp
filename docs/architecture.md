@@ -288,7 +288,7 @@ flowchart LR
 
 | Property | Value |
 |----------|-------|
-| URL | `https://pvqb2gzg7i.execute-api.us-west-2.amazonaws.com/ingest` |
+| URL | `https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest` |
 | Method | `POST` |
 | Protocol | HTTPS only (HTTP rejected) |
 | Integration | API Gateway → Kinesis PutRecord (no Lambda proxy) |

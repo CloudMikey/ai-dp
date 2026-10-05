@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an **AI-Powered Serverless Data Pipeline** built on AWS infrastructure managed with Terraform. The pipeline ingests both batch and streaming data, enriches it with AWS AI services (Comprehend, SageMaker), and provides analytics through a dual storage strategy (DynamoDB for hot data, S3 Data Lake for historical queries).
+This is an **AI-Powered Serverless Data Pipeline** built on AWS infrastructure managed with Terraform. The pipeline ingests both batch and streaming data, enriches it with Amazon Comprehend (sentiment and entity detection), and provides analytics through a dual storage strategy (DynamoDB for hot data, S3 Data Lake for historical queries).
 
 **Key Technologies:**
 - Infrastructure: Terraform >= 1.11.0 with S3 backend (native locking via `use_lockfile = true`)
 - Compute: AWS Lambda, Step Functions, EventBridge
 - Data Ingestion: API Gateway → Kinesis Data Streams, S3 batch uploads
-- AI/ML: Amazon Comprehend, SageMaker real-time endpoints, (optional) Rekognition
+- AI/ML: Amazon Comprehend (DetectSentiment, DetectEntities)
 - Storage: S3 (raw/processed/curated layers), DynamoDB, Glue + Athena
 - Observability: CloudWatch, X-Ray, SQS DLQs
 
@@ -43,7 +43,7 @@ AI-DP/
 | State Bucket | `tf-state-aidp` (us-west-1) | ✅ |
 | Data Lake | `ai-dp-data-lake-dev-us-west-2` | ✅ |
 | Kinesis | `ai-dp-dev-ingestion-stream` (KMS, PROVISIONED 1-shard) | ✅ |
-| API Gateway | `https://pvqb2gzg7i.execute-api.us-west-2.amazonaws.com/ingest` | ✅ |
+| API Gateway | `ai-dp-dev-ingestion-api` (URL: `terraform -chdir=envs/dev output api_gateway_invoke_url`) | ✅ |
 | Step Functions | `ai-dp-dev-orchestrator` | ✅ |
 | DynamoDB | `ai-dp-dev-enriched-data` | ✅ |
 | Glue Database | `ai-dp-dev-analytics` | ✅ |
@@ -103,6 +103,8 @@ This is a **portfolio project for entry-level to intermediate cloud engineering 
 - **USE CONTEXT7** - Check for deprecations before implementing
 
 ### Serena MCP Tools (MANDATORY)
+Serena memories live in `.serena/memories/`, which is gitignored (local only).
+
 **ALWAYS use Serena's semantic code navigation tools when available:**
 1. Use `get_symbols_overview` BEFORE reading entire files
 2. Use `find_symbol` with `name_path_pattern` for precise targeting
@@ -158,11 +160,11 @@ backend "s3" {
 
 ```powershell
 # Terraform workflow
-terraform -chdir=envs/dev fmt && terraform -chdir=envs/dev validate
+terraform fmt -recursive && terraform -chdir=envs/dev validate   # fmt from repo root, same as CI
 terraform -chdir=envs/dev plan
 terraform -chdir=envs/dev apply
 
-# Load test (sends 25 events to Kinesis via boto3)
+# Load test (sends 1,000 events to Kinesis via boto3)
 python scripts/load_test.py
 
 # Repair curated summary drift from DynamoDB (always --dry-run first)
@@ -194,6 +196,7 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 | Architecture overview | `docs/ai-dp overview notion.md` |
 | How the dashboard works | `docs/dashboard-explained.md` |
 | Reset data for a clean retest | `/reset-data` slash command |
+| Deploy, rollback, alarm response, DLQ replay | `docs/runbooks.md` |
 | Terraform patterns | Serena memory: `coding-standards` |
 | Implementation guide | `.claude/agents/portfolio.md` |
 
@@ -201,5 +204,5 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 
 - **Application Region**: `us-west-2` (all resources except state bucket)
 - **Backend Region**: `us-west-1` (state bucket only)
-- **CI/CD**: Deferred to Phase 10 (after infrastructure proven working)
+- **CI/CD**: GitHub Actions with OIDC (see `docs/cicd.md`)
 - **Learning Project**: Keep complexity appropriate, prioritize understanding

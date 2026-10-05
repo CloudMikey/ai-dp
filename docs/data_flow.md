@@ -23,7 +23,7 @@ EventBridge is the convergence point. Both paths write to `S3 raw/` and both tri
 ### Step 1 — API Gateway receives the request
 
 ```
-POST https://pvqb2gzg7i.execute-api.us-west-2.amazonaws.com/ingest
+POST https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest
 Content-Type: application/json
 X-Partition-Key: user-123
 

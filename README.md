@@ -117,7 +117,7 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
    Then confirm the SNS subscription email so the alarms can reach you.
 5. **Try it:**
    ```bash
-   curl -X POST "$(terraform -chdir=envs/dev output -raw api_gateway_invoke_url)/ingest" \
+   curl -X POST "$(terraform -chdir=envs/dev output -raw api_gateway_invoke_url)" \
      -H "Content-Type: application/json" -H "X-Partition-Key: test" \
      -d '{"event_type":"review","event_timestamp":"2026-10-04T12:00:00Z","text":"Fast shipping, great product."}'
    aws s3 cp review.txt s3://$(terraform -chdir=envs/dev output -raw data_lake_bucket_name)/raw/batch/review.txt   # plain text, under 5,000 bytes
