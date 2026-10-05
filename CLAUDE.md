@@ -193,7 +193,7 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 | Detailed phase history | Serena memory: `project-status-and-roadmap` |
 | Full roadmap | `docs/roadmap.md` |
 | Error solutions | `docs/errorlog.md` |
-| Architecture overview | `docs/ai-dp overview notion.md` |
+| Architecture overview | `docs/architecture.md` |
 | How the dashboard works | `docs/dashboard-explained.md` |
 | Reset data for a clean retest | `/reset-data` slash command |
 | Deploy, rollback, alarm response, DLQ replay | `docs/runbooks.md` |
