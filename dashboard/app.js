@@ -2,8 +2,8 @@
 // AI-DP Dashboard - Main Application
 // ========================================
 // Data Sources:
-// - DynamoDB: Real-time metrics cards + recent events table (last 30 days)
-// - S3 Curated: Top Entities bar chart (pre-aggregated, instant ~100ms)
+// - S3 curated summary: metric cards + Top Entities doughnut (pre-aggregated, one GetObject)
+// - DynamoDB timestamp-index GSI: recent events table (newest 50)
 // ========================================
 
 AWS.config.update({
@@ -154,7 +154,6 @@ function updateEntitiesChart(topEntities) {
         return;
     }
 
-    // Color palette for bars
     const colors = [
         '#3b82f6', '#ec4899', '#10b981', '#f59e0b', '#6366f1',
         '#8b5cf6', '#14b8a6', '#f97316', '#ef4444', '#6b7280'
@@ -276,9 +275,7 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ========================================
-// STEP 10: Loading & Error States
-// ========================================
+// Loading & error states
 function setTableLoading(isLoading) {
     const tbody = document.getElementById('events-tbody');
     if (isLoading) {
@@ -325,16 +322,11 @@ function showChartError(message, chartId) {
     errorDiv.textContent = message;
 }
 
-// ========================================
-// STEP 11: Timestamp
-// ========================================
 function updateTimestamp() {
     document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
 }
 
-// ========================================
-// STEP 12: Initialize & Auto-refresh
-// ========================================
+// Initial load + 60s auto-refresh
 window.addEventListener('load', function() {
     console.log('AI-DP Dashboard loaded');
     loadData();
