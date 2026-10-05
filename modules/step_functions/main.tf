@@ -115,9 +115,8 @@ resource "aws_sfn_state_machine" "orchestrator" {
             "entities.$"  = "$.comprehend_results[1]"
           }
           "processing_metadata" = {
-            "phase"         = "6-comprehend-complete"
-            "timestamp.$"   = "$$.State.EnteredTime"
-            "state_machine" = "ai-dp-dev-orchestrator"
+            "timestamp.$"     = "$$.State.EnteredTime"
+            "state_machine.$" = "$$.StateMachine.Name"
           }
         }
         Next = "InvokeMergeLambda"
