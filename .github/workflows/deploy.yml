@@ -39,7 +39,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install test dependencies
-        run: pip install pytest pytest-cov boto3 moto
+        run: pip install -r lambdas/requirements-dev.txt
 
       - name: Run unit tests
         run: pytest lambdas/ --cov --cov-report=term-missing --cov-fail-under=90
@@ -53,7 +53,7 @@ jobs:
       # ── 4. Configure AWS credentials via OIDC ────────────────────────────────
       # GitHub exchanges an OIDC token for short-lived AWS credentials.
       # No long-term access keys are stored in GitHub secrets.
-      # Role trust policy is scoped to repo:CloudMikey/AI-DP:*
+      # Role trust policy is scoped to repo:CloudMikey/ai-dp:*
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4.1.0
         with:
@@ -82,13 +82,19 @@ jobs:
         run: terraform plan -no-color -out=tfplan
 
       # ── 7. Post Plan to Job Summary ──────────────────────────────────────────
-      # No PR to comment on (push event), so write to the Actions job summary instead
+      # No PR to comment on (push event), so write to the Actions job summary instead.
+      # Plan output goes through an env var, not ${{ }} in the script, so quotes or $()
+      # inside it can't break or inject into the shell command (same as ci.yml).
       - name: Post Plan to Summary
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
         run: |
-          echo "### Terraform Plan Output" >> $GITHUB_STEP_SUMMARY
-          echo '```terraform' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.plan.outputs.stdout }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### Terraform Plan Output"
+            echo '```terraform'
+            printf '%s\n' "$PLAN"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ── 8. Terraform Apply ───────────────────────────────────────────────────
       # Applies the saved plan — no interactive prompt needed with -auto-approve
