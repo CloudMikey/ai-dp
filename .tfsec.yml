@@ -1,20 +1,18 @@
-# tfsec configuration for AI-Powered Serverless Data Pipeline
-# Documentation: https://aquasecurity.github.io/tfsec/
+# tfsec configuration. Supported keys: exclude, include, severity_overrides,
+# minimum_severity, min_required_version
+# Docs: https://github.com/aquasecurity/tfsec/blob/master/docs/guides/configuration/config.md
 
-# Severity levels to report
-severity_overrides:
-  # Can be: CRITICAL, HIGH, MEDIUM, LOW
-  # By default, all severities are reported
+minimum_severity: MEDIUM
 
-# Exclude specific checks if needed
 exclude:
-  # IAM wildcard resources: required for service-linked actions (logs:CreateLogDelivery,
-  # comprehend:DetectEntities) and path-scoped S3 ARNs that tfsec misreads as wildcards.
-  # Reviewed and accepted in Phase 9 security audit.
+  # IAM wildcard resources: required for actions AWS doesn't allow scoping
+  # (logs:CreateLogDelivery, comprehend:Detect*, xray:PutTraceSegments) and for
+  # path-scoped S3 ARNs (bucket/raw/*) that tfsec reads as wildcards.
+  # Reviewed and accepted in the Phase 9 security audit.
   - aws-iam-no-policy-wildcards
 
-  # CMK encryption: not required for dev environment, adds significant cost.
-  # Data at rest is protected by AWS-managed keys (AES256/SSE-S3).
+  # Customer-managed KMS keys: not used in dev for cost. Data at rest is still
+  # encrypted with AWS-managed keys (SSE-S3, DynamoDB default, Kinesis aws/kinesis).
   - aws-s3-encryption-customer-key
   - aws-dynamodb-table-customer-key
   - aws-cloudwatch-log-group-customer-key
@@ -22,91 +20,5 @@ exclude:
   - aws-sqs-enable-queue-encryption
   - aws-dynamodb-enable-at-rest-encryption
 
-  # S3 bucket logging: dev environment uses centralized CloudWatch for observability.
-  # Access logging to a separate bucket adds cost and complexity not needed for dev.
+  # S3 access logging: would need a second bucket; CloudWatch covers dev observability.
   - aws-s3-enable-bucket-logging
-
-# Minimum severity to fail CI/CD pipeline
-minimum_severity: MEDIUM
-
-# Custom checks (optional)
-# custom_checks:
-#   - path: .tfsec/custom_checks
-
-# Configure specific rules
-config:
-  # S3 Security
-  - rule: aws-s3-enable-versioning
-    enabled: true
-
-  - rule: aws-s3-enable-bucket-encryption
-    enabled: true
-
-  - rule: aws-s3-block-public-acls
-    enabled: true
-
-  - rule: aws-s3-block-public-policy
-    enabled: true
-
-  - rule: aws-s3-ignore-public-acls
-    enabled: true
-
-  - rule: aws-s3-restrict-public-buckets
-    enabled: true
-
-  # Lambda Security
-  - rule: aws-lambda-enable-tracing
-    enabled: true
-
-  - rule: aws-lambda-restrict-source-arn
-    enabled: true
-
-  # DynamoDB Security
-  - rule: aws-dynamodb-enable-recovery
-    enabled: true
-
-  - rule: aws-dynamodb-table-customer-key
-    enabled: false  # Can be enabled if using CMK
-
-  # API Gateway Security
-  - rule: aws-api-gateway-enable-access-logging
-    enabled: true
-
-  - rule: aws-api-gateway-enable-tracing
-    enabled: true
-
-  # IAM Security
-  - rule: aws-iam-no-policy-wildcards
-    enabled: true
-
-  - rule: aws-iam-enforce-mfa
-    enabled: true
-
-  # CloudWatch Security
-  - rule: aws-cloudwatch-log-group-customer-key
-    enabled: false  # Can be enabled if using CMK
-
-  # Kinesis Security
-  - rule: aws-kinesis-enable-in-transit-encryption
-    enabled: true
-
-  # Step Functions Security
-  - rule: aws-states-enable-logging
-    enabled: true
-
-# Ignore specific resources or paths
-exclude_paths:
-  # - "examples/"
-  # - "tests/"
-
-# Output format (json, csv, checkstyle, junit, sarif, default)
-format: default
-
-# Enable colored output
-color: true
-
-# Show passed checks
-show_passed: false
-
-# Show statistics
-show_statistics: true
