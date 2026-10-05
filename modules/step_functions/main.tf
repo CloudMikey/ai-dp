@@ -3,6 +3,28 @@
 locals {
   resource_prefix    = "${var.project_name}-${var.environment}"
   state_machine_name = "${local.resource_prefix}-orchestrator"
+
+  # Retry transient SDK failures (throttling, 5xx); fail fast on errors a retry can't fix.
+  # Retriers match in order, so the MaxAttempts = 0 entry must come first.
+  sdk_task_retry = [
+    {
+      ErrorEquals = [
+        "Comprehend.TextSizeLimitExceededException",
+        "Comprehend.InvalidRequestException",
+        "Comprehend.UnsupportedLanguageException",
+        "S3.NoSuchKeyException",
+        "S3.InvalidObjectStateException"
+      ]
+      MaxAttempts = 0
+    },
+    {
+      ErrorEquals     = ["States.TaskFailed"]
+      IntervalSeconds = 2
+      MaxAttempts     = 3
+      BackoffRate     = 2.0
+      JitterStrategy  = "FULL"
+    }
+  ]
 }
 
 # Logs execution history for debugging state machine failures and API errors
@@ -47,6 +69,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
           "Key.$"    = "$.key"
         }
         ResultPath = "$.s3_response"
+        Retry      = local.sdk_task_retry
         Next       = "PrepareTextContent"
       }
 
@@ -77,7 +100,8 @@ resource "aws_sfn_state_machine" "orchestrator" {
                   "LanguageCode" = "en"
                   "Text.$"       = "$.text_content"
                 }
-                End = true
+                Retry = local.sdk_task_retry
+                End   = true
               }
             }
           },
@@ -92,7 +116,8 @@ resource "aws_sfn_state_machine" "orchestrator" {
                   "LanguageCode" = "en"
                   "Text.$"       = "$.text_content"
                 }
-                End = true
+                Retry = local.sdk_task_retry
+                End   = true
               }
             }
           }
