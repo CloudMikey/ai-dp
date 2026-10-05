@@ -54,7 +54,7 @@ AI-DP/
 | GitHub Actions OIDC Role | `ai-dp-dev-github-actions` | ✅ |
 
 **Phase 9 Progress (7/7 tasks) ✅ COMPLETE:**
-- ✅ Lambda unit tests (42 tests, 95% coverage; CI gate at 90%)
+- ✅ Lambda unit tests (43 tests, 93% coverage of handler code; CI gate at 90%)
 - ✅ Load testing (1000 events, 0% errors)
 - ✅ CloudWatch Dashboard (8 widgets)
 - ✅ CloudWatch Alarms + SNS notifications

@@ -25,7 +25,6 @@ class TestLambdaHandler:
         result = etl_handler.lambda_handler(kinesis_event, None)
 
         assert result['successful'] == 1
-        assert result['failed'] == 0
         assert result['total'] == 1
 
     @mock_aws

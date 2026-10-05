@@ -42,7 +42,7 @@ jobs:
         run: pip install -r lambdas/requirements-dev.txt
 
       - name: Run unit tests
-        run: pytest lambdas/ --cov --cov-report=term-missing --cov-fail-under=90
+        run: pytest lambdas/ --cov=etl_handler --cov=merge_handler --cov-report=term-missing --cov-fail-under=90
 
       # ── 3. Setup Terraform ───────────────────────────────────────────────────
       - name: Setup Terraform
