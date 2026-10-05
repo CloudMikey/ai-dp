@@ -208,14 +208,3 @@ aws athena start-query-execution \
   --work-group ai-dp-dev-workgroup \
   --region us-west-2
 ```
-
-## Interview Talking Points
-
-**"Explain your analytics architecture"**
-- "I use AWS Glue Crawler to automatically discover schema from S3 JSON files. The crawler detects partitions based on the folder structure (year/month/day), which allows Athena to prune data efficiently. Queries only scan relevant partitions, reducing cost by 90%+."
-
-**"How do you handle schema evolution?"**
-- "I use the `UPDATE_IN_DATABASE` schema change policy. When new enrichment fields are added (like additional Comprehend outputs), the next crawler run updates the table schema automatically. No manual DDL changes needed."
-
-**"Why use Glue Crawler instead of manual table creation?"**
-- "Automation and flexibility. As the pipeline evolves, the crawler adapts to new fields. Manual CREATE TABLE statements would require constant updates. Plus, partition detection is automatic—Glue infers the partitioning scheme from S3 paths."

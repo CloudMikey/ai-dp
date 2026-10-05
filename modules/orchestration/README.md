@@ -15,30 +15,28 @@ The orchestration module completes the data pipeline by:
 ### Data Flow
 
 ```
-Step Functions (AI Enrichment Complete)
+Step Functions (InvokeMergeLambda)
   ↓
 Merge Lambda receives:
-  - recordId (S3 object key)
-  - sentiment (POSITIVE/NEGATIVE/NEUTRAL/MIXED)
-  - sentimentScores (confidence percentages)
-  - entities (people, places, organizations)
+  - source_object: bucket + key of the raw/ file
+  - ai_enrichment: raw DetectSentiment + DetectEntities responses
+  - processing_metadata: execution timestamp + state machine name
   ↓
-Lambda reads original record from S3 raw/
+Reads the raw/ file only to build a 500-char text preview
   ↓
-Merges AI results with original data
+Builds one enriched record (recordId, sentiment, scores, entities)
   ↓
-Dual Write:
-  1. S3 processed/ with date partitioning
-  2. DynamoDB with 30-day TTL
-  ↓
-Returns success with both storage locations
+Writes, in order:
+  1. S3 processed/year=/month=/day=/ (full record, for Athena)
+  2. DynamoDB (dashboard fields, 30-day TTL)
+  3. S3 curated/latest_summary.json (running totals; non-fatal, conditional write)
 ```
 
 ### Merge Lambda Responsibilities
 
-1. **Extract original data**: Reads raw record from S3 based on `recordId`
-2. **Combine outputs**: Merges original data + sentiment + entities into single object
-3. **Enrich metadata**: Adds `processed_at`, `lambda_version`, `record_version`
+1. **Text preview**: Reads the raw file and keeps the `text` field (JSON events) or the whole body (plain text)
+2. **Combine outputs**: Builds one record from the sentiment and entity responses, keeping only meaningful entity types (person, place, organization, ...) in `entities`
+3. **Add metadata**: `recordId`, `mergedAt`, `lambdaVersion`, `lambdaName`
 4. **Date partition**: Writes to S3 `processed/year=YYYY/month=MM/day=DD/`
 5. **Set TTL**: Calculates `expiresAt` for DynamoDB auto-deletion (30 days default)
 6. **Error handling**: Raises on failure so Step Functions can retry or catch it
@@ -359,44 +357,6 @@ aws lambda invoke `
 # Check result
 cat response.json
 ```
-
-## Interview Talking Points
-
-### 1. Why separate orchestration module?
-"The orchestration module handles the final step of the pipeline—merging AI results and implementing the dual storage strategy. Separating it from other modules follows single-responsibility principle: each module does one thing well."
-
-### 2. Why dual storage (S3 + DynamoDB)?
-"S3 provides cost-effective historical storage for analytics ($0.023/GB-month), while DynamoDB offers fast queries for real-time dashboards (single-digit millisecond reads). It's the best of both worlds: cheap long-term storage + fast recent data access."
-
-### 3. Explain your error handling strategy
-"Three layers of error handling:
-1. **Lambda retries**: 3 automatic retries for transient failures
-2. **DLQ**: Failed invocations stored for 14 days for debugging/replay
-3. **Step Functions catch blocks**: Errors trigger CloudWatch alarms
-
-This ensures no data loss and full visibility into failures."
-
-### 4. Why date partitioning in S3?
-"Date partitioning enables efficient Athena queries. When querying `WHERE year=2025 AND month=12`, Athena only scans December 2025 data—faster and cheaper. It's a standard practice for analytics workloads."
-
-### 5. How would you optimize for production?
-"For 10x traffic, I'd:
-1. Increase Lambda concurrency limits (reserved concurrency)
-2. Enable Lambda provisioned concurrency for predictable latency
-3. Add S3 batch writes (buffer multiple records, write once)
-4. Switch DynamoDB to provisioned capacity with auto-scaling
-5. Add CloudWatch alarms for DLQ depth and Lambda errors"
-
-### 6. Explain least-privilege IAM
-"The Lambda has scoped permissions:
-- Read ONLY from `raw/*` (can't read processed/)
-- Write ONLY to `processed/*` (can't write to raw/)
-- PutItem ONLY to enriched-data table (no Scan/Query/Delete)
-
-If the Lambda is compromised, damage is limited to its narrow permissions."
-
-### 7. Why TTL in DynamoDB?
-"TTL provides automatic data lifecycle management. Recent data stays hot for 30 days (fast queries), then auto-deletes (cost savings). Historical data remains in S3 for analytics. It's the 80/20 rule: 80% of queries target recent data, 20% target historical."
 
 ## Common Pitfalls
 

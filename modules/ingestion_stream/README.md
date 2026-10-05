@@ -207,7 +207,6 @@ Detects batch file uploads to the data lake `raw/` layer for orchestrated proces
 
 **Better for Portfolio Projects**:
 - Demonstrates modern AWS event-driven architecture
-- Easier to explain in interviews than S3 notifications
 - Shows understanding of decoupled systems
 
 ### Why Filter to raw/ Prefix Only?
@@ -282,17 +281,6 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/curated/test.json
 # Invocations metric should NOT increase ✅
 ```
 
-### Interview Talking Points
-
-**Q: Why EventBridge instead of S3 bucket notifications?**
-> "EventBridge provides centralized event routing and advanced filtering. With S3 notifications, you configure targets directly on the bucket - if you want to add another consumer later, you have to reconfigure the bucket. With EventBridge, I can add multiple targets to the same event rule without touching the S3 bucket. It's more flexible for evolving architectures."
-
-**Q: How does the event pattern filtering work?**
-> "The event pattern uses JSON to define three filters: source must be aws.s3, detail-type must be Object Created, and the object key must start with 'raw/'. This ensures only new uploads to the raw layer trigger processing. Uploads to processed or curated layers are ignored, preventing infinite loops."
-
-**Q: What happens if the rule fails to invoke a target?**
-> "EventBridge has built-in retry logic - it retries failed deliveries with exponential backoff. Failed Lambda invocations downstream are captured in an SQS dead letter queue (14-day retention) with a CloudWatch alarm on DLQ depth, so I can investigate or re-submit them."
-
 ---
 
 ## Capacity Planning
@@ -322,43 +310,13 @@ This stream runs in **provisioned mode with 1 shard** by default. Each shard pro
 
 ---
 
-## Interview Talking Points
-
-### Architecture Decisions
-
-**Q: Why HTTP API over REST API?**
-> "I chose HTTP API because it's AWS's modern API solution - 70% cheaper and simpler for this use case. REST API has features like API keys and request validation that we don't need. HTTP API is perfect for direct AWS service integrations."
-
-**Q: Why direct integration instead of Lambda proxy?**
-> "Direct integration eliminates Lambda cold starts during ingestion, reducing latency from 100-500ms to under 50ms. It's also cheaper since we're not paying for Lambda invocations just to write to Kinesis. Kinesis handles the buffering, so we don't need Lambda for that."
-
-**Q: How does this handle traffic spikes?**
-> "Kinesis acts as a buffer between ingestion and processing. Each shard can handle 1 MB/sec of writes, and API Gateway can scale to thousands of requests per second. If we get a spike, Kinesis stores the data and our Lambda consumers process it at their own pace."
-
-**Q: What happens if a write fails?**
-> "API Gateway returns the error to the client immediately. The client can implement retry logic with exponential backoff. We also have CloudWatch metrics and logs to track failed requests and diagnose issues."
-
-### Scaling Considerations
-
-**Q: How would you scale this for production?**
-> "The stream runs in provisioned mode with 1 shard — the cost-effective default for steady, low-volume traffic. To scale I'd add shards (each adds 1 MB/s of write capacity) with a good partition-key strategy to avoid hot shards, or switch to on-demand mode (`kinesis_stream_mode = \"ON_DEMAND\"`) for unpredictable, spiky traffic where I don't want to manage shard counts. Other levers: longer retention for a bigger replay window, and (already enabled here) KMS encryption at rest plus CORS restricted to specific domains."
-
-**Q: How do you monitor this?**
-> "CloudWatch metrics for Kinesis (PutRecord success rate, incoming data) and API Gateway (4xx/5xx errors, latency). I'd set up alarms for high error rates or when Kinesis utilization exceeds 80%. X-Ray active tracing is enabled on the ETL Lambda, so I can see per-invocation latency and downstream call timing (S3 writes) to diagnose bottlenecks."
-
-### Cost Optimization
-
-**Q: How did you optimize costs?**
-> "I right-sized Kinesis to provisioned 1-shard (~$11/mo) instead of on-demand (~$29/mo flat) once I saw the stream carried steady, low-volume traffic — on-demand's flat hourly rate only pays off at high or unpredictable throughput. I caught it in Cost Explorer: on-demand was billing ~$29/mo to move about 1 MB. I also set 7-day log retention instead of indefinite and used HTTP API instead of REST API for ~70% savings. For a high, bursty workload I'd switch back to on-demand to avoid throttling."
-
----
-
 ## Security Considerations
 
 ### Current Security (Dev)
 
 ✅ **HTTPS Only**: API Gateway enforces TLS in transit
-✅ **IAM Least Privilege**: API Gateway role only has `kinesis:PutRecord`
+✅ **IAM Least Privilege**: API Gateway role only has `kinesis:PutRecord` / `PutRecords` on this one stream
+✅ **Throttling**: 1 request/s, burst 5 (caps cost from abuse; doesn't stop it)
 ✅ **No Hardcoded Secrets**: All credentials managed by IAM
 ⚠️ **CORS Wide Open**: `cors_allow_origins = ["*"]` (dev only)
 ⚠️ **No Authentication**: Public endpoint (anyone can POST)
@@ -370,7 +328,6 @@ For production, consider adding:
 **Authentication**:
 - Lambda authorizer (JWT validation)
 - IAM authentication (for internal services)
-- API key requirement (for partner integrations)
 
 **CORS Restrictions**:
 ```hcl
@@ -385,7 +342,6 @@ kinesis_kms_key_id      = aws_kms_key.kinesis.id
 
 **Request Validation**:
 - Add Lambda authorizer to validate request schema
-- Implement rate limiting (API Gateway throttling)
 
 ---
 

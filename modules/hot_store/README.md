@@ -91,34 +91,6 @@ module "hot_store" {
 - Reads: 10,000/month = **$0.0025/month**
 - **Total: ~$0.03/month** (negligible for portfolio project)
 
-## Interview Talking Points
-
-### 1. Why DynamoDB over RDS?
-"DynamoDB scales horizontally for high-throughput workloads. For enriched event data, we need fast writes and time-based queries, which DynamoDB handles better than relational databases."
-
-### 2. Why on-demand billing?
-"For a portfolio project with unpredictable traffic, on-demand eliminates capacity planning overhead. In production, I'd analyze traffic patterns and consider provisioned capacity with auto-scaling for cost optimization."
-
-### 3. Why TTL?
-"TTL provides automatic data lifecycle management. Recent data stays in DynamoDB for fast queries, but we don't pay to store old data indefinitely since it's already archived in S3."
-
-### 4. Why GSI on recordType + timestamp?
-"The GSI supports common analytics queries like 'show all text records from last week' without scanning the entire table. It's optimized for time-based filtering, which is our primary query pattern."
-
-### 5. Point-in-time recovery worth the cost?
-"For $0.20/GB-month, PITR provides 35 days of backup. If the table gets corrupted or accidentally deleted, we can restore to any point in time. It's cheap insurance for data integrity."
-
-### 6. Explain your partition key choice
-"I chose `recordId` as the partition key to ensure even distribution across partitions—no hot keys. Each record has a unique ID, so read/write traffic spreads evenly. The sort key `timestamp` allows querying multiple versions of a record if needed."
-
-### 7. How would you scale this for production?
-"For 10x traffic, I'd:
-1. Monitor read/write patterns, consider provisioned capacity
-2. Enable DynamoDB auto-scaling
-3. Add partition key sharding for GSI if seeing hot partitions
-4. Enable DAX (caching) if read-heavy
-5. Archive older data more aggressively (14-day TTL vs 30)"
-
 ## Security Considerations
 
 **IAM Policy** (used by the Merge Lambda):

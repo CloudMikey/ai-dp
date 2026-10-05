@@ -166,32 +166,6 @@ The workflow uses several core ASL constructs (full definition in `main.tf`):
 **Least Privilege Principle**: every permission maps to a specific state in the workflow — S3 read for
 `ReadS3Object`, Comprehend for the parallel branches, Lambda invoke for `InvokeMergeLambda`.
 
-## Interview Talking Points
-
-### Q: Why did you choose Step Functions for orchestration?
-
-> "I needed to coordinate several steps — read from S3, call two Comprehend APIs in parallel, then invoke a merge Lambda — with retries and a clear failure path. Step Functions gives me visual workflow management and built-in error handling without writing orchestration logic in code. The declarative ASL makes the pipeline easy to understand, modify, and debug, and the native AWS SDK integrations let me call S3 and Comprehend directly without glue Lambdas."
-
-### Q: How do you run the two Comprehend calls efficiently?
-
-> "Sentiment and entity detection are independent, so I run them in a `Parallel` state with two branches. They execute concurrently and their results are merged into a single array, which roughly halves the enrichment latency compared to calling them sequentially."
-
-### Q: How do you handle errors in Step Functions?
-
-> "The Merge Lambda task has a `Retry` block for transient failures — `Lambda.ServiceException` and `Lambda.TooManyRequestsException` — with 3 attempts and exponential backoff (rate 2.0). If it still fails, a `Catch` on `States.ALL` routes the execution to a dedicated `MergeFailed` state that captures the error. The Lambda also has its own SQS DLQ, so failed payloads aren't lost."
-
-### Q: What's the cost of using Step Functions?
-
-> "It's $0.025 per 1,000 state transitions. This workflow is about 10 transitions per execution, so each run costs roughly $0.00025. Even at 10,000 batch uploads a month that's about $2.50 — negligible compared to the orchestration and debugging value."
-
-### Q: How do you monitor Step Functions executions?
-
-> "CloudWatch Logs with `include_execution_data` capture every state transition and the input/output at each step. I can watch real-time execution graphs in the console, set alarms on `ExecutionsFailed`, and query logs with CloudWatch Insights. For production I'd lower the log level from ALL to ERROR to cut cost while keeping failure visibility."
-
-### Q: How would you handle long-running tasks in this pipeline?
-
-> "I'm using Standard workflows (up to 1 year) because AI enrichment can take seconds to minutes and I want the full execution history for debugging. For very high-volume, short-lived processing I'd evaluate Express workflows, accepting that they trade per-execution visibility for throughput and lower cost."
-
 ## Resources
 
 - [AWS Step Functions Documentation](https://docs.aws.amazon.com/step-functions/)
