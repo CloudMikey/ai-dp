@@ -1,4 +1,4 @@
-﻿output "database_name" {
+output "database_name" {
   description = "Name of the Glue Data Catalog database"
   value       = aws_glue_catalog_database.analytics.name
 }

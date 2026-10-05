@@ -1,4 +1,4 @@
-﻿# Fast queries for recent AI-enriched data (auto-deletes old records via TTL)
+# Fast queries for recent AI-enriched data (auto-deletes old records via TTL)
 
 locals {
   table_name = "${var.project_name}-${var.environment}-enriched-data"
@@ -13,7 +13,7 @@ resource "aws_dynamodb_table" "enriched_data" {
     name = "recordId"
     type = "S"
   }
- 
+
   attribute {
     name = "timestamp"
     type = "N"

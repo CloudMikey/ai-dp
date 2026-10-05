@@ -1,4 +1,4 @@
-﻿# Merge Lambda: combines Comprehend outputs (sentiment + entities) into enriched records
+# Merge Lambda: combines Comprehend outputs (sentiment + entities) into enriched records
 # Writes to S3 processed/ (historical) + DynamoDB (real-time queries)
 
 locals {

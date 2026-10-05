@@ -1,4 +1,4 @@
-﻿# Three-layer data lake: raw/ (ingested), processed/ (AI-enriched), curated/ (business-ready)
+# Three-layer data lake: raw/ (ingested), processed/ (AI-enriched), curated/ (business-ready)
 
 locals {
   bucket_name = "${var.project_name}-data-lake-${var.environment}-${var.aws_region}"
@@ -139,7 +139,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
   # Curated layer lifecycle (conditionally created only if actions configured)
   dynamic "rule" {
     for_each = var.curated_layer_lifecycle.transition_to_ia_days > 0 || var.curated_layer_lifecycle.transition_to_glacier_days > 0 || var.curated_layer_lifecycle.expiration_days > 0 ? [1] : []
-    
+
     content {
       id     = "curated-layer-lifecycle"
       status = "Enabled"

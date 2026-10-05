@@ -1,4 +1,4 @@
-﻿locals {
+locals {
   resource_prefix       = "${var.project_name}-${var.environment}"
   athena_results_bucket = "${var.project_name}-athena-results-${var.environment}-${var.aws_region}"
 }
@@ -131,7 +131,7 @@ resource "aws_athena_workgroup" "dev" {
   state       = "ENABLED"
 
   configuration {
-    bytes_scanned_cutoff_per_query = 1073741824
+    bytes_scanned_cutoff_per_query     = 1073741824
     enforce_workgroup_configuration    = true
     publish_cloudwatch_metrics_enabled = true
 

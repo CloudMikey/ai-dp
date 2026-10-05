@@ -1,4 +1,4 @@
-﻿output "state_machine_arn" {
+output "state_machine_arn" {
   description = "ARN of the Step Functions state machine (for EventBridge targets and IAM policies)"
   value       = aws_sfn_state_machine.orchestrator.arn
 }

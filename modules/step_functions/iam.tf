@@ -1,4 +1,4 @@
-﻿# Execution role for Step Functions orchestrator (reads S3, invokes Comprehend + Merge Lambda)
+# Execution role for Step Functions orchestrator (reads S3, invokes Comprehend + Merge Lambda)
 
 resource "aws_iam_role" "step_functions" {
   name = "${local.resource_prefix}-step-functions-role"

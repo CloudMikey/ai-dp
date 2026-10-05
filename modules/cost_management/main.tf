@@ -1,4 +1,4 @@
-﻿# AWS Budgets for monthly cost monitoring with configurable thresholds and email alerts.
+# AWS Budgets for monthly cost monitoring with configurable thresholds and email alerts.
 
 locals {
   budget_name = "${var.project_name}-${var.environment}-monthly-budget"
