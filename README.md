@@ -1,356 +1,138 @@
-# AI-Powered Serverless Data Pipeline
+# AI-DP: Serverless Review Sentiment Pipeline
 
-![Status](https://img.shields.io/badge/status-complete-brightgreen)
-![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.11.0-blue)
-![AWS](https://img.shields.io/badge/AWS-serverless-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+A serverless AWS pipeline, built with Terraform, that takes text from two sources (an HTTP API and S3 file uploads), scores sentiment and named entities with Amazon Comprehend, and stores the results for a live dashboard and SQL queries.
 
-**33 unit tests · 96% coverage · 0% error rate (1,000-event load test) · $12/month actual AWS cost · 6 CloudWatch alarms · CI/CD via GitHub OIDC**
-
-A production-grade, serverless data pipeline built on AWS that ingests, enriches, and analyzes data using AI/ML services. This project demonstrates modern cloud architecture patterns, Infrastructure as Code (IaC), and AI/ML integration.
-
-## Overview
-
-This pipeline processes both **batch** and **streaming** data, enriching it with AWS AI services (Amazon Comprehend), and provides analytics through a dual storage strategy:
-- **Hot Storage**: DynamoDB for low-latency recent data queries
-- **Historical Storage**: S3 Data Lake for long-term analytics with Athena
-
-### Key Features
-
-- **Multi-Modal Ingestion**: REST API (streaming) + S3 batch uploads
-- **AI/ML Enrichment**: Sentiment analysis and entity extraction via Amazon Comprehend
-- **Serverless Architecture**: Zero server management, auto-scaling, pay-per-use
-- **Dual Storage Strategy**: Real-time queries (DynamoDB) + Historical analytics (S3 + Athena)
-- **Infrastructure as Code**: 100% Terraform-managed, multi-environment support
-- **Production-Ready**: Error handling, monitoring, SQS DLQs (14-day retention), security best practices
-- **CI/CD**: GitHub Actions with OIDC (no long-term credentials)
+**The problem it models:** a company collects product reviews in two ways. Customers post reviews on its site as they happen, and someone on the team gathers reviews from elsewhere online and uploads them in batches. Both should end up in one place, scored the same way.
 
 ## Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Ingestion["Ingestion Layer"]
-        Client(["Client"]) -->|"POST /ingest"| APIGW["API Gateway"]
-        Client -->|"S3 Upload"| S3Raw["S3 raw/"]
-        APIGW --> Kinesis["Kinesis Streams"]
+flowchart LR
+    subgraph Ingest
+        Client(["Review site"]) -->|"POST /ingest"| APIGW["API Gateway<br/>(HTTP API)"]
+        APIGW -->|"direct PutRecord,<br/>no Lambda"| Kinesis["Kinesis<br/>1 shard"]
         Kinesis --> ETL["ETL Lambda"]
-        ETL -->|"date-partitioned JSON"| S3Raw
+        Uploader(["Batch upload"]) -->|".txt files"| Raw
+        ETL -->|"JSON"| Raw["S3 raw/"]
     end
 
-    subgraph Enrichment["Orchestration & AI Enrichment"]
-        S3Raw -->|"Object Created"| EB["EventBridge"]
-        EB --> SF["Step Functions"]
-        SF -->|"Parallel"| Sentiment["Comprehend\nDetectSentiment"]
-        SF -->|"Parallel"| Entities["Comprehend\nDetectEntities"]
-        Sentiment --> Merge["Merge Lambda"]
-        Entities --> Merge
+    subgraph Enrich
+        Raw -->|"Object Created"| EB["EventBridge"]
+        EB --> SFN["Step Functions"]
+        SFN -->|"parallel"| Sent["Comprehend<br/>DetectSentiment"]
+        SFN -->|"parallel"| Ent["Comprehend<br/>DetectEntities"]
+        Sent --> Merge["Merge Lambda"]
+        Ent --> Merge
     end
 
-    subgraph Storage["Dual Storage"]
-        Merge --> S3P["S3 processed/"]
-        Merge --> DDB["DynamoDB\n30-day TTL"]
-        Merge --> S3C["S3 curated/\naggregate summary"]
+    subgraph Store
+        Merge --> Proc["S3 processed/"]
+        Merge --> DDB["DynamoDB<br/>30-day TTL"]
+        Merge --> Cur["S3 curated/<br/>summary JSON"]
     end
 
-    subgraph Analytics["Analytics"]
-        S3P --> Glue["Glue Crawler"]
-        Glue --> Athena["Athena"]
-        DDB -->|"~50ms"| Dash(["Dashboard\nChart.js"])
-        S3C -->|"~100ms"| Dash
-        Athena -->|"~3s"| Dash
-    end
+    Proc --> Glue["Glue crawler"] --> Athena["Athena<br/>(manual queries)"]
+    DDB --> Dash(["Dashboard"])
+    Cur --> Dash
 ```
 
-For full diagrams (sequence, state machine, storage tiers, API contract) see [docs/architecture.md](docs/architecture.md).
-
-## Technology Stack
-
-| Layer | Technologies |
-|-------|-------------|
-| **Infrastructure** | Terraform >= 1.11.0, AWS |
-| **Compute** | Lambda (Python 3.11+), Step Functions |
-| **Ingestion** | API Gateway, Kinesis Data Streams, EventBridge |
-| **AI/ML** | Comprehend (sentiment, entities) |
-| **Storage** | S3 (Data Lake), DynamoDB |
-| **Analytics** | Glue, Athena, Chart.js Dashboard |
-| **Observability** | CloudWatch, X-Ray, SQS DLQs |
-| **CI/CD** | GitHub Actions (OIDC) |
-
-## AI-Assisted Development
-
-This project was built using **Claude Code** as an AI coding assistant for infrastructure scaffolding, test generation, and documentation structure.
-
-Every generated output was reviewed, tested, and in several cases corrected or redesigned based on real failures encountered during implementation:
-
-- **DecimalEncoder** (`lambdas/merge/merge_handler.py`) — Athena queries were returning `HIVE_CURSOR_ERROR` due to Python floats serializing as scientific notation. The AI-generated handler used standard `json.dumps`. I diagnosed the root cause and built a custom `DecimalEncoder` class to normalize float representation before S3 writes.
-
-- **IAM least-privilege audit** — Initial IAM policies were over-permissive (bucket-level `s3:*`). During a dedicated security review I scoped every policy to the minimum required action and resource (e.g., S3 writes restricted to `raw/*`, `s3:PutObjectAcl` explicitly removed). Findings documented in `docs/errorlog.md`.
-
-- **Comprehend region pivot** — AI scaffolding placed Comprehend calls in `us-west-1` (same as the Terraform state bucket). Comprehend is not available in that region. I caught this during integration testing, diagnosed the cause, and redesigned the architecture so all application resources run in `us-west-2` with state backend isolated in `us-west-1`.
-
-- **CI/CD pipeline debugging** — The GitHub Actions OIDC workflow required 14+ iterations to get working end-to-end: IAM permission gaps only discoverable at runtime, tflint plugin rate limiting, deprecated action replacement. This debugging is traceable in the PR #1 commit history.
-
-The AI accelerated scaffolding and boilerplate. The architectural decisions, debugging, and security hardening are my own.
-
-## Repository Structure
-
-```
-AI-DP/
-├── bootstrap/            # Terraform config for S3 state bucket
-├── envs/                 # Environment-specific Terraform configs
-│   └── dev/             # Development environment
-├── modules/             # Reusable Terraform modules
-│   ├── data_lake/           # S3 buckets (raw/processed/curated) ✅
-│   ├── ingestion_stream/    # API Gateway, Kinesis, EventBridge ✅
-│   ├── step_functions/      # State machine + Comprehend AI ✅
-│   ├── hot_store/           # DynamoDB tables ✅
-│   ├── orchestration/       # Merge Lambda ✅
-│   ├── analytics/           # Glue crawler, Athena ✅
-│   └── observability/       # CloudWatch dashboards, alarms (Phase 9)
-├── lambdas/             # Python Lambda function code
-│   ├── etl/            # Kinesis consumer (normalize & write to S3)
-│   └── merge/          # Merge AI outputs, write to storage
-├── dashboard/          # Browser-based analytics dashboard ✅
-│   ├── index.html     # Main HTML file
-│   ├── styles.css     # Dark theme styling
-│   └── app.js         # Chart.js + AWS SDK integration
-└── docs/               # Project documentation
-```
-
-## Quick Start
-
-### Prerequisites
-
-- **Terraform** >= 1.11.0 ([Download](https://www.terraform.io/downloads))
-- **AWS CLI** configured with credentials
-- **Python** 3.11+ (for Lambda development)
-- **Git**
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/<your-username>/AI-DP.git
-cd AI-DP
-```
-
-### 2. Configure AWS Credentials
-
-```bash
-aws configure
-# Enter your AWS Access Key ID, Secret Key, and default region
-```
-
-### 3. Bootstrap Terraform Backend (First-Time Setup)
-
-Create the S3 bucket for Terraform state:
-
-```powershell
-terraform -chdir=bootstrap init
-terraform -chdir=bootstrap apply
-```
-
-This creates an S3 bucket with:
-- Versioning enabled
-- Encryption at rest (SSE-S3)
-- Native state locking (Terraform >= 1.11.0)
-
-### 4. Initialize Development Environment
-
-```powershell
-terraform -chdir=envs/dev init
-terraform -chdir=envs/dev plan
-terraform -chdir=envs/dev apply
-```
-
-
-## Development Workflow
-
-### Terraform Commands
-
-```powershell
-# Format Terraform files
-terraform -chdir=envs/dev fmt -recursive
-
-# Validate configuration
-terraform -chdir=envs/dev validate
-
-# Plan changes
-terraform -chdir=envs/dev plan -out=plan.out
-
-# Apply changes
-terraform -chdir=envs/dev apply plan.out
-
-# Destroy resources (use with caution!)
-terraform -chdir=envs/dev destroy
-```
-
-### Python Lambda Development
-
-```powershell
-# Navigate to Lambda function directory
-cd lambdas/etl
-
-# Create virtual environment
-python -m venv venv
-.\venv\Scripts\activate  # Windows
-source venv/bin/activate # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run tests
-pytest lambdas/ --cov --cov-report=term-missing
-```
-
-## Testing
-
-```powershell
-# Unit tests (33 tests, 96% coverage)
-pytest lambdas/etl/ --cov=etl_handler --cov-report=term-missing
-pytest lambdas/merge/ --cov=merge_handler --cov-report=term-missing
-
-# Run all Lambda tests with combined coverage report
-pytest lambdas/ --cov --cov-report=term-missing
-
-# Integration tests
-# See scripts/ for test utilities (load_test.py sends 1000 events via Kinesis)
-```
-
-## Project Status
-
-**Status**: ✅ **PROJECT COMPLETE** — All 10 phases done (2026-04-05)
-
-See [`docs/roadmap.md`](docs/roadmap.md) for full phase history and implementation details.
-
-### ✅ Completed Phases
-
-**Phase 0: Bootstrap Infrastructure**
-- S3 state bucket with native locking (Terraform >= 1.11.0)
-- Dev environment initialized
-
-**Phase 1: Data Lake Foundation**
-- S3 bucket: `ai-dp-data-lake-dev-us-west-2`
-- Three-layer architecture (raw/processed/curated)
-- Lifecycle policies, versioning, encryption
-
-**Phase 2: Streaming Ingestion**
-- API Gateway HTTP API + Kinesis Data Streams
-- ETL Lambda function (Python 3.11)
-- Idempotent writes (Kinesis sequence numbers as S3 filenames)
-- End-to-end tested: API → Kinesis → Lambda → S3
-
-**Phase 3: Batch Ingestion EventBridge**
-- EventBridge rule detects S3 uploads to raw/ layer
-- Filtered event pattern (prevents infinite loops)
-
-**Phase 4: Step Functions & EventBridge Wiring**
-- State machine deployed: `ai-dp-dev-orchestrator`
-- EventBridge → Step Functions integration
-- End-to-end batch path tested and verified
-
-**Phase 5: DynamoDB Hot Store**
-- DynamoDB table deployed: `ai-dp-dev-enriched-data`
-- On-demand billing, TTL (30 days), PITR enabled
-- GSI for time-based queries
-
-**Phase 6: AI Enrichment Services**
-- AWS Comprehend integrated (sentiment + entity detection)
-- Parallel execution in Step Functions
-- Real-time AI enrichment operational
-
-**Phase 7: Merge Lambda & Complete Orchestration**
-- Merge Lambda deployed: `ai-dp-dev-merge`
-- Dual storage strategy: S3 processed/ + DynamoDB
-- End-to-end pipeline fully operational (streaming + batch)
-
-**Phase 8: Analytics & Query Layer**
-- Glue Crawler + Athena: SQL queries on S3 data lake
-- Browser-based dashboard (HTML/CSS/JS + Chart.js)
-- Three-tier data strategy: Curated S3 (~100ms) + DynamoDB (~50ms) + Athena (~3s)
-- Optimized dashboard: Sentiment chart from pre-aggregated Curated S3 for instant loading
-- Responsive design: Real-time metrics, sentiment charts, entity analysis
-- Zero dependencies: Runs directly from file system or S3 static hosting
-
-**Phase 9: Production Hardening** ✅ (100% — 7/7 tasks complete)
-- ✅ Lambda unit tests (33 tests, 96% coverage)
-- ✅ Load testing (1000 events, 0% errors)
-- ✅ CloudWatch Dashboard (8 widgets) + 6 Alarms + SNS + X-Ray active tracing (both Lambdas)
-- ✅ Security Review (IAM audit, KMS, tfsec — 0 critical findings)
-- ✅ Cost Optimization ($12/month actual, 76% under $50 budget)
-- ✅ Architecture Documentation (`docs/architecture.md`) — Mermaid diagrams, sequence flows, API contract
-
-**Phase 10: CI/CD Pipeline** ✅ (100% — 6/6 tasks complete)
-- ✅ GitHub Actions OIDC role (`ai-dp-dev-github-actions`) — least-privilege IAM, Terraform-managed
-- ✅ CI workflow (`.github/workflows/ci.yml`) — fmt/validate/tflint/tfsec/plan on every PR
-- ✅ Deploy workflow (`.github/workflows/deploy.yml`) — `terraform apply` on merge to main
-- ✅ GitHub Environment (`dev`) with protection rules
-- ✅ Workflows tested end-to-end
-- ✅ CI/CD documentation (`docs/cicd.md`)
-
-## Documentation
-
-- **[Interview Walkthrough](docs/explained.md)**: How to explain this project in interviews
-- **[Error Log](docs/errorlog.md)**: Errors encountered, root causes, and fixes
-- **[Architecture](docs/architecture.md)**: Full diagrams, sequence flows, key decisions, API contract
-- **[Data Flow](docs/data_flow.md)**: End-to-end data flow with payloads and retention details
-- **[CI/CD](docs/cicd.md)**: CI/CD pipeline design and workflow documentation
-- **[Roadmap](docs/roadmap.md)**: Implementation phases and tasks
-- **[Project Overview](docs/ai-dp%20overview%20notion.md)**: Comprehensive architecture guide
-
-## Design Principles
-
-1. **NO HARDCODING**: All solutions are generic and pattern-based
-2. **ROOT CAUSE, NOT BANDAID**: Fix underlying structural issues
-3. **DATA INTEGRITY**: Use consistent, authoritative data sources
-4. **SECURITY-FIRST**: OIDC authentication, least-privilege IAM, no long-term credentials
-5. **ENVIRONMENT ISOLATION**: Infrastructure designed for multi-environment deployment (dev active)
-
-## CI/CD Pipeline
-
-Two GitHub Actions workflows handle the full CI/CD lifecycle:
-
-- **CI** (`.github/workflows/ci.yml`): Runs on every PR — fmt, validate, tflint, tfsec, plan. Posts plan output as PR comment.
-- **Deploy** (`.github/workflows/deploy.yml`): Runs on merge to `main` — plan + `terraform apply`. Posts plan to job summary.
-
-**Authentication:** GitHub OIDC — no long-term AWS credentials stored anywhere. See [`docs/cicd.md`](docs/cicd.md) for full documentation.
-
-## Cost Optimization
-
-- S3 lifecycle policies (IA → Glacier → expiration)
-- DynamoDB on-demand pricing + TTL auto-cleanup
-- Athena partition pruning (90%+ cost reduction)
-- Kinesis single-shard for dev (scale as needed)
-- Separate Athena results bucket with 7-day lifecycle
+Streaming reviews hit API Gateway, which writes straight into Kinesis through a service integration with no Lambda in between. The ETL Lambda reads from Kinesis, validates and normalizes each event, and writes it to `raw/` as JSON. Batch uploads land in `raw/` directly as plain text. Both paths meet at that point: an EventBridge rule on `raw/` starts one Step Functions execution per file. The execution calls Comprehend's sentiment and entity APIs in parallel, then the merge Lambda writes the result to S3 `processed/` (for Athena), DynamoDB (for the dashboard's recent-events table), and a running summary in `curated/` (for the dashboard's totals and chart).
+
+## Tech stack
+
+| Piece | Why I chose it |
+|---|---|
+| **Terraform** (S3 backend, native lockfile) | Everything is defined in code across 9 modules. State lives in S3 with `use_lockfile`, so no DynamoDB lock table. |
+| **API Gateway HTTP API** | It can write to Kinesis with no code through the `Kinesis-PutRecord` integration. |
+| **Kinesis Data Streams** | Buffers bursts in front of the Lambda. I'd never used it and wanted the experience. At this volume, SQS would have been enough. |
+| **Step Functions** | Calls Comprehend through its SDK integration, so there's no Lambda or cold start for that step. Runs sentiment and entities in parallel, and shows each state's input and output, which is how I debugged my JSONPath. |
+| **Amazon Comprehend** | Managed sentiment and entity detection, with no model to train or host. |
+| **DynamoDB** | Small, short-lived (30-day TTL) data the dashboard can query newest-first through a GSI. |
+| **S3 data lake** | `raw/` → `processed/` → `curated/` layers, each with its own lifecycle rules (IA, then Glacier, then expiry). |
+| **Glue + Athena** | SQL over `processed/` for historical questions. Queried by hand; the dashboard doesn't call it. |
+| **CloudWatch, X-Ray, SNS** | 6 alarms emailed through SNS, an 8-widget dashboard, and active tracing on both Lambdas. |
+| **GitHub Actions + OIDC** | CI and deploy without stored AWS keys. |
+
+## Design decisions and tradeoffs
+
+- **Step Functions instead of chaining Lambdas.** The SDK integration removed a Lambda whose only job would have been calling Comprehend, and the per-state input/output view made debugging much faster. The tradeoff is a second language to learn (Amazon States Language and JSONPath).
+- **Two stores for two jobs.** DynamoDB holds a small, expiring copy for fast dashboard reads. S3 holds everything long-term, cheaply, with lifecycle tiers. Every record is written to both, which means two writes that can partly fail. The merge Lambda writes S3 first, so DynamoDB failures still leave the record in S3.
+- **Dashboard totals come from a pre-computed summary file**, not from counting DynamoDB items. The table query only returns the latest 50 records, and a full count would mean a table scan on every refresh.
+- **Conditional writes instead of an atomic counter** for that summary (see Challenges). Claude suggested both. I chose ETag conditional writes because it was the smaller change. It makes lost updates rare, not impossible. A DynamoDB `ADD` counter is the right fix at higher write rates.
+- **Provisioned Kinesis (1 shard) instead of on-demand.** One shard cost $11.16 in August 2026; on-demand billed about $29/month for the same near-zero traffic. The mode is a variable, so I can switch to on-demand for a load test and back.
+- **No Athena on the dashboard.** The chart reads a small JSON file instead of paying Athena's latency and per-query cost on every page load.
+
+## Challenges and fixes
+
+| Problem | What I saw | Fix | Commit |
+|---|---|---|---|
+| **Comprehend isn't offered in us-west-1** | Step Functions failed with `UNSUPPORTED_OPERATION: This operation is not supported in this region`. | Moved all application resources to us-west-2 and left the state bucket in us-west-1. Moving the state bucket wouldn't have helped, because what mattered was where Comprehend runs. Lesson: check service availability by region before choosing one. | [`47e2bdd`](https://github.com/CloudMikey/ai-dp/commit/47e2bdd) |
+| **Athena `HIVE_CURSOR_ERROR`** | Queries over `processed/` failed. Tiny confidence scores were being written in scientific notation (`3.68e-06`), which the OpenX JSON SerDe can't parse inside nested structs. | Wrote a custom JSON encoder that writes floats as plain decimals. I didn't log this in `docs/errorlog.md` at the time, which I'd do differently. | [`9d76251`](https://github.com/CloudMikey/ai-dp/commit/9d76251) |
+| **Lost updates in the dashboard summary** | Sending test records, I saw 9 records stored but the summary reading 7. Concurrent merge Lambdas each read, changed, and rewrote the same S3 object, so later writes overwrote earlier ones. | Conditional `PutObject` (`IfMatch` on the ETag, `IfNoneMatch='*'` on create) with jittered retries. Re-ran the same test: 17 records, summary reads 17, with real `PreconditionFailed` retries in the logs. Also added `scripts/rebuild_summary.py` to recompute it from DynamoDB. | [`0716b71`](https://github.com/CloudMikey/ai-dp/commit/0716b71) |
+| **Empty text previews for batch uploads** | Batch files are plain text, but the preview code assumed JSON. The parse error was swallowed by a broad `except`, so previews were silently blank. Unnoticed for months because only the streaming path had been tested. | Fall back to the raw body on `JSONDecodeError`. | [`0716b71`](https://github.com/CloudMikey/ai-dp/commit/0716b71) |
+| **Kinesis bill jumped from ~$12 to ~$29/month** | I'd switched the stream to on-demand for a load test and never switched it back. I caught it on my bill. | Made the capacity mode a variable defaulting to provisioned, and reverted. | [`bec4044`](https://github.com/CloudMikey/ai-dp/commit/bec4044) |
+| **Unneeded `s3:PutObjectAcl` on the ETL role** | Not found by me. An AI-assisted audit flagged it. | Verified the Lambda didn't need it and removed it. | [`b55a9ce`](https://github.com/CloudMikey/ai-dp/commit/b55a9ce) |
+| **CI deploy role missing permissions** | Each `terraform plan` in CI failed on the next missing read permission. | Added them to the role's policy one at a time (the `ci: re-trigger after adding …` commits in PR #1). | [PR #1](https://github.com/CloudMikey/ai-dp/pull/1) |
 
 ## Security
 
-- All data encrypted at rest (S3 SSE-AES256, DynamoDB)
-- TLS/HTTPS enforced via bucket policies
-- IAM least-privilege roles (scoped to specific prefixes)
-- Public access blocked on all S3 buckets
-- SQS DLQs for error handling and retry
-- Point-in-time recovery enabled on DynamoDB
+- **No stored AWS keys in CI/CD.** GitHub Actions gets short-lived credentials through OIDC. The role's trust policy is limited to this repo (`repo:CloudMikey/ai-dp:*`).
+- **The deploy role's permission policy is managed in the AWS Console, not Terraform.** I did this on purpose to get hands-on time with IAM in the Console. The downside is that the policy can't be reviewed or recreated from this repo. If I started over, it would be in Terraform from day one.
+- **Pipeline IAM is scoped per role and per S3 prefix.** For example, ETL can only `PutObject` to `raw/*`, and merge can only `PutItem` to its one table. The remaining `Resource: "*"` statements are for actions AWS doesn't let you scope (Comprehend, X-Ray writes, Step Functions log delivery), and each has a comment saying so.
+- **Encryption and access:** SSE-S3 on the data lake, KMS on Kinesis, TLS-only bucket policy, and S3 Block Public Access on.
+- **State:** remote in S3, encrypted, with native locking. tfsec runs in CI. Accepted exceptions (mostly customer-managed KMS keys, skipped for cost in dev) are listed with reasons in `.tfsec.yml`.
+- **Known gaps** (fine for a short-lived demo, not for real use):
+  - The `/ingest` endpoint has no authentication or throttling.
+  - The local dashboard uses static IAM user keys from a gitignored `config.js`. Cognito Identity Pools or a small backend API would replace them.
+  - Early on I committed a binary Terraform plan file (`envs/dev/tfplan`). Plan files embed the full state, including resource ARNs and my account ID. I removed it and fixed the `.gitignore` rule that missed it in [`eb1472d`](https://github.com/CloudMikey/ai-dp/commit/eb1472d), but it is still in older commits.
 
-## Contributing
+## Cost
 
-This is a personal portfolio project. Contributions, suggestions, and feedback are welcome!
+**$11.16 in August 2026**, from AWS Cost Explorer. It was about $29/month while the stream was accidentally left on-demand.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- **Kinesis is the whole bill.** The single provisioned shard is billed every hour whether or not data flows. Lambda, Step Functions, Comprehend, DynamoDB, and S3 all showed $0.00 at this volume.
+- My account also shows $0.51 for Route 53, which isn't part of this project.
+- A $50/month AWS Budget emails an alert before costs get out of hand.
 
-## License
+## Deploy it
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+**Prerequisites:** Terraform >= 1.11 (CI uses 1.13.0), AWS CLI with admin-level credentials, Python 3.11, and an AWS account where Comprehend is available in us-west-2.
 
-## Acknowledgments
+1. **Create the state bucket** (one time):
+   ```bash
+   cp bootstrap/terraform.tfvars.example bootstrap/terraform.tfvars   # set aws_account_id
+   terraform -chdir=bootstrap init && terraform -chdir=bootstrap apply
+   ```
+2. **Point the dev environment at it:**
+   ```bash
+   cp "envs/dev/backend-dev.hcl copy.example" envs/dev/backend-dev.hcl   # set bucket = bootstrap output
+   echo 'alarm_email = "you@example.com"' > envs/dev/terraform.tfvars
+   ```
+3. **GitHub OIDC provider:** `envs/dev/cicd.tf` looks up an existing GitHub OIDC provider in the account. In an account without one, `plan` fails. Create the provider first, or delete `cicd.tf` if you don't need CI/CD.
+4. **Deploy:**
+   ```bash
+   terraform -chdir=envs/dev init -backend-config=backend-dev.hcl
+   terraform -chdir=envs/dev apply
+   ```
+   Then confirm the SNS subscription email so the alarms can reach you.
+5. **Try it:**
+   ```bash
+   curl -X POST "$(terraform -chdir=envs/dev output -raw api_gateway_invoke_url)/ingest" \
+     -H "Content-Type: application/json" -H "X-Partition-Key: test" \
+     -d '{"event_type":"review","event_timestamp":"2026-10-04T12:00:00Z","text":"Fast shipping, great product."}'
+   aws s3 cp review.txt s3://$(terraform -chdir=envs/dev output -raw data_lake_bucket_name)/raw/batch/review.txt   # plain text, under 5,000 bytes
+   ```
 
-- AWS Architecture Center for best practices
-- HashiCorp Terraform documentation
-- AWS Serverless examples and patterns
+**Teardown:** both the data lake and the Athena results bucket have versioning on and no `force_destroy`, so `terraform destroy` fails until they're empty. Empty them first, including old versions (the S3 console's **Empty** button does this), then run `terraform -chdir=envs/dev destroy`, and destroy `bootstrap/` last.
 
----
+## Limitations and what I'd change
 
-**Built with AWS, Terraform, and Python** | **Portfolio Project for Cloud Engineering Roles**
+- **On the streaming path, Comprehend scores the whole JSON envelope**, not just the review. The ETL Lambda writes the full event (timestamps, field names, Lambda name) to `raw/`, and Step Functions passes the whole file to Comprehend. Sentiment and entities are therefore computed partly on metadata. The dashboard filters out timestamp "entities" to hide the symptom. The fix is deciding what text each path sends before building it.
+- **The merge Lambda's DLQ never receives anything.** Its `dead_letter_config` only applies to asynchronous invocations, and Step Functions calls it synchronously, so failures go to the state machine's `Catch` instead. The DLQ and its alarm should be removed. See [`docs/runbooks.md`](docs/runbooks.md).
+- **No retries on the Comprehend steps**, so a throttled call fails the execution.
+- **Batch files must be under 5,000 bytes** (Comprehend's sentiment limit), and nothing enforces that.
+- **If I started over:** check which regions each service is available in before picking one, use SQS instead of Kinesis at this volume, decide what text each ingestion path sends to Comprehend before building, and put the CI deploy policy in Terraform from day one.
+
+## How I used AI
+
+I built this with Claude Code. It helped me plan the phases, wrote much of the Terraform and Python, and helped me debug. As a beginner on a project this size, I accepted more of its suggestions than I should have, and the Python and test suite are more elaborate than the project needed. I chose the services, ran every deployment, and found the bugs in the Challenges section by testing the pipeline myself. The `s3:PutObjectAcl` permission is the exception: an AI-assisted audit caught that one, not me.
