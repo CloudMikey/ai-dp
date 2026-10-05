@@ -1,4 +1,4 @@
-﻿# Merge Lambda execution role
+# Merge Lambda execution role
 # Reads Comprehend outputs (raw/) + writes enriched data to dual storage (DynamoDB + S3 curated/)
 # Scoped: no read from processed/, no access to other buckets
 

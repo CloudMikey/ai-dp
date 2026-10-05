@@ -1,4 +1,4 @@
-﻿output "budget_id" {
+output "budget_id" {
   description = "ID of the AWS Budget"
   value       = aws_budgets_budget.monthly_cost.id
 }

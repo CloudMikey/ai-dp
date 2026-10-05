@@ -84,9 +84,8 @@ jobs:
             -backend-config="use_lockfile=true"
 
       # ── 7. Terraform Format Check ────────────────────────────────────────────
-      # -recursive checks modules/ as well as envs/dev/
+      # Runs from the repo root: envs/dev alone would skip modules/ and bootstrap/
       - name: Terraform Format Check
-        working-directory: ${{ env.WORKING_DIR }}
         run: terraform fmt -check -recursive
 
       # ── 8. Terraform Validate ────────────────────────────────────────────────

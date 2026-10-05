@@ -115,7 +115,7 @@
   - Created `ai-dp-dev-github-actions` role with least-privilege inline policy
   - Trust scoped to `repo:CloudMikey/AI-DP:*`
   - Imported into Terraform state (`envs/dev/cicd.tf`)
-  - Role ARN: `arn:aws:iam::061039801477:role/ai-dp-dev-github-actions`
+  - Role ARN: `arn:aws:iam::<ACCOUNT_ID>:role/ai-dp-dev-github-actions`
 - **Task 2 ✅ (2026-04-05):** CI Workflow — Pull Request Validation
   - Created `.github/workflows/ci.yml` — triggers on all PRs to `main`
   - Pipeline: checkout → Terraform v1.13.0 setup → OIDC auth → init → fmt -check → validate → tflint → tfsec → plan → PR comment

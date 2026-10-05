@@ -1,4 +1,4 @@
-﻿# Exports bucket information for use by other modules (ingestion, processing, analytics)
+# Exports bucket information for use by other modules (ingestion, processing, analytics)
 
 output "bucket_name" {
   description = "Name of the data lake S3 bucket"

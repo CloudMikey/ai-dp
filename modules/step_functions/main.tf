@@ -1,4 +1,4 @@
-﻿# Batch processing workflow: S3 raw/ → EventBridge → Step Functions → Comprehend → Merge Lambda
+# Batch processing workflow: S3 raw/ → EventBridge → Step Functions → Comprehend → Merge Lambda
 
 locals {
   resource_prefix    = "${var.project_name}-${var.environment}"

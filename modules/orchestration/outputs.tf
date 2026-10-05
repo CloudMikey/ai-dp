@@ -1,4 +1,4 @@
-﻿output "lambda_function_arn" {
+output "lambda_function_arn" {
   description = "ARN of Merge Lambda function (for Step Functions invocation)"
   value       = aws_lambda_function.merge.arn
 }

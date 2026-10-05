@@ -34,8 +34,9 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Terraform plan files
+# Terraform plan files (binary plans embed the full state)
 *.tfplan
+tfplan
 plan.out
 
 # Terraform crash log files
@@ -207,6 +208,12 @@ mock-data/
 # Local scripts (user-specific utilities)
 local/
 scratch/
+
+# Personal AI tooling config (local paths, per-user permissions)
+.mcp.json
+.serena/
+.claude/settings.local.json
+.claude/agents/recruiter-review.md
 
 # Gemini CLI specific files (removed from project)
 GEMINI.md

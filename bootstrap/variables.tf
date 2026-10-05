@@ -1,4 +1,4 @@
-﻿variable "aws_region" {
+variable "aws_region" {
   description = "AWS region for the S3 state bucket"
   type        = string
 }

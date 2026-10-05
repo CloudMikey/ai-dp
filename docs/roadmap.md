@@ -632,7 +632,7 @@
 - Trust policy scoped to `repo:CloudMikey/AI-DP:*` — only this repo can assume the role
 - Policy covers all project services with ARN-scoped permissions (`ai-dp-*` prefix where supported)
 - Role imported into Terraform state via `terraform import` (`envs/dev/cicd.tf`)
-- Role ARN: `arn:aws:iam::061039801477:role/ai-dp-dev-github-actions`
+- Role ARN: `arn:aws:iam::<ACCOUNT_ID>:role/ai-dp-dev-github-actions`
 
 **Complete when:** GitHub Actions can assume each role, trust policies validated
 

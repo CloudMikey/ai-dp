@@ -1,4 +1,4 @@
-﻿resource "aws_iam_role" "glue_crawler" {
+resource "aws_iam_role" "glue_crawler" {
   name        = "${var.project_name}-${var.environment}-glue-crawler-role"
   description = "IAM role for Glue Crawler to access S3 and Glue Data Catalog"
 

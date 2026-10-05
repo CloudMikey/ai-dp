@@ -1,4 +1,4 @@
-﻿variable "environment" {
+variable "environment" {
   description = "Environment name (dev, stg, prod)"
   type        = string
   validation {
@@ -64,9 +64,9 @@ variable "curated_layer_lifecycle" {
     expiration_days            = number
   })
   default = {
-    transition_to_ia_days      = 0  # 0 means disabled
-    transition_to_glacier_days = 0  # 0 means disabled
-    expiration_days            = 0  # 0 means disabled
+    transition_to_ia_days      = 0 # 0 means disabled
+    transition_to_glacier_days = 0 # 0 means disabled
+    expiration_days            = 0 # 0 means disabled
   }
 }
 
