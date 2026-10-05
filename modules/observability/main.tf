@@ -132,8 +132,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
           period = 300
           stat   = "Maximum"
           metrics = [
-            ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", var.etl_dlq_name, { label = "ETL DLQ", color = "#d62728" }],
-            ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", var.merge_dlq_name, { label = "Merge DLQ", color = "#ff7f0e" }]
+            ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", var.etl_dlq_name, { label = "ETL DLQ", color = "#d62728" }]
           ]
         }
       },

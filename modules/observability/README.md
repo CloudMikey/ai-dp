@@ -12,7 +12,7 @@ Creates a CloudWatch operational dashboard for the AI-DP pipeline.
 | Kinesis Incoming Records | Records ingested per period |
 | Kinesis Iterator Age | Consumer lag in milliseconds |
 | Step Functions Executions | Started, Succeeded, Failed counts |
-| DLQ Depth | Messages visible in ETL + Merge DLQs |
+| DLQ Depth | Messages visible in the ETL DLQ |
 | DynamoDB Capacity | Consumed read/write capacity units |
 
 ## Usage
@@ -32,6 +32,5 @@ module "observability" {
   state_machine_arn          = module.step_functions.state_machine_arn
   dynamodb_table_name        = module.hot_store.table_name
   etl_dlq_name               = module.ingestion_stream.dlq_name
-  merge_dlq_name             = module.orchestration.dlq_name
 }
 ```

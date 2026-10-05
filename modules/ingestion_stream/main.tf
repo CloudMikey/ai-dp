@@ -192,10 +192,6 @@ resource "aws_lambda_function" "etl" {
     }
   }
 
-  dead_letter_config {
-    target_arn = aws_sqs_queue.etl_dlq.arn
-  }
-
   # X-Ray active tracing: per-invocation latency timeline + downstream AWS SDK call segments
   dynamic "tracing_config" {
     for_each = var.enable_xray_tracing ? [1] : []

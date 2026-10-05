@@ -209,9 +209,9 @@ Three data sources feed the dashboard, each with different latency and query com
 | Signal | Where |
 |--------|-------|
 | ETL Lambda failures | SQS DLQ: `ai-dp-dev-etl-dlq` + CloudWatch Logs |
-| Merge Lambda failures | SQS DLQ: `ai-dp-dev-merge-dlq` + CloudWatch Logs |
+| Merge Lambda failures | Step Functions `MergeFailed` state + CloudWatch Logs (`/aws/lambda/ai-dp-dev-merge`) |
 | Step Functions failures | CloudWatch Logs: `/aws/states/ai-dp-dev-orchestrator` |
 | Pipeline metrics | CloudWatch Dashboard: `ai-dp-dev-operations` |
-| Threshold alerts | 6 CloudWatch Alarms → SNS → email |
+| Threshold alerts | 5 CloudWatch Alarms → SNS → email |
 
 **Key alarms:** Lambda error rate > 5%, Kinesis iterator age > 60s, Step Functions failure count > 0, DLQ message count > 0.

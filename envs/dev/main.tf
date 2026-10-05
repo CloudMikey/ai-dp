@@ -210,11 +210,10 @@ module "observability" {
   # DynamoDB
   dynamodb_table_name = module.hot_store.table_name
 
-  # Dead Letter Queues
-  etl_dlq_name   = module.ingestion_stream.dlq_name
-  merge_dlq_name = module.orchestration.dlq_name
+  # Dead Letter Queue (streaming path; batch failures surface as Step Functions failures)
+  etl_dlq_name = module.ingestion_stream.dlq_name
 
-  # SNS email notifications for the 6 operational alarms
+  # SNS email notifications for the 5 operational alarms
   alarm_notification_emails = [var.alarm_email]
 
   tags = {

@@ -79,12 +79,10 @@ flowchart TD
 
     subgraph Observability["Observability"]
         ETLDLQ["SQS DLQ\nai-dp-dev-etl-dlq"]
-        MergeDLQ["SQS DLQ\nai-dp-dev-merge-dlq"]
-        CW["CloudWatch\nDashboard + 6 Alarms"]
+        CW["CloudWatch\nDashboard + 5 Alarms"]
         SNS["SNS Topic\n→ Email alerts"]
 
         ETL -.->|"Failed records"| ETLDLQ
-        Merge -.->|"Failed invocations"| MergeDLQ
         SF -.->|"Metrics & logs"| CW
         CW -.->|"Threshold breach"| SNS
     end
@@ -224,7 +222,7 @@ flowchart TD
     H -->|Catch: States.ALL| J
 
     I(["MergeComplete\nSucceed"])
-    J(["MergeFailed\nFail — check DLQ + CloudWatch"])
+    J(["MergeFailed\nFail — error in execution history + merge logs"])
 ```
 
 **Retry policy on ReadS3Object, DetectSentiment, DetectEntities:** errors a retry can't fix (`Comprehend.TextSizeLimitExceededException`, `InvalidRequestException`, `UnsupportedLanguageException`, `S3.NoSuchKeyException`, `S3.InvalidObjectStateException`) fail immediately; every other task failure (throttling, 5xx) retries 3 times from 2s with backoff 2.0 and full jitter.
@@ -394,11 +392,10 @@ All resources deployed in `us-west-2` (except state bucket in `us-west-1`).
 | Resource | Name | Config |
 |----------|------|--------|
 | CloudWatch Dashboard | `ai-dp-dev-operations` | 8 widgets: Lambda, Kinesis, Step Functions, DLQ, DynamoDB |
-| CloudWatch Alarms | 6 alarms | Lambda errors, DLQ depth, Kinesis lag, Step Functions failures |
+| CloudWatch Alarms | 5 alarms | Lambda errors, ETL DLQ depth, Kinesis lag, Step Functions failures |
 | SNS Topic | `ai-dp-dev-cloudwatch-alarms` | Email subscription for alarm notifications |
 | X-Ray Tracing | Active mode (both Lambdas) | Per-invocation latency timelines + downstream call segments (S3, DynamoDB, Comprehend) |
 | SQS DLQ (ETL) | `ai-dp-dev-etl-dlq` | 14-day retention |
-| SQS DLQ (Merge) | `ai-dp-dev-merge-dlq` | 14-day retention |
 | AWS Budget | `ai-dp-dev-monthly-budget` | $50/month, alerts at 80% / 100% actual / 100% forecast |
 
 ### CI/CD

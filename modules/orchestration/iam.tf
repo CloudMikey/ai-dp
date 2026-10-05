@@ -124,22 +124,3 @@ resource "aws_iam_role_policy" "xray_write" {
     ]
   })
 }
-
-# DLQ error handling: failed Step Functions invocations are retained for replay/debugging
-resource "aws_iam_role_policy" "dlq_write" {
-  name = "${local.resource_prefix}-merge-dlq-write"
-  role = aws_iam_role.merge_lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "sqs:SendMessage"
-        ]
-        Resource = aws_sqs_queue.merge_dlq.arn
-      }
-    ]
-  })
-}

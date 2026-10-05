@@ -52,11 +52,6 @@ variable "etl_dlq_name" {
   type        = string
 }
 
-variable "merge_dlq_name" {
-  description = "Name of the Merge Dead Letter Queue"
-  type        = string
-}
-
 variable "alarm_notification_emails" {
   description = "List of email addresses to receive CloudWatch alarm notifications"
   type        = list(string)

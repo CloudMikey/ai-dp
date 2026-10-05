@@ -49,7 +49,7 @@ AI-DP/
 | Glue Database | `ai-dp-dev-analytics` | ✅ |
 | Athena Workgroup | `ai-dp-dev-workgroup` | ✅ |
 | CloudWatch Dashboard | `ai-dp-dev-operations` | ✅ |
-| CloudWatch Alarms | 6 alarms + SNS topic | ✅ |
+| CloudWatch Alarms | 5 alarms + SNS topic | ✅ |
 | AWS Budget | `ai-dp-dev-monthly-budget` ($50/month) | ✅ |
 | GitHub Actions OIDC Role | `ai-dp-dev-github-actions` | ✅ |
 

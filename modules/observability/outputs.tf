@@ -24,7 +24,6 @@ output "alarm_names" {
     aws_cloudwatch_metric_alarm.etl_lambda_error_rate.alarm_name,
     aws_cloudwatch_metric_alarm.merge_lambda_error_rate.alarm_name,
     aws_cloudwatch_metric_alarm.etl_dlq_depth.alarm_name,
-    aws_cloudwatch_metric_alarm.merge_dlq_depth.alarm_name,
     aws_cloudwatch_metric_alarm.kinesis_iterator_age.alarm_name,
     aws_cloudwatch_metric_alarm.step_functions_failures.alarm_name
   ]

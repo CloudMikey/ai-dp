@@ -238,7 +238,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
 
       MergeFailed = {
         Type    = "Fail"
-        Comment = "Merge Lambda failed - check DLQ and CloudWatch Logs for details"
+        Comment = "Merge Lambda failed - error and cause are in this execution's history and the merge Lambda logs"
         Error   = "MergeLambdaError"
         Cause   = "Lambda invocation failed after retries"
       }

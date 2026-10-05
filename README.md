@@ -50,7 +50,7 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
 | **DynamoDB** | Small, short-lived (30-day TTL) data the dashboard can query newest-first through a GSI. |
 | **S3 data lake** | `raw/` → `processed/` → `curated/` layers, each with its own lifecycle rules (IA, then Glacier, then expiry). |
 | **Glue + Athena** | SQL over `processed/` for historical questions. Queried by hand; the dashboard doesn't call it. |
-| **CloudWatch, X-Ray, SNS** | 6 alarms emailed through SNS, an 8-widget dashboard, and active tracing on both Lambdas. |
+| **CloudWatch, X-Ray, SNS** | 5 alarms emailed through SNS, an 8-widget dashboard, and active tracing on both Lambdas. |
 | **GitHub Actions + OIDC** | CI and deploy without stored AWS keys. |
 
 ## Design decisions and tradeoffs
@@ -128,7 +128,7 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
 ## Limitations and what I'd change
 
 - **Comprehend used to score the whole JSON envelope on the streaming path**, timestamps and field names included, and the dashboard filtered out timestamp "entities" to hide the symptom. Step Functions now parses `.json` events and sends only the `text` field; events without one stop before Comprehend. Records written before the fix still carry the old scores.
-- **The merge Lambda's DLQ never receives anything.** Its `dead_letter_config` only applies to asynchronous invocations, and Step Functions calls it synchronously, so failures go to the state machine's `Catch` instead. The DLQ and its alarm should be removed. See [`docs/runbooks.md`](docs/runbooks.md).
+- **I had a DLQ on the merge Lambda that could never receive anything.** A Lambda `dead_letter_config` only applies to asynchronous invocations, and Step Functions calls the merge Lambda synchronously, so failures go to the state machine's `Catch`. I removed the queue and its alarm; batch failures are covered by the Step Functions failure alarm and [`docs/runbooks.md`](docs/runbooks.md).
 - **Batch files must be under 5,000 bytes** (Comprehend's sentiment limit), and nothing enforces that.
 - **If I started over:** check which regions each service is available in before picking one, use SQS instead of Kinesis at this volume, decide what text each ingestion path sends to Comprehend before building, and put the CI deploy policy in Terraform from day one.
 

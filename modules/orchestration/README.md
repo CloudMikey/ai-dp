@@ -7,7 +7,7 @@ Creates the Merge Lambda function that combines AI enrichment results and implem
 The orchestration module completes the data pipeline by:
 - **Merging AI outputs**: Combines sentiment analysis and entity extraction results from Amazon Comprehend
 - **Dual-write pattern**: Writes enriched data to both S3 `processed/` (historical analytics) and DynamoDB (real-time queries)
-- **Error handling**: SQS Dead Letter Queue captures failed invocations for debugging and replay
+- **Error handling**: failures surface to Step Functions, which retries transient Lambda errors and routes the rest to `MergeFailed`
 - **Metadata enrichment**: Adds processing timestamps, Lambda version info, and record versioning
 
 ## Architecture
@@ -41,13 +41,12 @@ Returns success with both storage locations
 3. **Enrich metadata**: Adds `processed_at`, `lambda_version`, `record_version`
 4. **Date partition**: Writes to S3 `processed/year=YYYY/month=MM/day=DD/`
 5. **Set TTL**: Calculates `expiresAt` for DynamoDB auto-deletion (30 days default)
-6. **Error handling**: Sends failed records to SQS DLQ after 3 retries
+6. **Error handling**: Raises on failure so Step Functions can retry or catch it
 
 ## Features
 
 - **Dual Storage Strategy**: S3 for cost-effective historical queries, DynamoDB for fast real-time access
-- **Automatic Retries**: Lambda retries transient failures 3 times before sending to DLQ
-- **Dead Letter Queue**: 14-day retention for debugging and replay
+- **Retries**: Step Functions retries `Lambda.ServiceException` / `Lambda.TooManyRequestsException` 3 times with backoff
 - **CloudWatch Logs**: All invocations logged for debugging (7-day retention default)
 - **Least-Privilege IAM**: Scoped permissions (read `raw/*`, write `processed/*`, PutItem to DynamoDB)
 - **Environment Variables**: Configurable bucket names, prefixes, TTL, log levels
@@ -104,8 +103,6 @@ module "orchestration" {
 | lambda_function_arn | ARN of Merge Lambda (used by Step Functions) |
 | lambda_function_name | Lambda function name |
 | lambda_role_arn | IAM role ARN for Lambda execution |
-| dlq_url | SQS Dead Letter Queue URL (for monitoring) |
-| dlq_arn | SQS Dead Letter Queue ARN |
 | cloudwatch_log_group_name | CloudWatch Log Group name |
 
 ## Lambda Function Details
@@ -150,15 +147,6 @@ module "orchestration" {
   "Effect": "Allow",
   "Action": ["dynamodb:PutItem"],
   "Resource": "arn:aws:dynamodb:region:account:table/ai-dp-dev-enriched-data"
-}
-```
-
-### SQS (DLQ only)
-```json
-{
-  "Effect": "Allow",
-  "Action": ["sqs:SendMessage"],
-  "Resource": "arn:aws:sqs:region:account:ai-dp-dev-merge-dlq"
 }
 ```
 
@@ -229,41 +217,15 @@ s3://ai-dp-data-lake-dev-us-west-2/processed/
 
 ## Error Handling
 
-### Retry Strategy
+Step Functions invokes this Lambda **synchronously**, so a Lambda dead-letter queue would never receive anything (`dead_letter_config` only applies to asynchronous invocations). Failures are handled by the state machine:
 
-Lambda automatically retries on transient failures:
-1. **1st attempt**: Immediate execution
-2. **2nd attempt**: After 2 seconds (if transient error)
-3. **3rd attempt**: After 4 seconds (if transient error)
-4. **DLQ**: After 3 failed attempts, message sent to SQS DLQ
+1. **Retry**: `Lambda.ServiceException` and `Lambda.TooManyRequestsException` are retried 3 times (2s, then backoff 2.0).
+2. **Catch**: anything else, or retries exhausted, routes the execution to the `MergeFailed` state.
+3. **Alert**: failed executions trigger the `step-functions-failures` alarm. See `docs/runbooks.md` (3d and 5) to inspect and replay them.
 
-**Transient Errors** (retriable):
-- `S3.ServiceException`
-- `DynamoDB.ProvisionedThroughputExceededException`
-- Network timeouts
-
-**Non-Transient Errors** (immediate DLQ):
-- Validation errors (missing fields)
-- S3 object not found
-- Malformed JSON
+The curated-summary update is the one non-fatal step: if it fails, the record is still in S3 and DynamoDB, and `scripts/rebuild_summary.py` can recompute the summary.
 
 ### Monitoring Failed Invocations
-
-**Check DLQ depth**:
-```powershell
-aws sqs get-queue-attributes `
-  --queue-url https://sqs.us-west-2.amazonaws.com/123456789012/ai-dp-dev-merge-dlq `
-  --attribute-names ApproximateNumberOfMessages `
-  --region us-west-2
-```
-
-**Read DLQ messages**:
-```powershell
-aws sqs receive-message `
-  --queue-url https://sqs.us-west-2.amazonaws.com/123456789012/ai-dp-dev-merge-dlq `
-  --max-number-of-messages 10 `
-  --region us-west-2
-```
 
 **View Lambda errors in CloudWatch**:
 ```powershell
