@@ -105,7 +105,7 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
    ```
 2. **Point the dev environment at it:**
    ```bash
-   cp "envs/dev/backend-dev.hcl copy.example" envs/dev/backend-dev.hcl   # set bucket = bootstrap output
+   cp envs/dev/backend-dev.hcl.example envs/dev/backend-dev.hcl   # set bucket = bootstrap output
    echo 'alarm_email = "you@example.com"' > envs/dev/terraform.tfvars
    ```
 3. **CI/CD role (optional):** `envs/dev/cicd.tf` creates the GitHub Actions deploy role and expects a GitHub OIDC provider to already exist in the account. If you don't need CI/CD, add `enable_github_oidc = false` to `terraform.tfvars`.
