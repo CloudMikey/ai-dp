@@ -256,6 +256,20 @@ class TestMergeAiResults:
         assert result['entities'] == ['Amazon']
         assert {d['Text'] for d in result['entityDetails']} == {'Amazon', '00:00', '3770'}
 
+    @mock_aws
+    def test_merged_at_is_valid_iso8601(self, set_env_vars):
+        """mergedAt is a single UTC 'Z' timestamp, not '+00:00Z'."""
+        result = merge_handler.merge_ai_results(
+            {'bucket': 'test-data-lake-bucket', 'key': 'raw/test.txt'},
+            {},
+            {'timestamp': '2026-01-25T12:00:00Z'}
+        )
+
+        merged_at = result['mergedAt']
+        assert merged_at.endswith('Z')
+        assert '+00:00' not in merged_at
+        datetime.fromisoformat(merged_at)  # raises on '+00:00Z'
+
 
 class TestWriteToS3Processed:
     """Tests for S3 processed layer writes."""

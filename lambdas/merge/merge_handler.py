@@ -227,7 +227,7 @@ def merge_ai_results(source_object: Dict[str, Any], ai_enrichment: Dict[str, Any
         'entityDetails': entity_details,
         'rawDataLocation': f"s3://{source_object.get('bucket')}/{source_object.get('key')}",
         'processingMetadata': processing_metadata,
-        'mergedAt': datetime.now(timezone.utc).isoformat() + 'Z',
+        'mergedAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
         'lambdaVersion': os.environ.get('AWS_LAMBDA_FUNCTION_VERSION', 'unknown'),
         'lambdaName': os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'unknown')
     }
