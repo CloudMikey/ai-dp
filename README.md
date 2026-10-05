@@ -82,7 +82,7 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
 - **Encryption and access:** SSE-S3 on the data lake, KMS on Kinesis, TLS-only bucket policy, and S3 Block Public Access on.
 - **State:** remote in S3, encrypted, with native locking. tfsec runs in CI. Accepted exceptions (mostly customer-managed KMS keys, skipped for cost in dev) are listed with reasons in `.tfsec.yml`.
 - **Known gaps** (fine for a short-lived demo, not for real use):
-  - The `/ingest` endpoint has no authentication or throttling.
+  - The `/ingest` endpoint has no authentication. It is throttled to 1 request/s (burst 5), which caps the damage but doesn't prevent it: at that rate, a sustained flood could still cost roughly $75/day in Step Functions and Comprehend charges (my estimate from list prices). The $50 budget alert would flag it. The stack won't stay deployed once I'm done with this project.
   - The local dashboard uses static IAM user keys from a gitignored `config.js`. Cognito Identity Pools or a small backend API would replace them.
   - Early on I committed a binary Terraform plan file (`envs/dev/tfplan`). Plan files embed the full state, including resource ARNs and my account ID. I removed it and fixed the `.gitignore` rule that missed it in [`eb1472d`](https://github.com/CloudMikey/ai-dp/commit/eb1472d), but it is still in older commits.
 

@@ -158,6 +158,8 @@ module "ingestion_stream" {
   enable_api_gateway_logging     = true
   api_gateway_log_retention_days = 7
   enable_cors                    = true
+  api_throttle_rate_limit        = 1 # Demo traffic only; excess requests get HTTP 429
+  api_throttle_burst_limit       = 5
   cors_allow_origins             = ["*"] # Restrict in production
 
   enable_xray_tracing = true

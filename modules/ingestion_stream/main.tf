@@ -85,6 +85,13 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
+  # The route has no auth, and every accepted request runs Step Functions + 2 Comprehend calls.
+  # Throttling caps that spend per day; it does not make the endpoint private.
+  default_route_settings {
+    throttling_rate_limit  = var.api_throttle_rate_limit
+    throttling_burst_limit = var.api_throttle_burst_limit
+  }
+
   dynamic "access_log_settings" {
     for_each = var.enable_api_gateway_logging ? [1] : []
 
