@@ -90,7 +90,7 @@ No AWS access keys are stored in GitHub. Instead:
 2. AWS STS exchanges it for temporary credentials (1-hour expiry)
 3. Credentials are scoped to the `ai-dp-dev-github-actions` IAM role
 
-**IAM Role:** `arn:aws:iam::061039801477:role/ai-dp-dev-github-actions`
+**IAM Role:** `arn:aws:iam::<ACCOUNT_ID>:role/ai-dp-dev-github-actions`
 **Trust policy scope:** `repo:CloudMikey/AI-DP:*` (this repo only)
 **Managed in Terraform:** `envs/dev/cicd.tf`
 
@@ -98,7 +98,7 @@ No AWS access keys are stored in GitHub. Instead:
 
 | Type | Name | Value |
 |------|------|-------|
-| Variable | `AWS_ROLE_ARN` | `arn:aws:iam::061039801477:role/ai-dp-dev-github-actions` |
+| Variable | `AWS_ROLE_ARN` | `arn:aws:iam::<ACCOUNT_ID>:role/ai-dp-dev-github-actions` |
 | Secret | `ALARM_EMAIL` | Email address for CloudWatch alarm SNS notifications |
 
 ---
