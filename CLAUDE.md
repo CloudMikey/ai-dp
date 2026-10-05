@@ -173,7 +173,7 @@ python scripts/rebuild_summary.py
 
 # Batch-path test: 8 sample .txt files -> 8 concurrent Step Functions executions
 aws s3 cp test-data/batch/ s3://ai-dp-data-lake-dev-us-west-2/raw/batch-test/ `
-  --recursive --region us-west-2
+  --recursive --exclude README.md --region us-west-2
 
 # Test streaming ingestion
 curl -X POST "https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest" `
