@@ -34,8 +34,9 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Terraform plan files
+# Terraform plan files (binary plans embed the full state)
 *.tfplan
+tfplan
 plan.out
 
 # Terraform crash log files
