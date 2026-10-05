@@ -1,7 +1,6 @@
 """Unit tests for Merge Lambda function."""
 
 import json
-import re
 import pytest
 from datetime import datetime, timezone
 from moto import mock_aws
@@ -322,10 +321,13 @@ class TestWriteToS3Processed:
         response = client.get_object(Bucket=bucket, Key=s3_key)
         content = response['Body'].read().decode('utf-8')
 
-        # Check for scientific notation patterns (e.g., 1e-06)
-        scientific_pattern = r'\d+\.?\d*[eE][+-]?\d+'
-        matches = re.findall(scientific_pattern, content)
-        assert len(matches) == 0, f"Found scientific notation: {matches}"
+        # Inspect only number literals: a regex over the raw text also matched hex like
+        # '19e0' inside the random recordId, so this test failed by chance
+        float_literals = []
+        json.loads(content, parse_float=lambda s: float_literals.append(s) or float(s))
+        assert float_literals, "expected sentiment scores in the output"
+        scientific = [s for s in float_literals if 'e' in s.lower()]
+        assert not scientific, f"Found scientific notation: {scientific}"
 
 
 class TestWriteToDynamodb:
