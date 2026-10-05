@@ -49,7 +49,7 @@ resource "aws_lambda_function" "merge" {
 
   runtime     = "python3.11"
   handler     = "merge_handler.lambda_handler"
-  timeout     = 60  # Load test P95=2044ms; S3 + DynamoDB writes
+  timeout     = 60  # S3 + DynamoDB writes, plus up to 5 summary retries with backoff
   memory_size = 256 # JSON merge + DecimalEncoder serialization
 
   role = aws_iam_role.merge_lambda.arn

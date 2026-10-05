@@ -1,4 +1,4 @@
-resource "aws_sns_topic" "cloudwatch_alarms" { # Broadcaster
+resource "aws_sns_topic" "cloudwatch_alarms" {
   name = "${local.resource_prefix}-cloudwatch-alarms"
 
   tags = {
@@ -7,7 +7,7 @@ resource "aws_sns_topic" "cloudwatch_alarms" { # Broadcaster
   }
 }
 
-resource "aws_sns_topic_subscription" "alarm_email" { # Reciever
+resource "aws_sns_topic_subscription" "alarm_email" {
   for_each = toset(var.alarm_notification_emails)
 
   topic_arn = aws_sns_topic.cloudwatch_alarms.arn
