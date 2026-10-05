@@ -209,6 +209,12 @@ mock-data/
 local/
 scratch/
 
+# Personal AI tooling config (local paths, per-user permissions)
+.mcp.json
+.serena/
+.claude/settings.local.json
+.claude/agents/recruiter-review.md
+
 # Gemini CLI specific files (removed from project)
 GEMINI.md
 .gemini-clipboard/
