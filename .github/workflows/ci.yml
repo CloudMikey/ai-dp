@@ -134,18 +134,34 @@ jobs:
       # ── 13. Post Plan Output to PR ───────────────────────────────────────────
       # Uses actions/github-script (first-party) to avoid external dependencies.
       # Plan output passed via env var to prevent template injection.
+      # Terraform writes errors to stderr, so without PLAN_ERRORS a failed plan
+      # only says "encountered a problem" and the cause stays in the Actions log.
+      # Secret masking covers logs, not comment bodies, so the alarm email (it's in
+      # resource addresses) and 12-digit account IDs are redacted before posting.
       - name: Post Plan to PR
         uses: actions/github-script@v7
         env:
           PLAN: ${{ steps.plan.outputs.stdout }}
+          PLAN_ERRORS: ${{ steps.plan.outputs.stderr }}
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
         with:
           script: |
-            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
+            const redact = (text) => {
+              let out = text || '';
+              if (process.env.ALARM_EMAIL) out = out.split(process.env.ALARM_EMAIL).join('<alarm-email>');
+              return out.replace(/\b\d{12}\b/g, '<account-id>');
+            };
+            const plan = redact(process.env.PLAN);
+            const planErrors = redact(process.env.PLAN_ERRORS).trim();
 
+            const errors = planErrors ? `\n\`\`\`\n${planErrors}\n\`\`\`\n` : '';
+
+            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
+            ${errors}
             <details><summary>Show Plan</summary>
 
             \`\`\`terraform
-            ${process.env.PLAN}
+            ${plan}
             \`\`\`
 
             </details>

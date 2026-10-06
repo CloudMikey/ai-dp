@@ -85,14 +85,18 @@ jobs:
       # No PR to comment on (push event), so write to the Actions job summary instead.
       # Plan output goes through an env var, not ${{ }} in the script, so quotes or $()
       # inside it can't break or inject into the shell command (same as ci.yml).
+      # The alarm email and account IDs are redacted, as in ci.yml's PR comment.
       - name: Post Plan to Summary
         env:
           PLAN: ${{ steps.plan.outputs.stdout }}
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
         run: |
+          redacted="$PLAN"
+          if [ -n "$ALARM_EMAIL" ]; then redacted="${redacted//"$ALARM_EMAIL"/<alarm-email>}"; fi
           {
             echo "### Terraform Plan Output"
             echo '```terraform'
-            printf '%s\n' "$PLAN"
+            printf '%s\n' "$redacted" | sed -E 's/\b[0-9]{12}\b/<account-id>/g'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
