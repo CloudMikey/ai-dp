@@ -79,6 +79,18 @@ variable "api_gateway_log_retention_days" {
   }
 }
 
+variable "api_throttle_rate_limit" {
+  description = "Steady-state requests per second allowed on the ingest API (all routes)"
+  type        = number
+  default     = 1
+}
+
+variable "api_throttle_burst_limit" {
+  description = "Maximum concurrent burst of requests allowed on the ingest API"
+  type        = number
+  default     = 5
+}
+
 variable "enable_cors" {
   description = "Enable CORS for API Gateway. Useful for dev/testing with web clients."
   type        = bool

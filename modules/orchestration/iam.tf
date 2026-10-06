@@ -1,6 +1,6 @@
 # Merge Lambda execution role
-# Reads Comprehend outputs (raw/) + writes enriched data to dual storage (DynamoDB + S3 curated/)
-# Scoped: no read from processed/, no access to other buckets
+# Reads raw/ (text preview), writes processed/ + DynamoDB, reads/writes the curated/ summary.
+# Scoped to this bucket's prefixes and this one table.
 
 resource "aws_iam_role" "merge_lambda" {
   name = "${local.resource_prefix}-merge-lambda-role"
@@ -27,8 +27,8 @@ resource "aws_iam_role" "merge_lambda" {
   )
 }
 
-# S3 write policy: processed/ (enriched data) + curated/ (pre-aggregated summary)
-# Write only; no read from processed (prevents circular dependencies)
+# processed/ is write-only. curated/ also needs GetObject because the summary is read-modify-write
+# (conditional on the ETag, see update_curated_summary).
 
 resource "aws_iam_role_policy" "s3_write" {
   name = "${local.resource_prefix}-merge-s3-write"
@@ -58,7 +58,7 @@ resource "aws_iam_role_policy" "s3_write" {
   })
 }
 
-# Read raw/ to extract text preview and compute statistics (DecimalEncoder handles JSON serialization)
+# Read raw/ to build the text preview stored with each record
 
 resource "aws_iam_role_policy" "s3_read" {
   name = "${local.resource_prefix}-merge-s3-read"
@@ -120,25 +120,6 @@ resource "aws_iam_role_policy" "xray_write" {
         Effect   = "Allow"
         Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
         Resource = "*"
-      }
-    ]
-  })
-}
-
-# DLQ error handling: failed Step Functions invocations are retained for replay/debugging
-resource "aws_iam_role_policy" "dlq_write" {
-  name = "${local.resource_prefix}-merge-dlq-write"
-  role = aws_iam_role.merge_lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "sqs:SendMessage"
-        ]
-        Resource = aws_sqs_queue.merge_dlq.arn
       }
     ]
   })

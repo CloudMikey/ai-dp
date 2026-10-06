@@ -15,8 +15,11 @@
 *.tfstate.*
 *.tfstate.backup
 
-# Lock files (may want to commit these in some projects)
+# Provider lock files: committed for the two root modules so CI and local runs
+# use identical provider builds; others are leftovers from running init elsewhere
 .terraform.lock.hcl
+!envs/dev/.terraform.lock.hcl
+!bootstrap/.terraform.lock.hcl
 
 # Variable files with sensitive data
 *.tfvars
@@ -200,8 +203,9 @@ site/
 *.rar
 *.7z
 
-# Local test data
-test-data/
+# Local test data (the sample batch files in test-data/batch/ are tracked)
+test-data/*
+!test-data/batch/
 sample-data/
 mock-data/
 

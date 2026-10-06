@@ -74,17 +74,14 @@ flowchart TD
         Catalog -->|"SQL queries"| Athena
         DynamoDB -->|"Real-time queries ~50ms"| Dashboard
         S3Curated -->|"Pre-aggregated ~100ms"| Dashboard
-        Athena -->|"Complex SQL ~3s"| Dashboard
     end
 
     subgraph Observability["Observability"]
         ETLDLQ["SQS DLQ\nai-dp-dev-etl-dlq"]
-        MergeDLQ["SQS DLQ\nai-dp-dev-merge-dlq"]
-        CW["CloudWatch\nDashboard + 6 Alarms"]
+        CW["CloudWatch\nDashboard + 5 Alarms"]
         SNS["SNS Topic\n→ Email alerts"]
 
         ETL -.->|"Failed records"| ETLDLQ
-        Merge -.->|"Failed invocations"| MergeDLQ
         SF -.->|"Metrics & logs"| CW
         CW -.->|"Threshold breach"| SNS
     end
@@ -148,7 +145,11 @@ sequenceDiagram
     SF->>S3: GetObject (read file contents)
     S3-->>SF: File body as text
 
-    SF->>SF: PrepareTextContent<br/>(package text + metadata)
+    alt key ends in .json (streaming event)
+        SF->>SF: ParseJsonEvent + CheckForText<br/>(score only the text field; no text = stop)
+    else plain-text batch file
+        SF->>SF: PrepareTextContent<br/>(whole body is the document)
+    end
 
     par Parallel AI Analysis
         SF->>Comprehend: DetectSentiment (en)
@@ -184,9 +185,22 @@ flowchart TD
     A --> B
 
     B["ReadS3Object\nTask — S3 SDK GetObject"]
-    B --> C
+    B --> K
 
-    C["PrepareTextContent\nPass — package text + metadata"]
+    K{"CheckFileFormat\nChoice — key ends in .json?"}
+    K -->|.json| L
+    K -->|other| C
+
+    L["ParseJsonEvent\nPass — States.StringToJson"]
+    L --> M
+    M{"CheckForText\nChoice — text field present?"}
+    M -->|yes| N
+    M -->|no| O
+    N["ExtractEventText\nPass — text field only"]
+    N --> D
+    O(["NoTextToAnalyze\nSucceed"])
+
+    C["PrepareTextContent\nPass — whole body is the text"]
     C --> D
 
     D{"ComprehendAnalysis\nParallel"}
@@ -207,8 +221,10 @@ flowchart TD
     H -->|Catch: States.ALL| J
 
     I(["MergeComplete\nSucceed"])
-    J(["MergeFailed\nFail — check DLQ + CloudWatch"])
+    J(["MergeFailed\nFail — error in execution history + merge logs"])
 ```
+
+**Retry policy on ReadS3Object, DetectSentiment, DetectEntities:** errors a retry can't fix (`Comprehend.TextSizeLimitExceededException`, `InvalidRequestException`, `UnsupportedLanguageException`, `S3.NoSuchKeyException`, `S3.InvalidObjectStateException`) fail immediately; every other task failure (throttling, 5xx) retries 3 times from 2s with backoff 2.0 and full jitter.
 
 **Retry policy on InvokeMergeLambda:**
 - Errors: `Lambda.ServiceException`, `Lambda.TooManyRequestsException`
@@ -250,35 +266,29 @@ flowchart LR
 
 ## Analytics Layer
 
-The dashboard uses three data sources in parallel, each optimized for a different query type.
+The dashboard reads two sources. Athena is the historical query path and is queried by hand; the dashboard does not call it.
 
 ```mermaid
 flowchart LR
     subgraph Sources["Data Sources"]
-        DDB["DynamoDB\nHot store"]
-        S3C["S3 curated/\nPre-aggregated"]
-        Athena["Athena\nSQL queries"]
+        S3C["S3 curated/\nlatest_summary.json"]
+        DDB["DynamoDB\ntimestamp-index GSI"]
     end
 
     subgraph Dashboard["Analytics Dashboard"]
-        Metrics["Metrics Cards\nTotal / Positive / Neutral\nNegative / Mixed\nSource: DynamoDB ~50ms"]
-        Recent["Recent Events Table\n20 most recent records\nSource: DynamoDB ~50ms"]
-        Sentiment["Sentiment Chart\nPie chart distribution\nSource: S3 curated/ ~100ms"]
-        Entities["Entity Analysis\nDoughnut chart by type\nSource: Athena UNNEST ~3s"]
-        Status["Pipeline Status\nTotal processed + last record\nSource: S3 curated/ ~100ms"]
+        Metrics["Metric cards\nTotal / Positive / Neutral\nNegative / Mixed"]
+        Entities["Top Entities\nDoughnut chart"]
+        Recent["Recent Events table\n20 newest records"]
     end
 
-    DDB --> Metrics
+    S3C --> Metrics
+    S3C --> Entities
     DDB --> Recent
-    S3C --> Sentiment
-    S3C --> Status
-    Athena --> Entities
 ```
 
-**Why three sources?** Each is the right tool for its job:
-- **DynamoDB** — real-time data, last 30 days, sub-100ms latency
-- **S3 curated/** — pre-aggregated by Merge Lambda on every write, no query cost
-- **Athena** — complex SQL with `UNNEST` on nested arrays, demonstrates analytical SQL skills
+- **S3 `curated/latest_summary.json`**: running totals and top entities, updated by the merge Lambda on every record. One small `GetObject` per refresh, with no scan and no query cost.
+- **DynamoDB**: a `Query` on the `timestamp-index` GSI (`recordType` + `timestamp`, newest first, limit 50) for the recent-events table. A plain `Scan` returns items in hash order, so it can't give "newest first".
+- **Athena**: SQL over `processed/` (for example `UNNEST` on the entity arrays), run from the console or CLI.
 
 ---
 
@@ -375,11 +385,10 @@ All resources deployed in `us-west-2` (except state bucket in `us-west-1`).
 | Resource | Name | Config |
 |----------|------|--------|
 | CloudWatch Dashboard | `ai-dp-dev-operations` | 8 widgets: Lambda, Kinesis, Step Functions, DLQ, DynamoDB |
-| CloudWatch Alarms | 6 alarms | Lambda errors, DLQ depth, Kinesis lag, Step Functions failures |
+| CloudWatch Alarms | 5 alarms | Lambda errors, ETL DLQ depth, Kinesis lag, Step Functions failures |
 | SNS Topic | `ai-dp-dev-cloudwatch-alarms` | Email subscription for alarm notifications |
 | X-Ray Tracing | Active mode (both Lambdas) | Per-invocation latency timelines + downstream call segments (S3, DynamoDB, Comprehend) |
 | SQS DLQ (ETL) | `ai-dp-dev-etl-dlq` | 14-day retention |
-| SQS DLQ (Merge) | `ai-dp-dev-merge-dlq` | 14-day retention |
 | AWS Budget | `ai-dp-dev-monthly-budget` | $50/month, alerts at 80% / 100% actual / 100% forecast |
 
 ### CI/CD
@@ -395,17 +404,17 @@ All resources deployed in `us-west-2` (except state bucket in `us-west-1`).
 
 ## Key Architectural Decisions
 
-### Kinesis over SQS for streaming ingestion
+### Kinesis between API Gateway and the ETL Lambda
 
-Kinesis was chosen because this pipeline has three requirements SQS cannot satisfy:
+I chose Kinesis mainly to learn it. At this project's volume, SQS would have done the job. What Kinesis does give this pipeline:
 
-**Replay.** Kinesis retains records for up to 7 days. If the ETL Lambda has a bug that corrupts data, you can fix the Lambda and replay the stream from any checkpoint. SQS deletes messages on successful consumption — no replay without external storage.
+**No-code ingestion.** API Gateway writes straight into Kinesis through the `Kinesis-PutRecord` service integration, with no Lambda in the request path.
 
-**Ordering.** Kinesis guarantees ordered delivery within a shard. For event streams where processing sequence matters (audit logs, clickstreams), out-of-order delivery can produce incorrect aggregates. SQS standard queues offer no ordering guarantee.
+**Stable sequence numbers.** Kinesis re-delivers a failed record with the same sequence number, so the ETL Lambda uses it as the S3 filename. A retry overwrites the same object instead of creating a duplicate.
 
-**Idempotent retry model.** Kinesis re-delivers the same record with the same sequence number on retry. This property is what makes the ETL Lambda's idempotent S3 write pattern possible — the sequence number doubles as a stable, deterministic filename. SQS message IDs are not guaranteed stable across retries.
+**Short replay window.** Records stay in the stream for 24 hours (`kinesis_retention_hours`), long enough to re-read a failed batch (see `docs/runbooks.md`, Runbook 4).
 
-The tradeoff: Kinesis costs more than SQS at low throughput and requires shard management. For this workload that's acceptable. At higher scale, Kinesis Enhanced Fan-Out would be the next step.
+The tradeoff: a provisioned shard bills every hour whether or not data flows, and it was the entire $11.16 August 2026 bill. SQS would cost close to nothing at this volume.
 
 ---
 

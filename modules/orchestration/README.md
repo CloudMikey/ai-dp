@@ -7,7 +7,7 @@ Creates the Merge Lambda function that combines AI enrichment results and implem
 The orchestration module completes the data pipeline by:
 - **Merging AI outputs**: Combines sentiment analysis and entity extraction results from Amazon Comprehend
 - **Dual-write pattern**: Writes enriched data to both S3 `processed/` (historical analytics) and DynamoDB (real-time queries)
-- **Error handling**: SQS Dead Letter Queue captures failed invocations for debugging and replay
+- **Error handling**: failures surface to Step Functions, which retries transient Lambda errors and routes the rest to `MergeFailed`
 - **Metadata enrichment**: Adds processing timestamps, Lambda version info, and record versioning
 
 ## Architecture
@@ -15,39 +15,36 @@ The orchestration module completes the data pipeline by:
 ### Data Flow
 
 ```
-Step Functions (AI Enrichment Complete)
+Step Functions (InvokeMergeLambda)
   ↓
 Merge Lambda receives:
-  - recordId (S3 object key)
-  - sentiment (POSITIVE/NEGATIVE/NEUTRAL/MIXED)
-  - sentimentScores (confidence percentages)
-  - entities (people, places, organizations)
+  - source_object: bucket + key of the raw/ file
+  - ai_enrichment: raw DetectSentiment + DetectEntities responses
+  - processing_metadata: execution timestamp + state machine name
   ↓
-Lambda reads original record from S3 raw/
+Reads the raw/ file only to build a 500-char text preview
   ↓
-Merges AI results with original data
+Builds one enriched record (recordId, sentiment, scores, entities)
   ↓
-Dual Write:
-  1. S3 processed/ with date partitioning
-  2. DynamoDB with 30-day TTL
-  ↓
-Returns success with both storage locations
+Writes, in order:
+  1. S3 processed/year=/month=/day=/ (full record, for Athena)
+  2. DynamoDB (dashboard fields, 30-day TTL)
+  3. S3 curated/latest_summary.json (running totals; non-fatal, conditional write)
 ```
 
 ### Merge Lambda Responsibilities
 
-1. **Extract original data**: Reads raw record from S3 based on `recordId`
-2. **Combine outputs**: Merges original data + sentiment + entities into single object
-3. **Enrich metadata**: Adds `processed_at`, `lambda_version`, `record_version`
+1. **Text preview**: Reads the raw file and keeps the `text` field (JSON events) or the whole body (plain text)
+2. **Combine outputs**: Builds one record from the sentiment and entity responses, keeping only meaningful entity types (person, place, organization, ...) in `entities`
+3. **Add metadata**: `recordId`, `mergedAt`, `lambdaVersion`, `lambdaName`
 4. **Date partition**: Writes to S3 `processed/year=YYYY/month=MM/day=DD/`
 5. **Set TTL**: Calculates `expiresAt` for DynamoDB auto-deletion (30 days default)
-6. **Error handling**: Sends failed records to SQS DLQ after 3 retries
+6. **Error handling**: Raises on failure so Step Functions can retry or catch it
 
 ## Features
 
 - **Dual Storage Strategy**: S3 for cost-effective historical queries, DynamoDB for fast real-time access
-- **Automatic Retries**: Lambda retries transient failures 3 times before sending to DLQ
-- **Dead Letter Queue**: 14-day retention for debugging and replay
+- **Retries**: Step Functions retries `Lambda.ServiceException` / `Lambda.TooManyRequestsException` 3 times with backoff
 - **CloudWatch Logs**: All invocations logged for debugging (7-day retention default)
 - **Least-Privilege IAM**: Scoped permissions (read `raw/*`, write `processed/*`, PutItem to DynamoDB)
 - **Environment Variables**: Configurable bucket names, prefixes, TTL, log levels
@@ -104,8 +101,6 @@ module "orchestration" {
 | lambda_function_arn | ARN of Merge Lambda (used by Step Functions) |
 | lambda_function_name | Lambda function name |
 | lambda_role_arn | IAM role ARN for Lambda execution |
-| dlq_url | SQS Dead Letter Queue URL (for monitoring) |
-| dlq_arn | SQS Dead Letter Queue ARN |
 | cloudwatch_log_group_name | CloudWatch Log Group name |
 
 ## Lambda Function Details
@@ -150,15 +145,6 @@ module "orchestration" {
   "Effect": "Allow",
   "Action": ["dynamodb:PutItem"],
   "Resource": "arn:aws:dynamodb:region:account:table/ai-dp-dev-enriched-data"
-}
-```
-
-### SQS (DLQ only)
-```json
-{
-  "Effect": "Allow",
-  "Action": ["sqs:SendMessage"],
-  "Resource": "arn:aws:sqs:region:account:ai-dp-dev-merge-dlq"
 }
 ```
 
@@ -229,41 +215,15 @@ s3://ai-dp-data-lake-dev-us-west-2/processed/
 
 ## Error Handling
 
-### Retry Strategy
+Step Functions invokes this Lambda **synchronously**, so a Lambda dead-letter queue would never receive anything (`dead_letter_config` only applies to asynchronous invocations). Failures are handled by the state machine:
 
-Lambda automatically retries on transient failures:
-1. **1st attempt**: Immediate execution
-2. **2nd attempt**: After 2 seconds (if transient error)
-3. **3rd attempt**: After 4 seconds (if transient error)
-4. **DLQ**: After 3 failed attempts, message sent to SQS DLQ
+1. **Retry**: `Lambda.ServiceException` and `Lambda.TooManyRequestsException` are retried 3 times (2s, then backoff 2.0).
+2. **Catch**: anything else, or retries exhausted, routes the execution to the `MergeFailed` state.
+3. **Alert**: failed executions trigger the `step-functions-failures` alarm. See `docs/runbooks.md` (3d and 5) to inspect and replay them.
 
-**Transient Errors** (retriable):
-- `S3.ServiceException`
-- `DynamoDB.ProvisionedThroughputExceededException`
-- Network timeouts
-
-**Non-Transient Errors** (immediate DLQ):
-- Validation errors (missing fields)
-- S3 object not found
-- Malformed JSON
+The curated-summary update is the one non-fatal step: if it fails, the record is still in S3 and DynamoDB, and `scripts/rebuild_summary.py` can recompute the summary.
 
 ### Monitoring Failed Invocations
-
-**Check DLQ depth**:
-```powershell
-aws sqs get-queue-attributes `
-  --queue-url https://sqs.us-west-2.amazonaws.com/123456789012/ai-dp-dev-merge-dlq `
-  --attribute-names ApproximateNumberOfMessages `
-  --region us-west-2
-```
-
-**Read DLQ messages**:
-```powershell
-aws sqs receive-message `
-  --queue-url https://sqs.us-west-2.amazonaws.com/123456789012/ai-dp-dev-merge-dlq `
-  --max-number-of-messages 10 `
-  --region us-west-2
-```
 
 **View Lambda errors in CloudWatch**:
 ```powershell
@@ -397,44 +357,6 @@ aws lambda invoke `
 # Check result
 cat response.json
 ```
-
-## Interview Talking Points
-
-### 1. Why separate orchestration module?
-"The orchestration module handles the final step of the pipeline—merging AI results and implementing the dual storage strategy. Separating it from other modules follows single-responsibility principle: each module does one thing well."
-
-### 2. Why dual storage (S3 + DynamoDB)?
-"S3 provides cost-effective historical storage for analytics ($0.023/GB-month), while DynamoDB offers fast queries for real-time dashboards (single-digit millisecond reads). It's the best of both worlds: cheap long-term storage + fast recent data access."
-
-### 3. Explain your error handling strategy
-"Three layers of error handling:
-1. **Lambda retries**: 3 automatic retries for transient failures
-2. **DLQ**: Failed invocations stored for 14 days for debugging/replay
-3. **Step Functions catch blocks**: Errors trigger CloudWatch alarms
-
-This ensures no data loss and full visibility into failures."
-
-### 4. Why date partitioning in S3?
-"Date partitioning enables efficient Athena queries. When querying `WHERE year=2025 AND month=12`, Athena only scans December 2025 data—faster and cheaper. It's a standard practice for analytics workloads."
-
-### 5. How would you optimize for production?
-"For 10x traffic, I'd:
-1. Increase Lambda concurrency limits (reserved concurrency)
-2. Enable Lambda provisioned concurrency for predictable latency
-3. Add S3 batch writes (buffer multiple records, write once)
-4. Switch DynamoDB to provisioned capacity with auto-scaling
-5. Add CloudWatch alarms for DLQ depth and Lambda errors"
-
-### 6. Explain least-privilege IAM
-"The Lambda has scoped permissions:
-- Read ONLY from `raw/*` (can't read processed/)
-- Write ONLY to `processed/*` (can't write to raw/)
-- PutItem ONLY to enriched-data table (no Scan/Query/Delete)
-
-If the Lambda is compromised, damage is limited to its narrow permissions."
-
-### 7. Why TTL in DynamoDB?
-"TTL provides automatic data lifecycle management. Recent data stays hot for 30 days (fast queries), then auto-deletes (cost savings). Historical data remains in S3 for analytics. It's the 80/20 rule: 80% of queries target recent data, 20% target historical."
 
 ## Common Pitfalls
 

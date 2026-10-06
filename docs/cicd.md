@@ -91,8 +91,9 @@ No AWS access keys are stored in GitHub. Instead:
 3. Credentials are scoped to the `ai-dp-dev-github-actions` IAM role
 
 **IAM Role:** `arn:aws:iam::<ACCOUNT_ID>:role/ai-dp-dev-github-actions`
-**Trust policy scope:** `repo:CloudMikey/AI-DP:*` (this repo only)
-**Managed in Terraform:** `envs/dev/cicd.tf`
+**Trust policy scope:** `repo:CloudMikey/ai-dp:*` (any branch, tag, or PR in this repo)
+**Role managed in Terraform:** `envs/dev/cicd.tf`
+**Permission policy managed in the AWS Console** (inline policy `ai-dp-dev-terraform-policy`), on purpose, to get hands-on with IAM there. It can't be reviewed or recreated from this repo.
 
 ### Required GitHub configuration
 

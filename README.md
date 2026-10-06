@@ -50,7 +50,7 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
 | **DynamoDB** | Small, short-lived (30-day TTL) data the dashboard can query newest-first through a GSI. |
 | **S3 data lake** | `raw/` → `processed/` → `curated/` layers, each with its own lifecycle rules (IA, then Glacier, then expiry). |
 | **Glue + Athena** | SQL over `processed/` for historical questions. Queried by hand; the dashboard doesn't call it. |
-| **CloudWatch, X-Ray, SNS** | 6 alarms emailed through SNS, an 8-widget dashboard, and active tracing on both Lambdas. |
+| **CloudWatch, X-Ray, SNS** | 5 alarms emailed through SNS, an 8-widget dashboard, and active tracing on both Lambdas. |
 | **GitHub Actions + OIDC** | CI and deploy without stored AWS keys. |
 
 ## Design decisions and tradeoffs
@@ -82,7 +82,7 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
 - **Encryption and access:** SSE-S3 on the data lake, KMS on Kinesis, TLS-only bucket policy, and S3 Block Public Access on.
 - **State:** remote in S3, encrypted, with native locking. tfsec runs in CI. Accepted exceptions (mostly customer-managed KMS keys, skipped for cost in dev) are listed with reasons in `.tfsec.yml`.
 - **Known gaps** (fine for a short-lived demo, not for real use):
-  - The `/ingest` endpoint has no authentication or throttling.
+  - The `/ingest` endpoint has no authentication. It is throttled to 1 request/s (burst 5), which caps the damage but doesn't prevent it: at that rate, a sustained flood could still cost roughly $75/day in Step Functions and Comprehend charges (my estimate from list prices). The $50 budget alert would flag it. The stack won't stay deployed once I'm done with this project.
   - The local dashboard uses static IAM user keys from a gitignored `config.js`. Cognito Identity Pools or a small backend API would replace them.
   - Early on I committed a binary Terraform plan file (`envs/dev/tfplan`). Plan files embed the full state, including resource ARNs and my account ID. I removed it and fixed the `.gitignore` rule that missed it in [`eb1472d`](https://github.com/CloudMikey/ai-dp/commit/eb1472d), but it is still in older commits.
 
@@ -105,10 +105,10 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
    ```
 2. **Point the dev environment at it:**
    ```bash
-   cp "envs/dev/backend-dev.hcl copy.example" envs/dev/backend-dev.hcl   # set bucket = bootstrap output
+   cp envs/dev/backend-dev.hcl.example envs/dev/backend-dev.hcl   # set bucket = bootstrap output
    echo 'alarm_email = "you@example.com"' > envs/dev/terraform.tfvars
    ```
-3. **GitHub OIDC provider:** `envs/dev/cicd.tf` looks up an existing GitHub OIDC provider in the account. In an account without one, `plan` fails. Create the provider first, or delete `cicd.tf` if you don't need CI/CD.
+3. **CI/CD role (optional):** `envs/dev/cicd.tf` creates the GitHub Actions deploy role and expects a GitHub OIDC provider to already exist in the account. If you don't need CI/CD, add `enable_github_oidc = false` to `terraform.tfvars`.
 4. **Deploy:**
    ```bash
    terraform -chdir=envs/dev init -backend-config=backend-dev.hcl
@@ -127,9 +127,8 @@ Streaming reviews hit API Gateway, which writes straight into Kinesis through a 
 
 ## Limitations and what I'd change
 
-- **On the streaming path, Comprehend scores the whole JSON envelope**, not just the review. The ETL Lambda writes the full event (timestamps, field names, Lambda name) to `raw/`, and Step Functions passes the whole file to Comprehend. Sentiment and entities are therefore computed partly on metadata. The dashboard filters out timestamp "entities" to hide the symptom. The fix is deciding what text each path sends before building it.
-- **The merge Lambda's DLQ never receives anything.** Its `dead_letter_config` only applies to asynchronous invocations, and Step Functions calls it synchronously, so failures go to the state machine's `Catch` instead. The DLQ and its alarm should be removed. See [`docs/runbooks.md`](docs/runbooks.md).
-- **No retries on the Comprehend steps**, so a throttled call fails the execution.
+- **Comprehend used to score the whole JSON envelope on the streaming path**, timestamps and field names included, and the dashboard filtered out timestamp "entities" to hide the symptom. Step Functions now parses `.json` events and sends only the `text` field; events without one stop before Comprehend. Records written before the fix still carry the old scores.
+- **I had a DLQ on the merge Lambda that could never receive anything.** A Lambda `dead_letter_config` only applies to asynchronous invocations, and Step Functions calls the merge Lambda synchronously, so failures go to the state machine's `Catch`. I removed the queue and its alarm; batch failures are covered by the Step Functions failure alarm and [`docs/runbooks.md`](docs/runbooks.md).
 - **Batch files must be under 5,000 bytes** (Comprehend's sentiment limit), and nothing enforces that.
 - **If I started over:** check which regions each service is available in before picking one, use SQS instead of Kinesis at this volume, decide what text each ingestion path sends to Comprehend before building, and put the CI deploy policy in Terraform from day one.
 

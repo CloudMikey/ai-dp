@@ -3,6 +3,28 @@
 locals {
   resource_prefix    = "${var.project_name}-${var.environment}"
   state_machine_name = "${local.resource_prefix}-orchestrator"
+
+  # Retry transient SDK failures (throttling, 5xx); fail fast on errors a retry can't fix.
+  # Retriers match in order, so the MaxAttempts = 0 entry must come first.
+  sdk_task_retry = [
+    {
+      ErrorEquals = [
+        "Comprehend.TextSizeLimitExceededException",
+        "Comprehend.InvalidRequestException",
+        "Comprehend.UnsupportedLanguageException",
+        "S3.NoSuchKeyException",
+        "S3.InvalidObjectStateException"
+      ]
+      MaxAttempts = 0
+    },
+    {
+      ErrorEquals     = ["States.TaskFailed"]
+      IntervalSeconds = 2
+      MaxAttempts     = 3
+      BackoffRate     = 2.0
+      JitterStrategy  = "FULL"
+    }
+  ]
 }
 
 # Logs execution history for debugging state machine failures and API errors
@@ -24,7 +46,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
   role_arn = aws_iam_role.step_functions.arn
 
   definition = jsonencode({
-    Comment = "AI Enrichment: reads S3 objects, runs Comprehend (sentiment + entities in parallel), merges results"
+    Comment = "AI Enrichment: reads S3 objects, extracts the text to score, runs Comprehend (sentiment + entities in parallel), merges results"
     StartAt = "PrepareComprehendInput"
     States = {
       PrepareComprehendInput = {
@@ -47,12 +69,69 @@ resource "aws_sfn_state_machine" "orchestrator" {
           "Key.$"    = "$.key"
         }
         ResultPath = "$.s3_response"
-        Next       = "PrepareTextContent"
+        Retry      = local.sdk_task_retry
+        Next       = "CheckFileFormat"
       }
 
+      # Streaming events arrive as JSON envelopes (event_type, timestamps, text);
+      # only the review text should be scored, not the metadata around it.
+      CheckFileFormat = {
+        Type = "Choice"
+        Choices = [
+          {
+            Variable      = "$.key"
+            StringMatches = "*.json"
+            Next          = "ParseJsonEvent"
+          }
+        ]
+        Default = "PrepareTextContent"
+      }
+
+      ParseJsonEvent = {
+        Type = "Pass"
+        Parameters = {
+          "event.$"  = "States.StringToJson($.s3_response.Body)"
+          "bucket.$" = "$.bucket"
+          "key.$"    = "$.key"
+          "size.$"   = "$.size"
+        }
+        Next = "CheckForText"
+      }
+
+      CheckForText = {
+        Type = "Choice"
+        Choices = [
+          {
+            # IsPresent first: comparing a missing path is a runtime error, not a false
+            And = [
+              { Variable = "$.event.text", IsPresent = true },
+              { Variable = "$.event.text", IsString = true }
+            ]
+            Next = "ExtractEventText"
+          }
+        ]
+        Default = "NoTextToAnalyze"
+      }
+
+      # Events without a text field (e.g. load-test pings) have nothing to score
+      NoTextToAnalyze = {
+        Type = "Succeed"
+      }
+
+      ExtractEventText = {
+        Type = "Pass"
+        Parameters = {
+          "text_content.$" = "$.event.text"
+          "bucket.$"       = "$.bucket"
+          "key.$"          = "$.key"
+          "size.$"         = "$.size"
+        }
+        Next = "ComprehendAnalysis"
+      }
+
+      # Batch uploads are plain text: the whole body is the document
       PrepareTextContent = {
-        Type    = "Pass"
-        Comment = "Combine S3 object content with metadata for AI analysis"
+        Type = "Pass"
         Parameters = {
           "text_content.$" = "$.s3_response.Body"
           "bucket.$"       = "$.bucket"
@@ -77,7 +156,8 @@ resource "aws_sfn_state_machine" "orchestrator" {
                   "LanguageCode" = "en"
                   "Text.$"       = "$.text_content"
                 }
-                End = true
+                Retry = local.sdk_task_retry
+                End   = true
               }
             }
           },
@@ -92,7 +172,8 @@ resource "aws_sfn_state_machine" "orchestrator" {
                   "LanguageCode" = "en"
                   "Text.$"       = "$.text_content"
                 }
-                End = true
+                Retry = local.sdk_task_retry
+                End   = true
               }
             }
           }
@@ -115,9 +196,8 @@ resource "aws_sfn_state_machine" "orchestrator" {
             "entities.$"  = "$.comprehend_results[1]"
           }
           "processing_metadata" = {
-            "phase"         = "6-comprehend-complete"
-            "timestamp.$"   = "$$.State.EnteredTime"
-            "state_machine" = "ai-dp-dev-orchestrator"
+            "timestamp.$"     = "$$.State.EnteredTime"
+            "state_machine.$" = "$$.StateMachine.Name"
           }
         }
         Next = "InvokeMergeLambda"
@@ -158,7 +238,7 @@ resource "aws_sfn_state_machine" "orchestrator" {
 
       MergeFailed = {
         Type    = "Fail"
-        Comment = "Merge Lambda failed - check DLQ and CloudWatch Logs for details"
+        Comment = "Merge Lambda failed - error and cause are in this execution's history and the merge Lambda logs"
         Error   = "MergeLambdaError"
         Cause   = "Lambda invocation failed after retries"
       }

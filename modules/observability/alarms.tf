@@ -1,4 +1,4 @@
-resource "aws_sns_topic" "cloudwatch_alarms" { # Broadcaster
+resource "aws_sns_topic" "cloudwatch_alarms" {
   name = "${local.resource_prefix}-cloudwatch-alarms"
 
   tags = {
@@ -7,7 +7,7 @@ resource "aws_sns_topic" "cloudwatch_alarms" { # Broadcaster
   }
 }
 
-resource "aws_sns_topic_subscription" "alarm_email" { # Reciever
+resource "aws_sns_topic_subscription" "alarm_email" {
   for_each = toset(var.alarm_notification_emails)
 
   topic_arn = aws_sns_topic.cloudwatch_alarms.arn
@@ -129,30 +129,6 @@ resource "aws_cloudwatch_metric_alarm" "etl_dlq_depth" {
 
   tags = {
     Name     = "${local.resource_prefix}-etl-dlq-depth"
-    Severity = "Critical"
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "merge_dlq_depth" {
-  alarm_name          = "${local.resource_prefix}-merge-dlq-depth"
-  alarm_description   = "Merge DLQ has messages - Lambda failures detected"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 60
-  statistic           = "Maximum"
-  threshold           = var.dlq_depth_threshold
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    QueueName = var.merge_dlq_name
-  }
-
-  alarm_actions = [aws_sns_topic.cloudwatch_alarms.arn]
-
-  tags = {
-    Name     = "${local.resource_prefix}-merge-dlq-depth"
     Severity = "Critical"
   }
 }

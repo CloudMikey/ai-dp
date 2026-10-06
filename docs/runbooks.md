@@ -35,7 +35,7 @@ Deploys run through GitHub Actions. Full workflow detail is in [cicd.md](cicd.md
    $api = terraform -chdir=envs/dev output -raw api_gateway_invoke_url   # already ends in /ingest
    curl -X POST $api `
      -H "Content-Type: application/json" -H "X-Partition-Key: smoke" `
-     -d '{"event_type":"smoke","event_timestamp":"2026-01-25T12:00:00Z"}'
+     -d '{"event_type":"smoke","event_timestamp":"2026-01-25T12:00:00Z","text":"Smoke test: fast shipping, great product."}'
    ```
    Within ~1 minute a new row should appear in the dashboard and the `ai-dp-dev-operations` CloudWatch dashboard should show an ETL invocation with no errors.
 
@@ -65,7 +65,7 @@ Terraform has no "undo". You roll back by deploying the previous code.
 
 ## 3. Alarm response
 
-All 6 alarms publish to SNS topic `ai-dp-dev-cloudwatch-alarms`, which emails the alarm address. First, see what is firing right now:
+All 5 alarms publish to SNS topic `ai-dp-dev-cloudwatch-alarms`, which emails the alarm address. First, see what is firing right now:
 
 ```powershell
 aws cloudwatch describe-alarms --state-value ALARM --region us-west-2 --query "MetricAlarms[].[AlarmName,StateReason]" --output table
@@ -78,7 +78,6 @@ aws cloudwatch describe-alarms --state-value ALARM --region us-west-2 --query "M
 | `ai-dp-dev-merge-lambda-error-rate` | Merge errors > 5% of invocations, 2 × 5 min | High | [3b](#3b-lambda-error-rate-etl-or-merge) |
 | `ai-dp-dev-kinesis-iterator-age` | Oldest unread record > 60 s, 2 × 5 min | Medium | [3c](#3c-kinesis-iterator-age) |
 | `ai-dp-dev-step-functions-failures` | > 3 failed executions in 5 min | High | [3d](#3d-step-functions-failures) |
-| `ai-dp-dev-merge-dlq-depth` | Merge DLQ has > 0 messages (1 min) | Critical | [3e](#3e-merge-dlq-depth) |
 
 Once you've fixed it, the alarm returns to `OK` by itself when the metric recovers (`treat_missing_data = notBreaching`). DLQ alarms stay red until the queue is empty.
 
@@ -136,12 +135,6 @@ More than 3 batch executions failed within 5 minutes.
    | `Comprehend.ThrottlingException` | Too many concurrent uploads | Replay more slowly |
 
 4. Replay the failed executions: [Runbook 5](#5-replay-batch-path-failed-step-functions).
-
-### 3e. Merge DLQ depth
-
-> **Known gap:** this alarm will almost certainly never fire. The Merge Lambda's `dead_letter_config` only captures **asynchronous** invocations, but Step Functions calls Merge **synchronously** and handles the failure itself (`Catch` → `MergeFailed`). Merge failures show up as **Step Functions failures (3d)** instead. The same applies to the ETL Lambda's own `dead_letter_config`. Its DLQ messages come from the Kinesis event source mapping's `on_failure` destination, not from that setting.
-
-If it does fire, something invoked Merge asynchronously (for example, a manual `aws lambda invoke --invocation-type Event`). Read the message (Runbook 4, step 1, with the merge queue) to see the original payload.
 
 ---
 

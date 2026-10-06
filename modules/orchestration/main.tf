@@ -25,24 +25,6 @@ data "archive_file" "merge_lambda" {
   ]
 }
 
-# DLQ for failed Lambda invocations (14-day retention for debugging)
-# Failures captured here: Comprehend timeout, S3 write errors, DynamoDB throttling
-
-resource "aws_sqs_queue" "merge_dlq" {
-  name = "${local.resource_prefix}-merge-dlq"
-
-  message_retention_seconds = 1209600 # 14 days
-
-  tags = merge(
-    var.tags,
-    {
-      Name        = "${local.resource_prefix}-merge-dlq"
-      Description = "Dead letter queue for failed Merge Lambda processing"
-      Purpose     = "ErrorHandling"
-    }
-  )
-}
-
 # CloudWatch Logs for debugging Comprehend API failures and DynamoDB write issues
 
 resource "aws_cloudwatch_log_group" "merge_lambda" {
@@ -67,7 +49,7 @@ resource "aws_lambda_function" "merge" {
 
   runtime     = "python3.11"
   handler     = "merge_handler.lambda_handler"
-  timeout     = 60  # Load test P95=2044ms; S3 + DynamoDB writes
+  timeout     = 60  # S3 + DynamoDB writes, plus up to 5 summary retries with backoff
   memory_size = 256 # JSON merge + DecimalEncoder serialization
 
   role = aws_iam_role.merge_lambda.arn
@@ -82,10 +64,6 @@ resource "aws_lambda_function" "merge" {
     }
   }
 
-  dead_letter_config {
-    target_arn = aws_sqs_queue.merge_dlq.arn
-  }
-
   # X-Ray active tracing: per-invocation latency timeline + downstream AWS SDK call segments
   dynamic "tracing_config" {
     for_each = var.enable_xray_tracing ? [1] : []
@@ -97,8 +75,7 @@ resource "aws_lambda_function" "merge" {
   depends_on = [
     aws_cloudwatch_log_group.merge_lambda,
     aws_iam_role_policy.s3_write,
-    aws_iam_role_policy.dynamodb_write,
-    aws_iam_role_policy.dlq_write
+    aws_iam_role_policy.dynamodb_write
   ]
 
   tags = merge(

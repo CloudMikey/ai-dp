@@ -45,12 +45,8 @@ class DecimalEncoder(json.JSONEncoder):
             text = text.rstrip("0").rstrip(".")
             return text
         
-        elif isinstance(obj, (int, bool)) or obj is None:
-            return json.dumps(obj)
-        elif isinstance(obj, str):
-            return json.dumps(obj)
         else:
-            return json.dumps(obj)
+            return json.dumps(obj)  # str, int, bool, None
 
 
 logger = logging.getLogger()
@@ -80,7 +76,7 @@ def get_config():
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Merge AI enrichment results and write to S3 processed/ + DynamoDB."""
-    logger.info(f"Received event: {json.dumps(event)}")
+    logger.debug(f"Received event: {json.dumps(event)}")
 
     validate_environment()
 
@@ -143,18 +139,10 @@ def get_text_preview(bucket: str, key: str, max_length: int = 500) -> Optional[s
         body = response['Body'].read().decode('utf-8')
 
         try:
-            raw_data = json.loads(body)
-            # Streaming path: ETL Lambda writes JSON, text lives in a known field
-            text = (
-                raw_data.get('text') or
-                raw_data.get('content') or
-                raw_data.get('message') or
-                raw_data.get('body') or
-                None
-            )
+            # Streaming path: same 'text' field Step Functions sends to Comprehend
+            text = json.loads(body).get('text')
         except json.JSONDecodeError:
-            # Batch path: uploaded files are plain text, so the body IS the text.
-            # Matches Step Functions, which passes the whole body to Comprehend unparsed.
+            # Batch path: uploaded files are plain text, so the body IS the text
             text = body.strip()
 
         if not text:
@@ -186,14 +174,10 @@ def merge_ai_results(source_object: Dict[str, Any], ai_enrichment: Dict[str, Any
     raw_scores = sentiment.get('SentimentScore', {})
     top_sentiment_score = raw_scores.get(top_sentiment.capitalize(), 0.0)
 
-    # Format sentiment scores without scientific notation (fixes Athena HIVE_CURSOR_ERROR)
-    # Python's default JSON serialization uses scientific notation for very small floats
-    # which the OpenX JsonSerDe in Athena/Glue cannot parse correctly
+    # Floats stay floats here; DecimalEncoder writes them without scientific notation
     sentiment_scores = {
-        'Positive': float(f"{raw_scores.get('Positive', 0.0):.10f}"),
-        'Negative': float(f"{raw_scores.get('Negative', 0.0):.10f}"),
-        'Neutral': float(f"{raw_scores.get('Neutral', 0.0):.10f}"),
-        'Mixed': float(f"{raw_scores.get('Mixed', 0.0):.10f}")
+        label: raw_scores.get(label, 0.0)
+        for label in ('Positive', 'Negative', 'Neutral', 'Mixed')
     }
 
     entity_texts = [
@@ -207,7 +191,7 @@ def merge_ai_results(source_object: Dict[str, Any], ai_enrichment: Dict[str, Any
         entity_details.append({
             'BeginOffset': entity.get('BeginOffset', 0),
             'EndOffset': entity.get('EndOffset', 0),
-            'Score': float(f"{entity.get('Score', 0.0):.10f}"),
+            'Score': entity.get('Score', 0.0),
             'Text': entity.get('Text', ''),
             'Type': entity.get('Type', '')
         })

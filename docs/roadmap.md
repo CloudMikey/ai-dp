@@ -500,7 +500,7 @@
 - Updated Terraform handler references in `modules/ingestion_stream/main.tf` and `modules/orchestration/main.tf`
 - Added `get_config()` lazy loading pattern for testability (env vars read at runtime, not import time)
 - Shared fixtures in `lambdas/conftest.py` (AWS credentials, sys.path setup)
-- Documentation: `docs/lambdatest.md`
+- Documentation: `docs/lambdatest.md` (later removed in commit 218f639; still in git history)
 
 **Complete when:** ✅ Tests written, all tests pass, coverage threshold met
 
@@ -578,7 +578,7 @@
 - ✅ Audited CloudWatch Logs retention (all 7 days confirmed)
 - ✅ Created cost_management Terraform module with AWS Budget alerts
 - ✅ Deployed $50/month budget with 80%, 100% actual, and 100% forecasted thresholds
-- ✅ Documented findings in `docs/cost-optimization-report.md`
+- ✅ Documented findings in `docs/cost-optimization-report.md` (later removed in commit 218f639; still in git history)
 
 **Implementation Notes:**
 - Current monthly costs: ~$12/month (76% under budget)

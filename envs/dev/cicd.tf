@@ -1,18 +1,16 @@
 # IAM role assumed by GitHub Actions via OIDC for Terraform CI/CD (no long-term credentials)
 #
 # The OIDC Identity Provider already exists in this account (created for a
-# previous project). We reference it via data source rather than recreating it.
-# Provider: token.actions.githubusercontent.com
-#
-# After creating the role in the AWS Console (per docs/phase10-task1-guide.md),
-# import it into state with:
-#   terraform -chdir=envs/dev import aws_iam_role.github_actions_dev ai-dp-dev-github-actions
+# previous project), so it is looked up rather than created. In an account
+# without one, set enable_github_oidc = false to deploy the pipeline alone.
 
 data "aws_iam_openid_connect_provider" "github_actions" {
-  url = "https://token.actions.githubusercontent.com"
+  count = var.enable_github_oidc ? 1 : 0
+  url   = "https://token.actions.githubusercontent.com"
 }
 
 resource "aws_iam_role" "github_actions_dev" {
+  count       = var.enable_github_oidc ? 1 : 0
   name        = "ai-dp-dev-github-actions"
   description = "GitHub Actions OIDC role for AI-DP dev Terraform deployments"
 
@@ -21,7 +19,7 @@ resource "aws_iam_role" "github_actions_dev" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Federated = data.aws_iam_openid_connect_provider.github_actions.arn
+        Federated = data.aws_iam_openid_connect_provider.github_actions[0].arn
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
@@ -29,8 +27,8 @@ resource "aws_iam_role" "github_actions_dev" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          # Trusts any workflow triggered from the AI-DP repo
-          # Branch restrictions enforced via GitHub branch protection (repo Settings -> Branches)
+          # Any branch, tag, or PR in this repo can assume the role, so a protected
+          # main branch (Settings -> Branches) is what keeps unreviewed code from deploying
           "token.actions.githubusercontent.com:sub" = "repo:CloudMikey/ai-dp:*"
         }
       }
@@ -43,8 +41,11 @@ resource "aws_iam_role" "github_actions_dev" {
   }
 }
 
+# Adding count changed the address; this keeps the existing role instead of replacing it
+moved {
+  from = aws_iam_role.github_actions_dev
+  to   = aws_iam_role.github_actions_dev[0]
+}
+
 # Note: The inline policy (ai-dp-dev-terraform-policy) is managed via the AWS Console.
 # The role itself is in Terraform state; the policy is discovered at deploy time.
-
-
-

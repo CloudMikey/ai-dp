@@ -30,12 +30,18 @@ Orchestrates the batch AI-enrichment pipeline. When a file lands in the data lak
 |---|-------|------|---------|
 | 1 | `PrepareComprehendInput` | Pass | Extract bucket / key / size from the EventBridge event |
 | 2 | `ReadS3Object` | Task (SDK: `s3:getObject`) | Read the object's text content from `raw/` |
-| 3 | `PrepareTextContent` | Pass | Combine text content with object metadata |
-| 4 | `ComprehendAnalysis` | **Parallel** | Branch A: `DetectSentiment` · Branch B: `DetectEntities` (both AWS SDK Comprehend tasks) |
-| 5 | `FormatResults` | Pass | Structure the sentiment + entity results for downstream writes |
-| 6 | `InvokeMergeLambda` | Task (Merge Lambda) | Merge results → S3 `processed/` + DynamoDB. Has `Retry` (3 attempts, backoff 2.0) and `Catch` |
-| 7 | `MergeComplete` | Succeed | Terminal success state |
-| 8 | `MergeFailed` | Fail | Terminal failure state (entered via `Catch` if the merge fails after retries) |
+| 3 | `CheckFileFormat` | Choice | `.json` keys (streaming events) → step 4; anything else → step 7 |
+| 4 | `ParseJsonEvent` | Pass | `States.StringToJson` turns the body into an object |
+| 5 | `CheckForText` | Choice | `text` field present → step 6; otherwise `NoTextToAnalyze` (Succeed, no Comprehend calls) |
+| 6 | `ExtractEventText` | Pass | Keep only the `text` field, so metadata isn't scored |
+| 7 | `PrepareTextContent` | Pass | Plain-text batch files: the whole body is the document |
+| 8 | `ComprehendAnalysis` | **Parallel** | Branch A: `DetectSentiment` · Branch B: `DetectEntities` (both AWS SDK Comprehend tasks) |
+| 9 | `FormatResults` | Pass | Structure the sentiment + entity results for downstream writes |
+| 10 | `InvokeMergeLambda` | Task (Merge Lambda) | Merge results → S3 `processed/` + DynamoDB. Has `Retry` (3 attempts, backoff 2.0) and `Catch` |
+| 11 | `MergeComplete` | Succeed | Terminal success state |
+| 12 | `MergeFailed` | Fail | Terminal failure state (entered via `Catch` if the merge fails after retries) |
+
+`ReadS3Object` and both Comprehend tasks share one retry policy: errors a retry can't fix (text too long, invalid request, missing key, archived object) fail immediately; any other task failure retries 3 times with backoff and full jitter.
 
 > Comprehend is invoked through Step Functions' native AWS SDK integrations (`arn:aws:states:::aws-sdk:comprehend:*`), so no glue Lambda is needed for the AI calls.
 
@@ -131,7 +137,9 @@ aws stepfunctions start-execution `
 
 The workflow uses several core ASL constructs (full definition in `main.tf`):
 
-- **`Pass`** states (`PrepareComprehendInput`, `PrepareTextContent`, `FormatResults`) reshape the
+- **`Choice`** states (`CheckFileFormat`, `CheckForText`) route streaming JSON events and plain-text
+  batch files to the right text-extraction step.
+- **`Pass`** states (`PrepareComprehendInput`, `ParseJsonEvent`, `ExtractEventText`, `PrepareTextContent`, `FormatResults`) reshape the
   data between steps using `Parameters` and JSONPath (`$.detail.bucket.name`, etc.) — no compute cost.
 - **AWS SDK service integrations** (`arn:aws:states:::aws-sdk:s3:getObject`,
   `arn:aws:states:::aws-sdk:comprehend:detectSentiment`) call AWS services directly from the state
@@ -157,32 +165,6 @@ The workflow uses several core ASL constructs (full definition in `main.tf`):
 
 **Least Privilege Principle**: every permission maps to a specific state in the workflow — S3 read for
 `ReadS3Object`, Comprehend for the parallel branches, Lambda invoke for `InvokeMergeLambda`.
-
-## Interview Talking Points
-
-### Q: Why did you choose Step Functions for orchestration?
-
-> "I needed to coordinate several steps — read from S3, call two Comprehend APIs in parallel, then invoke a merge Lambda — with retries and a clear failure path. Step Functions gives me visual workflow management and built-in error handling without writing orchestration logic in code. The declarative ASL makes the pipeline easy to understand, modify, and debug, and the native AWS SDK integrations let me call S3 and Comprehend directly without glue Lambdas."
-
-### Q: How do you run the two Comprehend calls efficiently?
-
-> "Sentiment and entity detection are independent, so I run them in a `Parallel` state with two branches. They execute concurrently and their results are merged into a single array, which roughly halves the enrichment latency compared to calling them sequentially."
-
-### Q: How do you handle errors in Step Functions?
-
-> "The Merge Lambda task has a `Retry` block for transient failures — `Lambda.ServiceException` and `Lambda.TooManyRequestsException` — with 3 attempts and exponential backoff (rate 2.0). If it still fails, a `Catch` on `States.ALL` routes the execution to a dedicated `MergeFailed` state that captures the error. The Lambda also has its own SQS DLQ, so failed payloads aren't lost."
-
-### Q: What's the cost of using Step Functions?
-
-> "It's $0.025 per 1,000 state transitions. This workflow is about 10 transitions per execution, so each run costs roughly $0.00025. Even at 10,000 batch uploads a month that's about $2.50 — negligible compared to the orchestration and debugging value."
-
-### Q: How do you monitor Step Functions executions?
-
-> "CloudWatch Logs with `include_execution_data` capture every state transition and the input/output at each step. I can watch real-time execution graphs in the console, set alarms on `ExecutionsFailed`, and query logs with CloudWatch Insights. For production I'd lower the log level from ALL to ERROR to cut cost while keeping failure visibility."
-
-### Q: How would you handle long-running tasks in this pipeline?
-
-> "I'm using Standard workflows (up to 1 year) because AI enrichment can take seconds to minutes and I want the full execution history for debugging. For very high-volume, short-lived processing I'd evaluate Express workflows, accepting that they trade per-execution visibility for throughput and lower cost."
 
 ## Resources
 

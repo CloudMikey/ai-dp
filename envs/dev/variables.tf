@@ -12,6 +12,12 @@ variable "project_name" {
   default     = "ai-dp"
 }
 
+variable "enable_github_oidc" {
+  description = "Create the GitHub Actions deploy role (requires an existing GitHub OIDC provider in the account)"
+  type        = bool
+  default     = true
+}
+
 variable "alarm_email" {
   description = "Email address for CloudWatch alarm notifications"
   type        = string

@@ -6,13 +6,13 @@ build step) and talks directly to AWS via the AWS SDK for JavaScript.
 
 ## Architecture
 
-The dashboard reads from two of the pipeline's storage layers — the **hot store** for recent
-records and a **pre-aggregated summary** in the data lake for the chart:
+The dashboard reads from two of the pipeline's storage layers: a **pre-aggregated summary** in the
+data lake for the totals and chart, and the **hot store** for recent records:
 
 | Data Source | What it powers | How it's read |
 |-------------|----------------|---------------|
-| **DynamoDB** (`ai-dp-dev-enriched-data`) | Metric cards + Recent Events table | `Scan` (limit 50), aggregated client-side |
-| **S3 curated layer** (`curated/latest_summary.json`) | "Top Entities Detected" chart | `GetObject` of a pre-aggregated JSON file |
+| **S3 curated layer** (`curated/latest_summary.json`) | Metric cards + "Top Entities Detected" chart | `GetObject` of a pre-aggregated JSON file |
+| **DynamoDB** (`ai-dp-dev-enriched-data`) | Recent Events table | `Query` on the `timestamp-index` GSI, newest first (limit 50) |
 | **Kinesis** (`ai-dp-dev-ingestion-stream`) | "Send Test Event" button | `PutRecord` into the ingestion stream |
 
 > **Note on historical analytics:** Athena + Glue exist in this project as the **cold / historical
@@ -23,9 +23,9 @@ records and a **pre-aggregated summary** in the data lake for the chart:
 
 ## Features & Functionality
 
-### 1. Sentiment Metric Cards (DynamoDB)
-- **Total Records**: count of event records returned by the DynamoDB scan (limited to 50)
-- **Sentiment breakdown**: POSITIVE, NEUTRAL, NEGATIVE, MIXED counts, tallied in the browser
+### 1. Sentiment Metric Cards (S3 curated summary)
+- **Total Records**: `total_records` from the summary, a count of every record the pipeline has processed
+- **Sentiment breakdown**: POSITIVE, NEUTRAL, NEGATIVE, MIXED from `sentiment_counts`, which sum to the total
 - **Color-coded cards** for each sentiment category
 
 ### 2. Top Entities Detected (S3 curated summary)
@@ -40,6 +40,7 @@ records and a **pre-aggregated summary** in the data lake for the chart:
   - **Time**: local timestamp
   - **Sentiment**: color-coded badge
   - **Confidence**: `sentimentScore` as a percentage (e.g. "99.0%")
+  - **Text**: the first 500 characters of the review, truncated in the cell; hover for the full preview
   - **Entities**: up to 4 entity badges with a "+N" overflow indicator
 - Junk "entities" that Comprehend misidentifies (timestamps, time strings) are filtered out before
   display, and all entity text is HTML-escaped to prevent injection
@@ -100,9 +101,9 @@ const CONFIG = {
 The credentials in `config.js` need these permissions:
 
 **DynamoDB:**
-- `dynamodb:Scan` on `ai-dp-dev-enriched-data`
+- `dynamodb:Query` on `ai-dp-dev-enriched-data/index/timestamp-index`
 
-**S3 (for the Top Entities chart):**
+**S3 (for the metric cards and Top Entities chart):**
 - `s3:GetObject` on the data lake bucket (`curated/latest_summary.json`)
 
 **Kinesis (for the "Send Test Event" button):**
@@ -134,17 +135,17 @@ Press `F12` and open the Console tab:
 ### Data Flow
 
 1. **Page load** triggers `loadData()`, which runs two operations in parallel (`Promise.all`):
-   - `loadDynamoDBData()` — scans the hot store (limit 50), filters out metadata records, then
-     updates the metric cards and the Recent Events table
-   - `loadCuratedSummary()` — fetches `curated/latest_summary.json` from S3 and renders the
-     Top Entities doughnut chart
+   - `loadDynamoDBData()` — queries the `timestamp-index` GSI for the 50 newest records, filters out
+     metadata records, then fills the Recent Events table
+   - `loadCuratedSummary()` — fetches `curated/latest_summary.json` from S3, then updates the metric
+     cards and renders the Top Entities doughnut chart
 2. **Auto-refresh** re-runs `loadData()` every 60 seconds; the **Refresh** button runs it on demand.
 3. **Send Test Event** is independent: it `PutRecord`s a sample payload to Kinesis and the result
    shows up in the table after the pipeline processes it.
 
 ### Fallback Behavior
 
-- If the DynamoDB scan fails, the table shows an error and the chart still renders (and vice versa) —
+- If the DynamoDB query fails, the table shows an error and the cards and chart still render (and vice versa) —
   the two sources fail independently.
 - If `curated/latest_summary.json` doesn't exist yet (e.g. before the Merge Lambda has run), the
   chart shows "Curated summary not available" instead of breaking the page.
@@ -167,7 +168,7 @@ Edit `sorted.slice(0, 20)` in `updateTable()` in `app.js`.
 ### "Failed to load recent events from DynamoDB"
 - Check the credentials in `config.js`
 - Verify `DYNAMODB_TABLE` matches your deployed table
-- Ensure the IAM user has `dynamodb:Scan`
+- Ensure the IAM user has `dynamodb:Query` on the `timestamp-index` GSI
 
 ### "Curated summary not available" (chart empty)
 - The Merge Lambda writes `curated/latest_summary.json` on each run — send some data through the
@@ -198,12 +199,6 @@ This dashboard uses static AWS credentials in `config.js` for **local demonstrat
 - A backend API (Lambda + API Gateway) so the browser holds no credentials
 - IAM roles for hosted applications
 
-**Interview talking point:** *"For this local demo I use static credentials since it only runs on my
-machine and `config.js` is gitignored. In production I'd use Cognito Identity Pools for temporary
-browser credentials, or route all AWS calls through a backend API. I also deliberately keep Athena
-out of the dashboard — it's the console-only cold path for historical queries — and feed the chart
-from a pre-aggregated S3 summary for fast, cheap loads."*
-
 ## Data Schema
 
 ### DynamoDB Record Structure
@@ -225,8 +220,8 @@ from a pre-aggregated S3 summary for fast, cheap loads."*
 
 ### Curated Summary (`curated/latest_summary.json`)
 
-Pre-aggregated by the Merge Lambda on each run. The dashboard reads `top_entities` (for the chart)
-and logs `total_records`; the other fields are available for future widgets:
+Pre-aggregated by the Merge Lambda on each run. The dashboard reads `total_records` and
+`sentiment_counts` (cards) and `top_entities` (chart); the other fields are unused:
 
 ```json
 {

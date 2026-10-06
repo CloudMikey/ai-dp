@@ -215,7 +215,7 @@ The dashboard is a **live-operations view**, and it is bounded in three independ
 
 The metric cards have a **different** limit: they read a running tally that only counts records written since the file was last created. Reset the summary and it starts from zero regardless of what is in DynamoDB.
 
-None of this is a defect. S3 `processed/` retains everything permanently, and Athena queries the full history. The dashboard answers *"what is happening lately"* — and answers it correctly.
+None of this is a defect. S3 `processed/` keeps every record for a year (365-day lifecycle), and Athena queries that history. The dashboard answers *"what is happening lately"* — and answers it correctly.
 
 ---
 

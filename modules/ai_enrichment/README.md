@@ -4,14 +4,6 @@
 
 This module provides IAM permissions for Step Functions to integrate with AWS Comprehend for AI-powered text analysis. AWS Comprehend is a serverless natural language processing (NLP) service, so no infrastructure resources need to be provisioned—only IAM policies.
 
-## Portfolio Notes
-
-**Interview Talking Points:**
-- **Serverless AI Integration**: Demonstrates understanding of AWS managed AI services
-- **Service Orchestration**: Shows Step Functions coordinating multiple AI tasks
-- **IAM Best Practices**: Least-privilege permissions scoped to specific Comprehend actions
-- **Cost Optimization**: Comprehend is pay-per-request with no minimum fees
-
 ## Features
 
 - **Sentiment Analysis**: `comprehend:DetectSentiment` - analyzes positive/negative/neutral sentiment

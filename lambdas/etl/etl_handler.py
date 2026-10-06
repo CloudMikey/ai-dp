@@ -28,29 +28,28 @@ def get_config():
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Process Kinesis records and write to S3. Failed batches go to DLQ."""
+    """Process Kinesis records and write to S3.
+
+    Raises on the first bad record so Lambda retries the whole batch (S3 keys are
+    sequence numbers, so re-writing earlier records is harmless). After 3 retries the
+    event source mapping sends the batch to the DLQ.
+    """
     logger.info(f"Processing {len(event['Records'])} records from Kinesis")
 
-    config = get_config()
+    get_config()  # fail fast if DATA_LAKE_BUCKET is missing
 
     successful = 0
-    failed = 0
-
     for record in event['Records']:
         try:
-
             result = process_record(record)
-            logger.info(f"Successfully processed record: {result}")
-            successful += 1
-
         except Exception as e:
             logger.error(f"Failed to process record: {str(e)}", exc_info=True)
-            failed += 1
             raise
+        logger.info(f"Successfully processed record: {result}")
+        successful += 1
 
     summary = {
         'successful': successful,
-        'failed': failed,
         'total': len(event['Records'])
     }
 

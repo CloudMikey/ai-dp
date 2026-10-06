@@ -85,6 +85,13 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
+  # The route has no auth, and every accepted request runs Step Functions + 2 Comprehend calls.
+  # Throttling caps that spend per day; it does not make the endpoint private.
+  default_route_settings {
+    throttling_rate_limit  = var.api_throttle_rate_limit
+    throttling_burst_limit = var.api_throttle_burst_limit
+  }
+
   dynamic "access_log_settings" {
     for_each = var.enable_api_gateway_logging ? [1] : []
 
@@ -182,7 +189,7 @@ resource "aws_lambda_function" "etl" {
   runtime     = "python3.11"
   handler     = "etl_handler.lambda_handler"
   timeout     = 60  # Kinesis batch window is 5s; 60s allows for S3 write latency + retries without approaching stream retention boundary
-  memory_size = 256 # 256MB sufficient for JSON decode + S3 write; load test confirmed P95=2044ms well within timeout
+  memory_size = 256 # JSON decode + one S3 PutObject per record
   role        = aws_iam_role.etl_lambda.arn
   environment {
     variables = {
@@ -190,10 +197,6 @@ resource "aws_lambda_function" "etl" {
       RAW_PREFIX       = "raw/"
       LOG_LEVEL        = "INFO"
     }
-  }
-
-  dead_letter_config {
-    target_arn = aws_sqs_queue.etl_dlq.arn
   }
 
   # X-Ray active tracing: per-invocation latency timeline + downstream AWS SDK call segments
@@ -232,7 +235,8 @@ resource "aws_lambda_event_source_mapping" "kinesis_to_etl" {
       destination_arn = aws_sqs_queue.etl_dlq.arn
     }
   }
-  # bisect_batch_on_function_error not set â€” poison-pill protection handled by maximum_retry_attempts = 3 + DLQ
+  # bisect_batch_on_function_error is off: one bad record fails its whole batch, so after 3 retries
+  # the good records in that batch go to the DLQ too (docs/runbooks.md, Runbook 4, replays them)
   depends_on = [
     aws_iam_role_policy_attachment.lambda_kinesis_execution,
     aws_lambda_function.etl

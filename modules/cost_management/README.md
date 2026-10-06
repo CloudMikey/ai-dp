@@ -88,11 +88,3 @@ budget_amount = "200.00"  # Moderate limit for staging
 ```hcl
 budget_amount = "1000.00"  # Higher limit for production workloads
 ```
-
-## Interview Talking Points
-
-- Demonstrates proactive cost management through infrastructure-as-code
-- Shows understanding of environment-appropriate budget thresholds
-- Implements multi-threshold alerting (early warning + hard limit)
-- Uses AWS native tools (Budgets) rather than third-party solutions
-- Configurable and reusable across multiple environments

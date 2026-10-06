@@ -49,12 +49,12 @@ AI-DP/
 | Glue Database | `ai-dp-dev-analytics` | ✅ |
 | Athena Workgroup | `ai-dp-dev-workgroup` | ✅ |
 | CloudWatch Dashboard | `ai-dp-dev-operations` | ✅ |
-| CloudWatch Alarms | 6 alarms + SNS topic | ✅ |
+| CloudWatch Alarms | 5 alarms + SNS topic | ✅ |
 | AWS Budget | `ai-dp-dev-monthly-budget` ($50/month) | ✅ |
 | GitHub Actions OIDC Role | `ai-dp-dev-github-actions` | ✅ |
 
 **Phase 9 Progress (7/7 tasks) ✅ COMPLETE:**
-- ✅ Lambda unit tests (42 tests, 95% coverage; CI gate at 90%)
+- ✅ Lambda unit tests (43 tests, 93% coverage of handler code; CI gate at 90%)
 - ✅ Load testing (1000 events, 0% errors)
 - ✅ CloudWatch Dashboard (8 widgets)
 - ✅ CloudWatch Alarms + SNS notifications
@@ -81,7 +81,7 @@ AI-DP/
 - **Text preview feature completed.** The `td.text-preview` CSS had existed unused since a removed column; added the `Text` column to the dashboard table with full text in a `title` tooltip on hover, and corrected all `colspan` values from 4 to 5.
 - **New tooling:** `scripts/rebuild_summary.py` (recomputes the summary from DynamoDB; absolute write, idempotent, `--dry-run`) and the `/reset-data` slash command (clears only the two sources the dashboard reads, never `raw/` or `processed/`).
 
-**Batch path input contract (verified 2026-08-31):** Step Functions passes the **entire file body** to Comprehend (`"text_content.$" = "$.s3_response.Body"`) — no JSON parsing, no field extraction. Use plain `.txt`, one document per file, under **5,000 bytes** (`DetectSentiment`'s limit; `DetectEntities` allows 100 KB, so sentiment binds). EventBridge matches any key under `raw/`, with no extension filter. One file = one record = one sentiment.
+**Comprehend input contract:** Step Functions routes on the object key. Keys ending in `.json` (the streaming path) are parsed with `States.StringToJson` and only the `text` field is scored; events without `text` end at `NoTextToAnalyze` with no Comprehend calls. Any other key is treated as plain text and the **entire body** is scored. Keep each document under **5,000 bytes** (`DetectSentiment`'s limit; `DetectEntities` allows 100 KB, so sentiment binds). EventBridge matches any key under `raw/`. One file = one record = one sentiment.
 
 **For full phase history, achievements, and next steps:** Load Serena memory `project-status-and-roadmap`.
 
@@ -173,12 +173,12 @@ python scripts/rebuild_summary.py
 
 # Batch-path test: 8 sample .txt files -> 8 concurrent Step Functions executions
 aws s3 cp test-data/batch/ s3://ai-dp-data-lake-dev-us-west-2/raw/batch-test/ `
-  --recursive --region us-west-2
+  --recursive --exclude README.md --region us-west-2
 
 # Test streaming ingestion
 curl -X POST "https://<api-id>.execute-api.us-west-2.amazonaws.com/ingest" `
   -H "Content-Type: application/json" -H "X-Partition-Key: test" `
-  -d '{"event_type":"test","event_timestamp":"2026-01-25T12:00:00Z"}'
+  -d '{"event_type":"test","event_timestamp":"2026-01-25T12:00:00Z","text":"Fast shipping, great product."}'
 
 # Test batch ingestion
 aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
@@ -193,7 +193,7 @@ aws s3 cp test.json s3://ai-dp-data-lake-dev-us-west-2/raw/test.json
 | Detailed phase history | Serena memory: `project-status-and-roadmap` |
 | Full roadmap | `docs/roadmap.md` |
 | Error solutions | `docs/errorlog.md` |
-| Architecture overview | `docs/ai-dp overview notion.md` |
+| Architecture overview | `docs/architecture.md` |
 | How the dashboard works | `docs/dashboard-explained.md` |
 | Reset data for a clean retest | `/reset-data` slash command |
 | Deploy, rollback, alarm response, DLQ replay | `docs/runbooks.md` |

@@ -5,20 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI-DP Analytics Dashboard</title>
 
-    <!-- Our custom styles -->
     <link rel="stylesheet" href="styles.css">
 
-    <!-- Chart.js library for making charts (pie chart, bar chart, etc.) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-    <!-- AWS SDK to connect to DynamoDB (our database) -->
+    <!-- AWS SDK v2: DynamoDB, S3, and Kinesis calls from the browser -->
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1543.0.min.js"></script>
 </head>
 <body>
-    <!-- Main container holds everything -->
     <div class="container">
 
-        <!-- Top header section -->
         <header>
             <h1>AI-DP Analytics Dashboard</h1>
             <p class="subtitle">Real-time Sentiment Analysis</p>
@@ -26,7 +22,7 @@
 
         <!-- Metrics + Chart side by side -->
         <section class="top-row">
-            <!-- Left: Sentiment metrics (vertical stack, from DynamoDB) -->
+            <!-- Left: sentiment totals (from the S3 curated summary) -->
             <div class="metrics-vertical">
                 <div class="metric-card">
                     <h3 id="total-records">-</h3>
@@ -82,7 +78,6 @@
                     </tr>
                 </thead>
                 <tbody id="events-tbody">
-                    <!-- Data will be added here by JavaScript -->
                     <tr>
                         <td colspan="5">Loading...</td>
                     </tr>
@@ -90,16 +85,14 @@
             </table>
         </section>
 
-        <!-- Footer at bottom -->
         <footer>
             <p>Last updated: <span id="last-update">Never</span></p>
         </footer>
     </div>
 
-    <!-- Load our configuration (AWS credentials) -->
+    <!-- Local, gitignored: AWS credentials + resource names (see README) -->
     <script src="config.js"></script>
 
-    <!-- Load our main JavaScript code -->
     <script src="app.js"></script>
 </body>
 </html>

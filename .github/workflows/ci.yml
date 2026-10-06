@@ -40,10 +40,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install test dependencies
-        run: pip install pytest pytest-cov boto3 moto
+        run: pip install -r lambdas/requirements-dev.txt
 
       - name: Run unit tests
-        run: pytest lambdas/ --cov --cov-report=term-missing --cov-fail-under=90
+        run: pytest lambdas/ --cov=etl_handler --cov=merge_handler --cov-report=term-missing --cov-fail-under=90
 
       # ── 3. Setup Terraform ───────────────────────────────────────────────────
       # terraform_wrapper: true (default) wraps the binary so plan stdout/stderr
@@ -62,7 +62,7 @@ jobs:
       # ── 5. Configure AWS credentials via OIDC ────────────────────────────────
       # GitHub exchanges an OIDC token for short-lived AWS credentials.
       # No long-term access keys are stored in GitHub secrets.
-      # Role trust policy is scoped to repo:CloudMikey/AI-DP:*
+      # Role trust policy is scoped to repo:CloudMikey/ai-dp:*
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4.1.0
         with:
@@ -106,9 +106,16 @@ jobs:
         run: tflint --chdir="${{ env.WORKING_DIR }}" --config="$(pwd)/.tflint.hcl"
 
       # ── 11. Run tfsec ────────────────────────────────────────────────────────
-      # aquasecurity/tfsec-action was deprecated; install binary directly instead
+      # aquasecurity/tfsec-action was deprecated; install a pinned release binary and
+      # verify its published SHA-256 instead of piping a script from master into bash
       - name: Install tfsec
-        run: curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+        env:
+          TFSEC_VERSION: v1.28.14
+          TFSEC_SHA256: a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68
+        run: |
+          curl -sSL -o tfsec "https://github.com/aquasecurity/tfsec/releases/download/${TFSEC_VERSION}/tfsec-linux-amd64"
+          echo "${TFSEC_SHA256}  tfsec" | sha256sum -c -
+          sudo install -m 0755 tfsec /usr/local/bin/tfsec
 
       - name: Run tfsec
         run: tfsec ${{ env.WORKING_DIR }} --config-file .tfsec.yml --minimum-severity MEDIUM --no-color
