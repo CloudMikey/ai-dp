@@ -453,7 +453,7 @@ NOT AVAILABLE in:
 
 **Implementation**:
 ```python
-# lambdas/etl/app.py
+# lambdas/etl/etl_handler.py
 
 def process_record(record: Dict[str, Any]) -> Dict[str, str]:
     """Decode Kinesis record → Validate → Normalize → Write to S3."""
