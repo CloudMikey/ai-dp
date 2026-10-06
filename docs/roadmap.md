@@ -568,7 +568,7 @@
 **tfsec Results:**
 - 0 critical findings
 - 17 high (all accepted - IAM wildcards for AWS APIs that don't support resource-level permissions)
-- Full report: `docs/tfsec-report.md`
+- Full report: `docs/tfsec-report.md` (later removed; rerun tfsec to reproduce)
 
 **Complete when:** ✅ Security scan passes, no critical findings, audit trail documented
 

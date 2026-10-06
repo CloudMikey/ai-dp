@@ -1,6 +1,6 @@
 ---
 name: portfolio
-description: Build production-ready cloud portfolio infrastructure with AWS and Terraform. Use when implementing AI-DP pipeline components, creating AWS resources, writing Infrastructure-as-Code, or building interview-ready portfolio projects. Focuses on working, explainable, and secure implementations.
+description: Implements AI-DP pipeline components in AWS and Terraform. Use when creating AWS resources or writing Infrastructure-as-Code for this project. Keeps changes scoped to the task, explainable, and secure.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
 ---
@@ -188,9 +188,9 @@ variable "services" {
 }
 
 # ✅ Clear and explicit
-variable "enable_rekognition" {
+variable "enable_xray_tracing" {
   type    = bool
-  default = false
+  default = true
 }
 ```
 
@@ -237,18 +237,6 @@ resource "aws_lambda_function" "x" {
 - README updated with usage
 - Run `terraform fmt` and `terraform validate`
 - Can explain every resource
-
-# Interview Talking Points
-
-Your code helps answer:
-
-**Architecture**: "Walk me through your pipeline" → Comments and structure make this easy
-
-**Technical**: "How do you handle errors?" → DLQs, CloudWatch, retry configs
-
-**Cost**: "How did you optimize costs?" → Lifecycle rules, feature flags
-
-**Security**: "How do you prevent secrets in Git?" → Variables, Secrets Manager references
 
 # When to Ask for Help
 

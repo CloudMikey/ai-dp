@@ -142,7 +142,7 @@ kinesis_kms_key_id      = "alias/aws/kinesis"
 | Medium | 2 | Accepted (see below) |
 | Low | 7 | Accepted (see below) |
 
-**Full report:** `docs/tfsec-report.md`
+**Current result:** 0 findings at MEDIUM and above with the documented exclusions in `.tfsec.yml` (CI runs this on every PR). The raw scan output from this audit was removed; rerun `tfsec envs/dev --config-file .tfsec.yml` to reproduce.
 
 ### 4.2 Accepted Risks (Not Remediated)
 
@@ -155,14 +155,6 @@ These findings are intentional for a portfolio project:
 | S3 access logging disabled | Cost optimization for dev environment |
 | CloudWatch logs not KMS encrypted | AWS-managed encryption sufficient for portfolio |
 | CORS wildcard | Dev environment only - would restrict in production |
-
-### 4.3 Interview Talking Points
-
-**Q: "Why did tfsec report IAM wildcards?"**
-A: "Some AWS APIs like Comprehend and Glue don't support resource-level permissions. The wildcards are scoped to specific services and documented with inline comments explaining the AWS requirement."
-
-**Q: "Why not enable S3 access logging?"**
-A: "For a dev/portfolio environment, the cost and complexity of managing log buckets outweighs the audit benefit. In production, I would enable it for compliance and incident investigation."
 
 ---
 

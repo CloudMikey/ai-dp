@@ -117,7 +117,7 @@ module "orchestration" {
 - `TTL_DAYS`: Days before DynamoDB record expires
 - `LOG_LEVEL`: Logging verbosity (INFO/DEBUG/ERROR)
 
-**Lambda Code Location**: [`lambdas/merge/app.py`](../../lambdas/merge/app.py)
+**Lambda Code Location**: [`lambdas/merge/merge_handler.py`](../../lambdas/merge/merge_handler.py)
 
 ## IAM Permissions (Least-Privilege)
 
