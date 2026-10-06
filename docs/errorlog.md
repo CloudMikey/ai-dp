@@ -655,8 +655,51 @@ Batch-path records have no `textPreview` attribute, so `latest_text_preview` in 
 
 ---
 
+## Error #7: CI Deploy Role Missing Permissions That Only New Changes Needed
+
+**Date**: 2026-10-05
+**Context**: PR #6 (pipeline hardening), which changed the state machine definition and the API Gateway stage, run through CI as `ai-dp-dev-github-actions`. A local `terraform plan` with admin credentials had succeeded.
+
+### Symptom
+
+Two failures, one after the other:
+
+1. **CI plan failed.** The PR comment said `Terraform planned the following actions, but then encountered a problem` and listed 3 changes instead of the expected 5, with no error message.
+2. **Deploy apply failed partway.** After fixing (1) and merging, 7 of 8 changes applied; the API stage update failed:
+
+```
+Error: updating API Gateway v2 Stage ($default): BadRequestException: Insufficient permissions to enable logging.
+User: ...assumed-role/ai-dp-dev-github-actions/... is not authorized to perform: logs:CreateLogDelivery
+```
+
+### Root Cause
+
+The CI role's permission policy lives in the AWS Console, not Terraform, so nothing kept it in step with what the code started asking AWS to do.
+
+1. **`states:ValidateStateMachineDefinition`**: the AWS provider validated the changed state machine definition during `plan`, and the role couldn't call that API. The plan stopped at the state machine, which is why it reported 3 of 5 changes. (A June commit also touched the definition's `Comment`; I haven't confirmed whether that change went through CI before the provider started validating, or was applied with admin credentials.)
+2. **`logs:CreateLogDelivery` and related actions**: the stage has access logging enabled, and API Gateway re-checks that the *caller* can manage log delivery on a stage update. The stage was created with admin credentials, and git history shows no stage change between CI going live and this PR.
+
+**Why the PR comment showed no error**: `ci.yml` posted only the plan's stdout. Terraform writes errors to stderr.
+
+### Attempted Solutions
+
+None needed. `aws iam simulate-principal-policy` against the role confirmed each missing action before changing anything.
+
+### Working Fix
+
+1. Added `states:ValidateStateMachineDefinition` and the 7 log-delivery actions, both on `Resource: "*"` (neither is tied to a specific resource ARN). Re-ran CI, merged, re-ran the failed deploy: only the stage change remained, and it applied.
+2. Audited the rest of the policy the same way and added actions the repo's own runbooks would hit: `kinesis:UpdateStreamMode` (Runbook 8), retention changes, `iam:UpdateAssumeRolePolicy`, policy versions, `iam:ListInstanceProfilesForRole`, `dynamodb:UpdateTable`, untag actions. The policy simulator also never matched the existing `kinesis:UpdateShardCount` grant against the stream ARN, so shard-count changes from CI likely would have failed too; moved both capacity actions to `Resource: "*"`, which works either way.
+3. Tightened IAM while there: role actions scoped to `role/ai-dp-*` (was `*`), `iam:PassRole` limited by `iam:PassedToService` to the 5 services the pipeline uses, and an explicit `Deny` stopping the role from editing its own policies, trust policy, or deleting itself.
+4. `ci.yml` now includes the plan's stderr in the PR comment. Both the PR comment and `deploy.yml`'s job summary redact the alarm email (it appears in resource addresses) and 12-digit account IDs, because GitHub masks secrets in logs but not in text a workflow posts.
+
+**Verification**: 24 simulated decisions on the draft policy and 10 on the live role matched expectations, including the denials; Access Analyzer reported 0 findings. Deploy re-run succeeded; stage throttling, state machine, and alarms confirmed via the AWS CLI.
+
+### Key Principle
+
+**A permission policy managed outside code drifts from the code that depends on it, and the gap only shows up at plan or apply time, under the role that's missing it.** A local plan with admin credentials proves nothing about CI. Test with the real role (`simulate-principal-policy`) before merging changes that touch new APIs, and make the failure message visible where people look.
+
 ---
 
-**Last Updated**: 2026-08-31
-**Total Errors Documented**: 6
+**Last Updated**: 2026-10-05
+**Total Errors Documented**: 7
 **Total Preventive Patterns Documented**: 4
