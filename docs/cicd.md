@@ -95,6 +95,8 @@ No AWS access keys are stored in GitHub. Instead:
 **Role managed in Terraform:** `envs/dev/cicd.tf`
 **Permission policy managed in the AWS Console** (inline policy `ai-dp-dev-terraform-policy`), on purpose, to get hands-on with IAM there. It can't be reviewed or recreated from this repo.
 
+What the policy allows, in short: most actions are limited to resources named `ai-dp-*` (S3, Lambda, Kinesis, DynamoDB, SNS, SQS, Step Functions) plus the state bucket; actions that can't be scoped that way here (Glue/Athena, CloudWatch, EventBridge, Budgets, log delivery, event source mappings) use `*`. IAM write actions are limited to `role/ai-dp-*` and the Comprehend policy; `iam:PassRole` only to Lambda, Step Functions, Glue, EventBridge, and API Gateway. An explicit `Deny` stops the role from editing its own policies or trust policy, so a workflow can't grant itself more access. Because the policy isn't in code, it can fall behind what Terraform needs; see `docs/errorlog.md` Error #7 for how that showed up and how to check it with `aws iam simulate-principal-policy`.
+
 ### Required GitHub configuration
 
 | Type | Name | Value |
