@@ -69,6 +69,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-actions-ci-${{ github.run_id }}
+          mask-aws-account-id: true # This repo's Actions logs are public
 
       # ── 6. Terraform Init ────────────────────────────────────────────────────
       # Uses partial backend config (bucket/key/region in backend-dev.hcl,
@@ -82,6 +83,18 @@ jobs:
             -backend-config="region=us-west-1" \
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
+
+      # ── 6a. Mask API Gateway ID ──────────────────────────────────────────────
+      # The ID reveals the unauthenticated /ingest URL, and plan output prints it.
+      # Calls terraform-bin because the setup-terraform wrapper logs stdout.
+      - name: Mask API Gateway ID
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          api_id="$("$TERRAFORM_CLI_PATH/terraform-bin" output -raw api_gateway_id 2>/dev/null || true)"
+          if [ -n "$api_id" ]; then
+            echo "::add-mask::$api_id"
+            echo "API_GATEWAY_ID=$api_id" >> "$GITHUB_ENV"
+          fi
 
       # ── 7. Terraform Format Check ────────────────────────────────────────────
       # Runs from the repo root: envs/dev alone would skip modules/ and bootstrap/
@@ -137,7 +150,7 @@ jobs:
       # Terraform writes errors to stderr, so without PLAN_ERRORS a failed plan
       # only says "encountered a problem" and the cause stays in the Actions log.
       # Secret masking covers logs, not comment bodies, so the alarm email (it's in
-      # resource addresses) and 12-digit account IDs are redacted before posting.
+      # resource addresses), API ID and 12-digit account IDs are redacted before posting.
       - name: Post Plan to PR
         uses: actions/github-script@v7
         env:
@@ -149,6 +162,7 @@ jobs:
             const redact = (text) => {
               let out = text || '';
               if (process.env.ALARM_EMAIL) out = out.split(process.env.ALARM_EMAIL).join('<alarm-email>');
+              if (process.env.API_GATEWAY_ID) out = out.split(process.env.API_GATEWAY_ID).join('<api-id>');
               return out.replace(/\b\d{12}\b/g, '<account-id>');
             };
             const plan = redact(process.env.PLAN);
