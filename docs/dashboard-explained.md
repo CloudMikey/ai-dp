@@ -32,7 +32,7 @@ Those `id` attributes are the contract. `app.js` finds each one and swaps in rea
 
 ---
 
-## Three widgets, two data sources
+## Four widgets, two data sources
 
 ```
    ┌─────────────────────────┐         ┌─────────────────────────┐
@@ -44,6 +44,7 @@ Those `id` attributes are the contract. `app.js` finds each one and swaps in rea
        ┌───────┴────────┐                          │
        ▼                ▼                          ▼
    Metric cards    Entities chart           Recent Events table
+   + Mix bar
 ```
 
 Both reads fire **in parallel**, so the page fills at the speed of the slower one rather than the sum:
@@ -54,7 +55,7 @@ await Promise.all([ loadDynamoDBData(), loadCuratedSummary() ]);
 
 ---
 
-## Source 1 — the curated summary (cards + chart)
+## Source 1 — the curated summary (cards + mix bar + chart)
 
 One `getObject` pulls a single small JSON file that the **Merge Lambda already computed**:
 
@@ -66,15 +67,17 @@ One `getObject` pulls a single small JSON file that the **Merge Lambda already c
 }
 ```
 
-That one file feeds both widgets:
+That one file feeds all three:
 
 ```
    latest_summary.json
-         ├── total_records + sentiment_counts ──► the 5 metric cards
-         └── top_entities ─────────────────────► the doughnut chart
+         ├── total_records + sentiment_counts ──► the 5 metric cards + the mix bar
+         └── top_entities ─────────────────────► the bar chart (10 most mentioned)
 ```
 
-The counting already happened at write time, inside the pipeline. The browser does no arithmetic — it reads finished numbers and prints them. That is why it responds in roughly 100 ms.
+Despite its name, `top_entities` holds a count for **every** entity. The browser sorts them and keeps 10. Trimming at write time instead would stop new entities from ever reaching the chart (`docs/errorlog.md` Error #8).
+
+The counting already happened at write time, inside the pipeline. The browser does almost no arithmetic — it reads finished numbers and prints them, working out only the mix bar's percentages. That is why it responds in roughly 100 ms.
 
 The numbers are also **self-consistent**: the sentiment counts sum to `total_records`. That matters. An earlier version tallied sentiments from a 50-row sample while showing a true total, so the cards could read "Total: 42" while the four sentiment counts summed to 50. Numbers that do not add up destroy trust in a dashboard faster than numbers that are missing.
 
@@ -117,10 +120,10 @@ A plain `scan` returned hash-ordered results, capped at the page size, and never
 | Time | `item.timestamp`, epoch milliseconds → `toLocaleString()` |
 | Sentiment | `item.sentiment`, styled by a CSS class |
 | Confidence | `item.sentimentScore` × 100, one decimal |
-| Text | `item.textPreview`, truncated by CSS, full text on hover via `title` |
+| Text | `item.textPreview`, clamped to 4 lines by CSS, full text on hover via `title` |
 | Entities | `item.entities`, first 4 as badges, then `+N` |
 
-The Text column truncates visually with an ellipsis and shows the complete preview in a native browser tooltip on hover. Both the visible text and the tooltip run through `escapeHtml()` — the sample data contains apostrophes (`O'Hare`, `I'm`) that would otherwise break the HTML attribute.
+The Text column wraps to at most 4 lines, ends in an ellipsis if there is more, and shows the complete preview in a native browser tooltip on hover. Both the visible text and the tooltip run through `escapeHtml()` — the sample data contains apostrophes (`O'Hare`, `I'm`) that would otherwise break the HTML attribute.
 
 The table renders at most 20 rows even though the query returns 50. It is a live feed, not a data browser.
 

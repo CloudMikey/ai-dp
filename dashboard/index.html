@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-DP Analytics Dashboard</title>
+    <title>Text Sentiment Analytics | AI-DP</title>
 
     <link rel="stylesheet" href="styles.css">
 
@@ -16,9 +16,19 @@
     <div class="container">
 
         <header>
-            <h1>AI-DP Analytics Dashboard</h1>
-            <p class="subtitle">Real-time Sentiment Analysis</p>
+            <div>
+                <h1>Text Sentiment Analytics</h1>
+                <p class="subtitle">Amazon Comprehend &middot; Kinesis &middot; Step Functions &middot; DynamoDB</p>
+            </div>
+            <p id="data-status" class="data-status">Checking for records...</p>
         </header>
+
+        <!-- Sentiment share of all records (from the S3 curated summary) -->
+        <section class="sentiment-section">
+            <h2>Sentiment Mix</h2>
+            <div id="sentiment-bar" class="sentiment-bar" role="img" aria-label="Sentiment mix: no data yet"></div>
+            <div id="sentiment-legend" class="sentiment-legend"></div>
+        </section>
 
         <!-- Metrics + Chart side by side -->
         <section class="top-row">
@@ -86,7 +96,7 @@
         </section>
 
         <footer>
-            <p>Last updated: <span id="last-update">Never</span></p>
+            <p>Page refreshed: <span id="last-update">Never</span></p>
         </footer>
     </div>
 

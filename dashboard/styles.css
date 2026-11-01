@@ -24,22 +24,88 @@ body {
 
 /* ===== HEADER ===== */
 header {
-    text-align: center;
-    padding: 30px 0;
-    background: linear-gradient(135deg, #000000 0%, #333333 100%);
-    color: white;
-    border-radius: 10px;
-    margin-bottom: 30px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 4px 24px;
+    padding: 8px 0;
+    margin-bottom: 16px;
+}
+
+.data-status {
+    font-size: 0.9em;
+    color: #555;
 }
 
 header h1 {
-    font-size: 2.5em;
-    margin-bottom: 10px;
+    font-size: 1.8em;
+    line-height: 1.2;
+    color: #111;
+    margin-bottom: 4px;
 }
 
 .subtitle {
-    font-size: 1.2em;
-    opacity: 0.9;
+    font-size: 0.95em;
+    color: #666;
+}
+
+/* ===== SENTIMENT MIX BAR ===== */
+.sentiment-section {
+    background: white;
+    padding: 20px 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.sentiment-section h2 {
+    margin-bottom: 12px;
+    color: #333;
+}
+
+.sentiment-bar {
+    display: flex;
+    gap: 2px;
+    height: 18px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f3f4f6; /* Visible track while there is no data */
+}
+
+.sentiment-segment {
+    flex-basis: 0;
+    min-width: 4px; /* Keeps a single record visible among thousands */
+}
+
+.sentiment-segment.positive, .sentiment-swatch.positive { background: #10b981; }
+.sentiment-segment.neutral,  .sentiment-swatch.neutral  { background: #f59e0b; }
+.sentiment-segment.negative, .sentiment-swatch.negative { background: #ef4444; }
+.sentiment-segment.mixed,    .sentiment-swatch.mixed    { background: #8b5cf6; }
+
+.sentiment-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 24px;
+    margin-top: 10px;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.sentiment-legend:empty {
+    display: none;
+}
+
+.sentiment-legend-item strong {
+    color: #333;
+}
+
+.sentiment-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin-right: 6px;
 }
 
 /* ===== TOP ROW: Metrics + Chart side by side ===== */
@@ -64,7 +130,9 @@ header h1 {
 }
 
 .top-row .chart-container {
+    position: relative; /* Chart.js sizes the canvas from this box */
     flex: 1;
+    width: 100%; /* auto margins would otherwise shrink it to the canvas in a flex column */
     height: 350px;
     padding: 10px;
 }
@@ -430,15 +498,27 @@ tbody tr:hover {
     margin-bottom: 10px;
 }
 
-/* Text preview column - compact with native tooltip on hover */
+/* Text preview column - the widest, so reviews can be read without hovering */
 td.text-preview {
-    max-width: 200px;
+    width: 40%;
+    font-size: 0.85em;
+    line-height: 1.4;
+    color: #555;
+}
+
+/* Previews run up to 500 characters; anything past 4 lines stays in the tooltip */
+.text-clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
     overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+.time-cell {
     white-space: nowrap;
     font-size: 0.85em;
     color: #555;
-    cursor: help;
 }
 
 /* ===== ENTITY BADGES IN TABLE ===== */
@@ -446,6 +526,7 @@ td.text-preview {
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
+    min-width: 210px; /* Lets badges share a line instead of stacking into a tall row */
     max-width: 350px;
 }
 
@@ -538,7 +619,7 @@ footer {
     }
 
     header h1 {
-        font-size: 1.8em;
+        font-size: 1.5em;
     }
 
     .chart-container {
@@ -551,7 +632,7 @@ footer {
     }
 
     table {
-        min-width: 600px;
+        min-width: 800px; /* The wider text column needs room before scrolling kicks in */
     }
 }
 

@@ -2,7 +2,7 @@
 // AI-DP Dashboard - Main Application
 // ========================================
 // Data Sources:
-// - S3 curated summary: metric cards + Top Entities doughnut (pre-aggregated, one GetObject)
+// - S3 curated summary: metric cards + Top Entities bar chart (pre-aggregated, one GetObject)
 // - DynamoDB timestamp-index GSI: recent events table (newest 50)
 // ========================================
 
@@ -75,13 +75,18 @@ async function loadCuratedSummary() {
 
         const summary = JSON.parse(result.Body.toString('utf-8'));
         cachedCuratedSummary = summary;
+        // A pipeline that started empty has now produced data, so drop the earlier error
+        const staleError = document.getElementById('entities-chart-error');
+        if (staleError) staleError.remove();
         updateMetrics(summary);
         updateEntitiesChart(summary.top_entities || {});
+        updateDataStatus(summary);
         console.log(`Curated: ${summary.total_records} total records`);
 
     } catch (error) {
         console.error('Curated summary error:', error);
         showChartError('Curated summary not available', 'entities-chart');
+        document.getElementById('data-status').textContent = 'No records yet';
     } finally {
         setChartLoading(false, 'entities-chart');
     }
@@ -140,56 +145,98 @@ function updateMetrics(summary) {
 
     const mixedEl = document.getElementById('mixed-count');
     if (mixedEl) mixedEl.textContent = counts.MIXED || 0;
+
+    updateSentimentBar(counts, total);
+}
+
+// Shows when data last arrived, which the footer's page-refresh time can't tell you
+function updateDataStatus(summary) {
+    const total = summary.total_records || 0;
+    const lastRecord = new Date(summary.last_updated);
+    const noun = total === 1 ? 'record' : 'records';
+
+    document.getElementById('data-status').textContent = isNaN(lastRecord)
+        ? `${total} ${noun}`
+        : `${total} ${noun} · Last record ${lastRecord.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`;
+}
+
+function updateSentimentBar(counts, total) {
+    const bar    = document.getElementById('sentiment-bar');
+    const legend = document.getElementById('sentiment-legend');
+    bar.innerHTML = '';
+    legend.innerHTML = '';
+
+    if (total === 0) return;
+
+    const parts = [];
+    // Same order as the metric cards, so the two read together
+    ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'MIXED'].forEach(sentiment => {
+        const count = counts[sentiment] || 0;
+        const name  = sentiment.charAt(0) + sentiment.slice(1).toLowerCase();
+        const pct   = Math.round((count / total) * 100);
+        parts.push(`${name} ${pct}%`);
+
+        // A zero-width segment would still leave a stray gap in the bar
+        if (count > 0) {
+            const segment = document.createElement('div');
+            segment.className = `sentiment-segment ${sentiment.toLowerCase()}`;
+            segment.style.flexGrow = count;
+            segment.title = `${name}: ${count} of ${total} (${pct}%)`;
+            bar.appendChild(segment);
+        }
+
+        const item = document.createElement('span');
+        item.className = 'sentiment-legend-item';
+        item.innerHTML = `<span class="sentiment-swatch ${sentiment.toLowerCase()}"></span>${name} <strong>${pct}%</strong>`;
+        legend.appendChild(item);
+    });
+
+    bar.setAttribute('aria-label', `Sentiment mix: ${parts.join(', ')}`);
 }
 
 function updateEntitiesChart(topEntities) {
     if (entitiesChart) entitiesChart.destroy();
 
-    const ctx    = document.getElementById('entities-chart').getContext('2d');
-    const labels = Object.keys(topEntities);
-    const data   = Object.values(topEntities);
+    const ctx     = document.getElementById('entities-chart').getContext('2d');
+    // The summary holds every entity's count; bars read top-down, so show the 10 most mentioned
+    const entries = Object.entries(topEntities).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
-    if (labels.length === 0) {
+    if (entries.length === 0) {
         showChartError('No entity data available', 'entities-chart');
         return;
     }
 
-    const colors = [
-        '#3b82f6', '#ec4899', '#10b981', '#f59e0b', '#6366f1',
-        '#8b5cf6', '#14b8a6', '#f97316', '#ef4444', '#6b7280'
-    ];
-
     entitiesChart = new Chart(ctx, {
-        type: 'doughnut',
+        type: 'bar',
         data: {
-            labels: labels,
+            labels: entries.map(([label]) => label),
             datasets: [{
-                data: data,
-                backgroundColor: colors.slice(0, labels.length),
-                borderWidth: 2,
-                borderColor: '#fff'
+                label: 'Mentions',
+                data: entries.map(([, count]) => count),
+                backgroundColor: '#3b82f6',
+                borderRadius: 4,
+                borderSkipped: 'start',
+                maxBarThickness: 18
             }]
         },
         options: {
+            indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        font: { size: 12 },
-                        padding: 12,
-                        generateLabels: function(chart) {
-                            const d = chart.data;
-                            return d.labels.map((label, i) => ({
-                                text: `${label}: ${d.datasets[0].data[i]}`,
-                                fillStyle: d.datasets[0].backgroundColor[i],
-                                hidden: false,
-                                index: i
-                            }));
-                        }
-                    }
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: { precision: 0, color: '#888' }, // counts are whole numbers
+                    grid: { color: '#eee' },
+                    border: { display: false }
                 },
+                y: {
+                    ticks: { color: '#333', font: { size: 13 } },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false }, // one series; the section title names it
                 title: {
                     display: true,
                     text: 'Source: S3 Curated Layer (Comprehend NLP)',
@@ -251,14 +298,14 @@ function updateTable(data) {
             entitiesHtml = `<div class="entity-list">${badges.join('')}</div>`;
         }
 
-        // Full text lives in the title attribute; CSS truncates the visible cell
+        // Full text lives in the title attribute; CSS clamps the visible cell to 4 lines
         const preview = item.textPreview || '';
         const previewHtml = preview
-            ? `<td class="text-preview" title="${escapeHtml(preview)}">${escapeHtml(preview)}</td>`
+            ? `<td class="text-preview" title="${escapeHtml(preview)}"><div class="text-clamp">${escapeHtml(preview)}</div></td>`
             : '<td class="text-preview"><span class="no-data">—</span></td>';
 
         row.innerHTML = `
-            <td>${timestamp}</td>
+            <td class="time-cell">${timestamp}</td>
             <td><span class="sentiment-badge ${sentimentClass}">${sentiment}</span></td>
             <td>${confidence}</td>
             ${previewHtml}

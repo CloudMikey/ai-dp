@@ -29,10 +29,10 @@ data lake for the totals and chart, and the **hot store** for recent records:
 - **Color-coded cards** for each sentiment category
 
 ### 2. Top Entities Detected (S3 curated summary)
-- **Doughnut chart** (Chart.js) of the most frequently detected entities
+- **Horizontal bar chart** (Chart.js) of the 10 most frequently detected entities
 - Data comes from `curated/latest_summary.json` (`top_entities`), which the **Merge Lambda
   pre-aggregates** on each run — no SQL, no query latency
-- Legend shows each entity with its count (e.g. "AWS: 12")
+- The file keeps every entity's count; the dashboard picks the top 10
 
 ### 3. Recent Events Table (DynamoDB)
 - **Up to 20 most recent records**, sorted by timestamp (newest first)
@@ -55,7 +55,7 @@ data lake for the totals and chart, and the **hot store** for recent records:
 - **Auto-refresh** every 60 seconds, plus a manual **Refresh** button
 - **Loading states** while fetching, and per-widget **error handling** so a failure in one source
   doesn't blank the whole page
-- **Last updated** timestamp in the footer
+- **Record count and last record time** in the header (from the summary); **page refresh time** in the footer
 
 ## Files
 
