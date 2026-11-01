@@ -299,9 +299,8 @@ def _apply_to_summary(summary: Dict[str, Any], enriched_data: Dict[str, Any]) ->
         if entity and len(entity) > 2:  # Skip very short strings
             summary['top_entities'][entity] = summary['top_entities'].get(entity, 0) + 1
 
-    # Keep only the top 10 by count so the object stays small
-    sorted_entities = sorted(summary['top_entities'].items(), key=lambda x: x[1], reverse=True)[:10]
-    summary['top_entities'] = dict(sorted_entities)
+    # Every count is kept: trimming here would reset anything outside the cut to zero,
+    # so late entities could never climb (errorlog #8). The dashboard picks its top 10.
 
     summary['last_updated'] = enriched_data['mergedAt']
     summary['latest_sentiment'] = sentiment

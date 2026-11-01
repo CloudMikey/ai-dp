@@ -589,6 +589,30 @@ class TestUpdateCuratedSummary:
         # Counts must be self-consistent - this is what broke in production
         assert sum(summary['sentiment_counts'].values()) == summary['total_records']
 
+    @mock_aws
+    def test_late_entity_keeps_its_count(self, set_env_vars):
+        """errorlog #8: an entity arriving after 10 others must still accumulate."""
+        client = boto3.client('s3', region_name='us-west-2')
+        client.create_bucket(
+            Bucket='test-data-lake-bucket',
+            CreateBucketConfiguration={'LocationConstraint': 'us-west-2'}
+        )
+
+        entities = [f'Early{i}' for i in range(10)] + ['Seattle'] * 3
+        for entity in entities:
+            merge_handler.update_curated_summary({
+                'sentiment': 'POSITIVE',
+                'sentimentScore': 0.9,
+                'entities': [entity],
+                'mergedAt': '2026-01-25T12:00:00Z',
+                'textPreview': ''
+            })
+
+        response = client.get_object(Bucket='test-data-lake-bucket', Key='curated/latest_summary.json')
+        summary = json.loads(response['Body'].read().decode('utf-8'))
+
+        assert summary['top_entities']['Seattle'] == 3
+
 
 class TestLambdaHandler:
     """Integration tests for the main lambda_handler."""

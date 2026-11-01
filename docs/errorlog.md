@@ -700,6 +700,43 @@ None needed. `aws iam simulate-principal-policy` against the role confirmed each
 
 ---
 
-**Last Updated**: 2026-10-05
-**Total Errors Documented**: 7
+## Error #8: Top Entities Chart Froze on the First Entities Seen
+
+**Date**: 2026-10-31
+**Context**: Reviewing how the dashboard's Top Entities chart picks its 10 entries, ahead of recording the demo.
+
+### Symptom
+
+No error and no alarm. Once the summary held 10 entities, a new entity almost never appeared on the chart, however often it was mentioned, so the "top" list mostly reflected arrival order rather than frequency.
+
+### Root Cause
+
+`_apply_to_summary` trimmed `top_entities` to 10 after every record, which also deleted the counts of everything it cut:
+
+1. A new entity starts at a count of 1 and sorts below existing entries with the same count, because Python's sort keeps tied items in their existing order.
+2. It is cut, and its count is lost.
+3. Its next mention starts at 1 again, so it never accumulates. The only way in is several mentions within one record.
+
+**Why it went unnoticed**: test runs used small datasets, and the old doughnut chart showed mostly tied slices, so a stale list looked normal.
+
+### Attempted Solutions
+
+None needed. A new unit test (`test_late_entity_keeps_its_count`) reproduced the bug before the fix.
+
+### Working Fix
+
+The Merge Lambda keeps every entity's count, and the dashboard sorts and shows the top 10. `scripts/rebuild_summary.py` writes the same shape. The field stays named `top_entities` so existing summaries and the dashboard keep working.
+
+**Known limitation**: the summary now grows with each distinct entity, which makes the read-modify-write in Error #6 slightly slower. That is negligible at this project's volume. At higher volume, entity counts belong in DynamoDB as atomic counters, the same fix Error #6 names.
+
+**Existing summaries**: counts already discarded can't be restored from the summary. Run `scripts/rebuild_summary.py`, or `/reset-data` for a clean start.
+
+### Key Principle
+
+**Trim when you read an aggregate, not when you write it.** A running tally that throws away its own counts can't correct itself later.
+
+---
+
+**Last Updated**: 2026-10-31
+**Total Errors Documented**: 8
 **Total Preventive Patterns Documented**: 4

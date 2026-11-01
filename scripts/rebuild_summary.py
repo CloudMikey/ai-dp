@@ -26,7 +26,6 @@ REGION = 'us-west-2'
 TABLE = 'ai-dp-dev-enriched-data'
 BUCKET = 'ai-dp-data-lake-dev-us-west-2'
 SUMMARY_KEY = 'curated/latest_summary.json'
-TOP_ENTITY_LIMIT = 10
 
 dynamodb = boto3.client('dynamodb', region_name=REGION)
 s3 = boto3.client('s3', region_name=REGION)
@@ -58,12 +57,12 @@ def build_summary(records):
 
     newest = max(records, key=lambda r: int(r['timestamp']['N'])) if records else None
     oldest = min(records, key=lambda r: int(r['timestamp']['N'])) if records else None
-    now = datetime.now(timezone.utc).isoformat() + 'Z'
+    now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
     return {
         'sentiment_counts': sentiment_counts,
         'total_records': len(records),
-        'top_entities': dict(entity_counts.most_common(TOP_ENTITY_LIMIT)),
+        'top_entities': dict(entity_counts.most_common()),  # all counts, like the Merge Lambda
         'first_record_at': oldest['mergedAt']['S'] if oldest and 'mergedAt' in oldest else now,
         'last_updated': now,
         'latest_sentiment': newest['sentiment']['S'] if newest else 'UNKNOWN',
