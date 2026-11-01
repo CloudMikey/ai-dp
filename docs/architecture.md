@@ -277,7 +277,7 @@ flowchart LR
 
     subgraph Dashboard["Analytics Dashboard"]
         Metrics["Metric cards\nTotal / Positive / Neutral\nNegative / Mixed"]
-        Entities["Top Entities\nDoughnut chart"]
+        Entities["Top Entities\nBar chart"]
         Recent["Recent Events table\n20 newest records"]
     end
 
